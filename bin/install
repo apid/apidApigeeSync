@@ -1,0 +1,51 @@
+#! /usr/bin/env node
+
+'use strict';
+
+var async = require('async');
+var spawn = require('child_process').spawn;
+var fs = require('fs');
+var path = require('path');
+
+var base = process.cwd();
+var dirs = fs.readdirSync(base);
+
+var tasks = [];
+dirs.forEach(function(dir) {
+  var fulldir = path.join(base, dir);
+
+  // a plugin contains package.json in root
+  var pkg = path.join(fulldir, 'package.json');
+  if (!fs.existsSync(pkg)) return;
+  var pstat = fs.statSync(pkg);
+  if (!pstat.isFile()) return;
+
+  // a plugin contains index.js in root
+  var index = path.join(fulldir, 'index.js');
+  if (!fs.existsSync(index)) return;
+  var istat = fs.statSync(index);
+  if (!istat.isFile()) return;
+
+  tasks.push(function(cb) {
+    console.log('\nrunning "npm install" in', fulldir, '...');
+    var cmd = process.platform === 'win32' ? 'cmd' : 'npm';
+    var args = process.platform === 'win32' ? ['/c', 'npm', 'install'] : ['install'];
+    var child = spawn(cmd, args, {
+      cwd: fulldir,
+      stdio: 'inherit'
+    });
+    child.on('close', function(code) {
+      console.error('  ->', code === 0 ? 'OK' : 'failed: ' + code);
+      cb(code);
+    });
+  });
+});
+
+async.series(tasks, function(err, results) {
+  if (err) {
+    console.error('npm install failed: ', err);
+  } else {
+    console.error('npm install OK');
+  }
+  process.exit(err ? 1 : 0);
+});

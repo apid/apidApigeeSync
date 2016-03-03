@@ -1,0 +1,11 @@
+{
+  "name": "edgemicro-sample-plugin-accumulate-request",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A sample plugin for Apigee Edge Microgateway that accumulates chunks of request content",
+  "dependencies": {
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}

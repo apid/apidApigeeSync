@@ -1,0 +1,11 @@
+{
+  "name": "edgemicro-sample-plugin-transform-uppercase",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A sample plugin for Apigee Edge Microgateway that transforms chunks of content by upper-casing them",
+  "dependencies": {
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}

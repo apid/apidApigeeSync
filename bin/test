@@ -1,0 +1,57 @@
+#! /usr/bin/env node
+
+'use strict';
+
+var async = require('async');
+var spawn = require('child_process').spawn;
+var fs = require('fs');
+var path = require('path');
+
+var base = process.cwd();
+var dirs = fs.readdirSync(base);
+
+var tasks = [];
+dirs.forEach(function(dir) {
+  var fulldir = path.join(base, dir);
+
+  // a plugin contains package.json in root
+  var pkg = path.join(fulldir, 'package.json');
+  if (!fs.existsSync(pkg)) return;
+  var pstat = fs.statSync(pkg);
+  if (!pstat.isFile()) return;
+
+  // a plugin contains index.js in root
+  var index = path.join(fulldir, 'index.js');
+  if (!fs.existsSync(index)) return;
+  var istat = fs.statSync(index);
+  if (!istat.isFile()) return;
+
+  // skip plugins without tests
+  var test = path.join(fulldir, 'test');
+  if (!fs.existsSync(test)) return;
+  var tstat = fs.statSync(test);
+  if (!tstat.isDirectory()) return;
+
+  tasks.push(function(cb) {
+    console.log('\nrunning "mocha" in', fulldir, '...');
+    var cmd = process.platform === 'win32' ? 'cmd' : 'mocha';
+    var args = process.platform === 'win32' ? ['/c', 'mocha'] : [];
+    args.push(path.join(dir, 'test', '**.test.js'));
+    var child = spawn(cmd, args, {
+      stdio: 'inherit'
+    });
+    child.on('close', function(code) {
+      console.error('  ->', code === 0 ? 'OK' : 'failed: ' + code);
+      cb(code);
+    });
+  });
+});
+
+async.series(tasks, function(err, results) {
+  if (err) {
+    console.error('tests failed: ', err);
+  } else {
+    console.error('tests OK');
+  }
+  process.exit(err ? 1 : 0);
+});

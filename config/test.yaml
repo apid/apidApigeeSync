@@ -1,0 +1,105 @@
+edgemicro:
+  max_connections: -1
+  max_connections_hard: -1
+  logging:
+    level: info
+    dir: /var/tmp
+  port: 8000
+  plugins:
+    dir:
+    sequence:
+      - analytics
+      - oauth
+      - quota
+      - spikearrest
+analytics:
+  bufferSize: 60000
+  flushInterval: 5000
+  batchSize: 500
+  source: microgateway
+  uri: 'http://bios-phere-test.apigee.net/microgatewaymanager/axpublisher/organization/aarora/environment/prod'
+  key: 42ec99c1f569bf386d4b1195e1de81f00ba2c22d054735123843a41e9c0c7457
+  secret: 9bd2e25d79765a2f2e2087f2576697fdc3e9d40e82856c10b11938ccb2403156
+headers:
+  x-forwarded-for: true
+  x-forwarded-host: true
+  x-request-id: true
+  x-response-time: true
+  via: true
+oauth:
+  allowNoAuthorization: true
+  allowInvalidAuthorization: true
+  public_key: |-
+    -----BEGIN CERTIFICATE-----
+    MIICpDCCAYwCCQDd9JO8DIvnqTANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDEwls
+    b2NhbGhvc3QwHhcNMTUwNjI1MDMxNTQ5WhcNMTUwNjI2MDMxNTQ5WjAUMRIwEAYD
+    VQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDY
+    O0JHvd1m/H/VyGmQpuqY/CvZGbx/wRWrLG/YErYl1w30e615hJOBpT1neavXONGw
+    2kuiqjRon8WcWvjrmKSDitul1MhUqddEBC+JhMfZpgCr9axcrFgRxm4JcfrhWoqE
+    LXAYLo/VXzNCCkGz4SLcp/azpnnPBeTm5m4AJBMW0YrznBQrVMJHGXXvd1b9q5Hp
+    Ejui9VdIEknhNJ88bjP3Lq7j0efCbkj0IAYNigdbC+eIMbRHVHNyEaioUAU9pYAp
+    2v1tomnwlQbEhD3vVnWJprKWgLGtYf9pmwrffwtDu73gyO/qr+aVNSNlchQ4fOag
+    3xeYKmAUHOl6QpiIocjzAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAG9B1kST84u0
+    yR5/CNqHO6wx2SiYKOfrhkvKbxsql/u59qxYd6jHPyE4adLkp/PPWz6DN4ucRT4J
+    2UULFD2biRvPK9Ua3J7IKLUMOuVnwU7JFCiAf51e0A9Weqh6L0+ATTkZMddUfKTA
+    uLdVOBz43EPCizKAjUP39+RFuUhBJazNrXyibE4fP/r6pJ7EB4a57HnvTlNkPZXA
+    z24Ihg42rqDXgFmNPE6X9p/pSOzA87iGLrOznbFQzTHJg/wLqmPEPVrjFwXWfzoI
+    CAysSvrNWbfqSIoxxWPpkK+O10m2DqYaQMu3J73p9kgD0gV9KBSW2rMFDg6JnI4G
+    BDvtgIzP58M=
+    -----END CERTIFICATE-----
+  product_to_proxy:
+    Test2:
+      - microgateway_test2
+    Test:
+      - microgateway_test
+proxies: &ref_0
+  - max_connections: -1
+    name: microgateway_test2
+    revision: '1'
+    proxy_name: default
+    base_path: /microgateway_test2
+    target_name: default
+    url: 'http://127.0.0.1:8080/'
+  - max_connections: -1
+    name: microgateway_test
+    revision: '1'
+    proxy_name: default
+    base_path: /
+    target_name: default
+    url: 'http://127.0.0.1:8080'
+  - max_connections: -1
+    name: b
+    revision: '1'
+    proxy_name: b
+    base_path: /b
+    target_name: default
+    url: 'http://127.0.0.1:8080'
+  - max_connections: -1
+    name: boo
+    revision: '1'
+    proxy_name: boo
+    base_path: /boo
+    target_name: default
+    url: 'http://127.0.0.1:8080'
+  - max_connections: -1
+    name: edgemicro_loop
+    revision: '1'
+    proxy_name: default
+    base_path: /edgemicro_loop
+    target_name: default
+    url: 'http://127.0.0.1:8000/'
+quota:
+  travel-app:
+    allow: '2'
+    interval: '1'
+    timeUnit: minute
+    bufferSize: 10000
+    uri: 'https://edgemicroservices-us-east-1.apigee.net/edgemicro/quotas/organization/aarora/environment/prod'
+spikearrest:
+  timeUnit: minute
+  allow: 10
+  buffersize: 10
+cache:
+  EdgeMicroTestProduct:
+    ttl: 300000
+

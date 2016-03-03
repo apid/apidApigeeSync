@@ -1,0 +1,11 @@
+{
+  "name": "edgemicro-sample-plugin-test",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A test plugin for Apigee Edge Microgateway",
+  "dependencies": {
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
