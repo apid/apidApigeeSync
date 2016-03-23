@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Plugins for Apige Edge Microgateway",
+  "main":"index.js",
   "scripts": {
     "install": "bin/install",
     "test": "bin/test"
