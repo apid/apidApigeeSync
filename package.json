@@ -1,5 +1,5 @@
 {
-  "name": "edgemicro-plugins",
+  "name": "microgateway-plugins",
   "version": "0.1.1",
   "private": true,
   "description": "Plugins for Apige Edge Microgateway",
