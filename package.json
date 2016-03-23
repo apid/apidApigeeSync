@@ -1,9 +1,9 @@
 {
   "name": "edgemicro-plugins",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Plugins for Apige Edge Microgateway",
-  "main":"index.js",
+  "main": "index.js",
   "scripts": {
     "install": "bin/install",
     "test": "bin/test"
