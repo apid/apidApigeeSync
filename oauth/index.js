@@ -79,7 +79,7 @@ module.exports.init = function(config, logger, stats) {
       issuer: undefined
     };
 
-    jwt.verify(token, config.public_key, options, function(err, decodedToken) {
+   jwt.verify(token && token.token ? token.token: token, config.public_key, options, function(err, decodedToken) {
 
       if (err) {
 
