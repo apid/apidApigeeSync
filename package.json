@@ -4,13 +4,32 @@
   "description": "Plugins for Apige Edge Microgateway",
   "main": "index.js",
   "scripts": {
-    "install": "bin/install",
     "test": "bin/test"
   },
   "dependencies": {
-    "async": "^1.4.2"
+    "async": "^1.4.2",
+    "debug": "^2.2.0",
+    "volos-spikearrest-memory": "^0.10.0",
+    "volos-quota-memory": "^0.11.0",
+    "volos-quota-apigee": "^0.13.0",
+    "jsonwebtoken": "^5.0.1",
+    "lodash": "^3.10.1",
+    "request": "^2.65.0",
+    "volos-cache-memory": "^0.10.0",
+    "volos-analytics-apigee": "^0.4.0"
   },
   "devDependencies": {
-    "js-yaml": "^3.4.2"
+    "js-yaml": "^3.4.2",
+    "async": "^1.4.2",
+    "chai": "^2.3.0",
+    "config": "^1.13.0",
+    "debug": "^2.2.0",
+    "lodash": "^3.9.3",
+    "mocha": "^2.2.4",
+    "supertest": "^1.1.0",
+    "jsonwebtoken": "^5.0.1",
+    "pem": "^1.7.2",
+    "volos-analytics-memory": "^0.2.0",
+    "volos-quota-memory": "^0.11.0"
   }
 }
