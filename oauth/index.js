@@ -185,9 +185,11 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
               const regex = apiproxy.replace(/\*/gi,"[^/]+");
               matchesProxyRules =  urlPath.match(regex)
             }else{
-              // if(apiproxy.includes(SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN)){
-              // }
-              matchesProxyRules = urlPath == apiproxy;
+               if(apiproxy === SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN){
+                 matchesProxyRules = urlPath === SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN
+               }else{
+                 matchesProxyRules = urlPath == apiproxy;
+               }
             }
           }
       })
