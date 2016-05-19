@@ -168,11 +168,14 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
     const apiproxies = config.product_to_api_resource[product];
     var matchesProxyRules = false;
     if(apiproxies && apiproxies.length){
-      apiproxies.forEach(function (apiproxy) {
+      apiproxies.forEach(function (tempApiProxy) {
           if(matchesProxyRules){
             //found one
             return;
           }
+          const apiproxy = tempApiProxy.includes(proxy.base_path)
+            ? tempApiProxy
+            : proxy.base_path + (tempApiProxy.startsWith("/") ? "" : "/") +  tempApiProxy
           if (apiproxy.endsWith("/") && !urlPath.endsWith("/")) {
               urlPath = urlPath + "/";
           }
@@ -185,11 +188,9 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
               const regex = apiproxy.replace(/\*/gi,"[^/]+");
               matchesProxyRules =  urlPath.match(regex)
             }else{
-               if(apiproxy === SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN){
-                 matchesProxyRules = urlPath === SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN
-               }else{
-                 matchesProxyRules = urlPath == apiproxy;
-               }
+              // if(apiproxy.includes(SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN)){
+              // }
+              matchesProxyRules = urlPath == apiproxy;
             }
           }
       })
