@@ -5,6 +5,11 @@ var config = {
   "product_to_proxy":{"EdgeMicroTestProduct":["edgemicro_weather"]},
   "product_to_api_resource":{"EdgeMicroTestProduct":["/hello/blah/*/foo*","/hello/some/**","/hello/blah"]}
   };
+  var config2 = {
+  "verify_api_key_url":"https://sfeldmanmicro-test.apigee.net/edgemicro-auth/verifyApiKey",
+  "product_to_proxy":{"EdgeMicroTestProduct":["edgemicro_weather"]},
+  "product_to_api_resource":{"EdgeMicroTestProduct":[]}
+  };
 var proxy = {name:'edgemicro_weather'}
 var token = {api_product_list:['EdgeMicroTestProduct']}
 describe('test oauth',function(){
@@ -19,6 +24,21 @@ describe('test oauth',function(){
      contains = oauth.checkIfAuthorized(config,'/hello/blah/somerule/ifoosomething',proxy,token);
     assert(!contains)
     contains = oauth.checkIfAuthorized(config,'/hello/some/somerule/foosomething',proxy,token);
+    assert(contains)
+    done()
+
+  })
+    it('checkIfAuthorizedNoConfig',function (done) {
+    var contains;
+    contains = oauth.checkIfAuthorized(config2,'/hello',proxy,token);
+    assert(contains)
+    contains = oauth.checkIfAuthorized(config2,'/hello/blah',proxy,token);
+    assert(contains)
+    contains = oauth.checkIfAuthorized(config2,'/hello/blah/somerule/foosomething',proxy,token);
+    assert(contains)
+     contains = oauth.checkIfAuthorized(config2,'/hello/blah/somerule/ifoosomething',proxy,token);
+    assert(contains)
+    contains = oauth.checkIfAuthorized(config2,'/hello/some/somerule/foosomething',proxy,token);
     assert(contains)
     done()
 
