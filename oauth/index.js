@@ -3,7 +3,7 @@
 var debug = require('debug')('plugin:oauth');
 var url = require('url');
 var jwt = require('jsonwebtoken');
-var request = require('request');
+var requestLib = require('request');
 var _ = require('lodash');
 
 const authHeaderRegex = /Bearer (.+)/;
@@ -15,6 +15,7 @@ const SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN = "/";
 module.exports.init = function (config, logger, stats) {
 
   var apiKeyCache = {};
+  var request = config.request ? requestLib.defaults(config.request) : requestLib;
 
   var middleware = function (req, res, next) {
 
