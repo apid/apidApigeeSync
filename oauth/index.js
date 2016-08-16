@@ -37,8 +37,14 @@ module.exports.init = function (config, logger, stats) {
       if (!header || header.length < 2) {
         return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
       }
+
       var token = header[1];
-      delete (req.headers[authHeaderName]); // never pass this header to target
+
+      if (config.keepAuthHeader) {
+        //do nothing
+      } else {
+        delete (req.headers[authHeaderName]); // don't pass this header to target
+      }
 
       verify(token, config, logger, stats, middleware, req, res, next);
     }

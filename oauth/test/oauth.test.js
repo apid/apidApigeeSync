@@ -456,6 +456,26 @@ describe('oauth', function() {
         });
     });
 
+    it('keep auth header', function(done) {
+      config.oauth.keepAuthHeader = true;
+      config.oauth.allowNoAuthorization = true;
+      config.oauth.allowInvalidAuthorization = false;
+
+      request(proxy)
+        .get('/')
+        .expect(200)
+        .end(function(err, res) {
+          if (err) { return done(err); }
+          should.exist(res.body.fromTarget);
+          should.exist(res.headers.authorization);
+
+          should.not.exist(res.body.headers['authorization']);
+          should.not.exist(res.body.headers['x-authorization-claims']);
+          done();
+        });
+
+    });
+
   });
 
 });
