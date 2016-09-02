@@ -20,6 +20,7 @@ module.exports.init = function (config, logger, stats) {
 
     var authHeaderName = config['authorization-header'] ? config['authorization-header'] : 'authorization';
     var apiKeyHeaderName = config['api-key-header'] ? config['api-key-header'] : 'x-api-key';
+    var keepAuthHeader = config['keep-authorization-header'] || false;
     var apiKey;
 
     if (!req.headers[authHeaderName]) {
@@ -37,8 +38,12 @@ module.exports.init = function (config, logger, stats) {
       if (!header || header.length < 2) {
         return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
       }
+
       var token = header[1];
-      delete (req.headers[authHeaderName]); // never pass this header to target
+
+      if (!keepAuthHeader) {
+        delete (req.headers[authHeaderName]); // don't pass this header to target
+      }
 
       verify(token, config, logger, stats, middleware, req, res, next);
     }

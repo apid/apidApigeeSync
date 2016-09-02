@@ -15,6 +15,7 @@ var config = {
   "product_to_proxy":{"EdgeMicroTestProduct":["edgemicro_weather"]},
   "product_to_api_resource":{"EdgeMicroTestProduct":["/blah/*/foo*","/some/**","blah"]}
   };
+
 var proxy = {name:'edgemicro_weather',base_path:'/hello'}
 
 var token = {api_product_list:['EdgeMicroTestProduct']}
