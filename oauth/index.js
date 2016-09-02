@@ -20,6 +20,7 @@ module.exports.init = function (config, logger, stats) {
 
     var authHeaderName = config['authorization-header'] ? config['authorization-header'] : 'authorization';
     var apiKeyHeaderName = config['api-key-header'] ? config['api-key-header'] : 'x-api-key';
+    var keepAuthHeader = config['keep-authorization-header'] || false;
     var apiKey;
 
     if (!req.headers[authHeaderName]) {
@@ -40,9 +41,7 @@ module.exports.init = function (config, logger, stats) {
 
       var token = header[1];
 
-      if (config.keepAuthHeader) {
-        //do nothing
-      } else {
+      if (!keepAuthHeader) {
         delete (req.headers[authHeaderName]); // don't pass this header to target
       }
 
