@@ -14,7 +14,7 @@
     "url": "git+https://github.com/apigee/microgateway-plugins.git"
   },
   "author": "srinandan",
-  "license": "ISC",
+  "license": "Apache 2.0",
   "bugs": {
     "url": "https://github.com/apigee/microgateway-plugins/issues"
   },

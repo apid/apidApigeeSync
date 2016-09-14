@@ -22,8 +22,9 @@ module.exports.init = function(config, logger, stats) {
         res.write(JSON.stringify(healthInfo))
         res.end()
       }
-      else
+      else {
         next()
+      }
     }
   }
 }
