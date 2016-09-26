@@ -1,0 +1,111 @@
+hash: d08d25e5d3cf18bae11145be87817c2c7c0bbe7608b1b8126bc0d3eea53931b8
+updated: 2016-09-22T11:06:44.785980058-07:00
+imports:
+- name: github.com/30x/apid
+  version: e0cf0bd9ca044ba1643e979a356573551f3c4595
+  subpackages:
+  - api
+  - config
+  - data
+  - events
+  - factory
+  - logger
+- name: github.com/fsnotify/fsnotify
+  version: f12c6236fe7b5cf6bcf30e5935d08cb079d78334
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: 757bef944d0f21880861c2dd9c871ca543023cba
+- name: github.com/hashicorp/hcl
+  version: ef8133da8cda503718a74741312bf50821e6de79
+  subpackages:
+  - hcl/ast
+  - hcl/parser
+  - hcl/scanner
+  - hcl/strconv
+  - hcl/token
+  - json/parser
+  - json/scanner
+  - json/token
+- name: github.com/kr/fs
+  version: 2788f0dbd16903de03cb8186e5c7d97b69ad387b
+- name: github.com/magiconair/properties
+  version: 0723e352fa358f9322c938cc2dadda874e9151a9
+- name: github.com/mattn/go-sqlite3
+  version: 3fb7a0e792edd47bf0cf1e919dfc14e2be412e15
+- name: github.com/mitchellh/mapstructure
+  version: ca63d7c062ee3c9f34db231e352b60012b4fd0c1
+- name: github.com/pelletier/go-buffruneio
+  version: df1e16fde7fc330a0ca68167c23bf7ed6ac31d6d
+- name: github.com/pelletier/go-toml
+  version: 45932ad32dfdd20826f5671da37a5f3ce9f26a8d
+- name: github.com/pkg/errors
+  version: a887431f7f6ef7687b556dbf718d9f351d4858a0
+- name: github.com/pkg/sftp
+  version: 8197a2e580736b78d704be0fc47b2324c0591a32
+- name: github.com/Sirupsen/logrus
+  version: 3ec0642a7fb6488f65b06f9040adc67e3990296a
+- name: github.com/spf13/afero
+  version: 52e4a6cfac46163658bd4f123c49b6ee7dc75f78
+  subpackages:
+  - mem
+  - sftp
+- name: github.com/spf13/cast
+  version: 60e7a69a428e9ac1cf7e0c865fc2fe810d34363e
+- name: github.com/spf13/jwalterweatherman
+  version: 33c24e77fb80341fe7130ee7c594256ff08ccc46
+- name: github.com/spf13/pflag
+  version: c7e63cf4530bcd3ba943729cee0efeff2ebea63f
+- name: github.com/spf13/viper
+  version: a78f70b5b977efe08e313a9e2341c3f5457abdaf
+- name: golang.org/x/crypto
+  version: 8e06e8ddd9629eb88639aba897641bff8031f1d3
+  subpackages:
+  - curve25519
+  - ed25519
+  - ed25519/internal/edwards25519
+  - ssh
+- name: golang.org/x/sys
+  version: 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
+  subpackages:
+  - unix
+- name: golang.org/x/text
+  version: 9c8be9c425872eec4348571de4bcd4113104fceb
+  subpackages:
+  - transform
+  - unicode/norm
+- name: gopkg.in/yaml.v2
+  version: 31c299268d302dd0aa9a0dcf765a3d58971ac83f
+testImports:
+- name: github.com/onsi/ginkgo
+  version: 46c87bb63f2d8d62b3076873b7a84da124da72ce
+  subpackages:
+  - config
+  - ginkgo
+  - internal/codelocation
+  - internal/containernode
+  - internal/failer
+  - internal/leafnodes
+  - internal/remote
+  - internal/spec
+  - internal/specrunner
+  - internal/suite
+  - internal/testingtproxy
+  - internal/writer
+  - reporters
+  - reporters/stenographer
+  - types
+- name: github.com/onsi/gomega
+  version: d59fa0ac68bb5dd932ee8d24eed631cdd519efc3
+  subpackages:
+  - format
+  - internal/assertion
+  - internal/asyncassertion
+  - internal/oraclematcher
+  - internal/testingtsupport
+  - matchers
+  - matchers/support/goraph/bipartitegraph
+  - matchers/support/goraph/edge
+  - matchers/support/goraph/node
+  - matchers/support/goraph/util
+  - types
