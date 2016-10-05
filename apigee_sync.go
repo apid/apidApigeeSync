@@ -220,3 +220,61 @@ type oauthTokenResp struct {
 	TokenExpIn     int64    `json:"refreshTokenExpiresIn"`
 	RefreshCount   int64    `json:"refreshCount"`
 }
+
+func Redirect(req *http.Request, via []*http.Request) error {
+	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("org", config.GetString(configOrganization))
+	return nil
+}
+
+func downloadSnapshot() error {
+
+	org := config.GetString(configOrganization)
+	status := getTokenForOrg(org)
+	if status == false {
+		return errors.New("Unable to get new token")
+	}
+	snapshotUri, err := url.Parse(config.GetString(configProxyServerBaseURI))
+	if err != nil {
+		log.Errorf("bad url value for config %s: %s", configProxyServerBaseURI, err)
+		return err
+	}
+	snapshotUri.Path = path.Join(snapshotUri.Path, "/v1/edgex/snapshots?org")
+
+	v := url.Values{}
+	v.Add("tag", org)
+	snapshotUri.RawQuery = v.Encode()
+	uri := snapshotUri.String()
+	log.Info("Snapshot Download : ", uri)
+
+	client := &http.Client{
+		CheckRedirect: Redirect,
+	}
+	req, err := http.NewRequest("GET", uri, nil)
+	req.Header.Add("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error("API Proxy comm error: [%s] ", err)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 200 {
+		rawjson, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("Snapshot response read error: [%s] ", err)
+			return err
+		}
+
+		err = data.InsertSnapshotDB(rawjson)
+		if err != nil {
+			log.Error("Insert Snapshot error: [%s] ", err)
+			return err
+		}
+
+		log.Info("Got a new DB from Snapshot server")
+		return err
+	}
+	log.Info("Snapshot server Connect failed. Resp code %d", resp.StatusCode)
+	return err
+
+}

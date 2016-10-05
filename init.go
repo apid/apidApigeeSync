@@ -43,6 +43,12 @@ func initPlugin(services apid.Services) error {
 		}
 	}
 
+	err := downloadSnapshot()
+	if err != nil {
+		log.Error("Unable to download snapshot")
+		return nil
+	}
+
 	log.Debug("starting update goroutine")
 	go updatePeriodicChanges()
 
