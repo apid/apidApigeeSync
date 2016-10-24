@@ -1,16 +1,19 @@
 package apidApigeeSync
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/30x/apid"
 )
 
 const (
-	configOrganization       = "apigeesync_organization" // todo: how are we supporting multiple orgs?
-	configPollInterval       = "apigeesync_poll_interval"
-	configProxyServerBaseURI = "apigeesync_proxy_server_base"
-	configConsumerKey        = "apigeesync_consumer_key"
-	configConsumerSecret     = "apigeesync_consumer_secret"
+	configPollInterval        = "apigeesync_poll_interval"
+	configProxyServerBaseURI  = "apigeesync_proxy_server_base"
+	configSnapServerBaseURI   = "apigeesync_snapshot_server_base"
+	configChangeServerBaseURI = "apigeesync_change_server_base"
+	configConsumerKey         = "apigeesync_consumer_key"
+	configConsumerSecret      = "apigeesync_consumer_secret"
+	configScopeId             = "apigeesync_bootstrap_id"
 
 	ApigeeSyncEventSelector = "ApigeeSync"
 )
@@ -36,23 +39,68 @@ func initPlugin(services apid.Services) error {
 
 	config.SetDefault(configPollInterval, 120)
 
+	db, err := data.DB()
+	if err != nil {
+		log.Panic("Unable to access DB", err)
+	}
+
 	// check for required values
-	for _, key := range []string{configProxyServerBaseURI, configOrganization, configConsumerKey, configConsumerSecret} {
+	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret, configSnapServerBaseURI, configChangeServerBaseURI} {
 		if !config.IsSet(key) {
 			return fmt.Errorf("Missing required config value: %s", key)
 		}
 	}
 
-	err := downloadSnapshot()
-	if err != nil {
-		log.Error("Unable to download snapshot")
-		return nil
+	var count int
+	row := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='apid_config' COLLATE NOCASE;")
+	if err := row.Scan(&count); err != nil {
+		log.Panic("Unable to setup database", err)
+	}
+	if count == 0 {
+		createTables(db)
 	}
 
+	/* call to Download Snapshot info */
+	go DownloadSnapshot()
+
+	/* Begin Looking for changes periodically */
 	log.Debug("starting update goroutine")
 	go updatePeriodicChanges()
+
+	events.Listen(ApigeeSyncEventSelector, &handler{})
 
 	log.Debug("end init")
 
 	return nil
+}
+
+func createTables(db *sql.DB) {
+	_, err := db.Exec(`
+CREATE TABLE apid_config (
+    id text,
+    name text,
+    description text,
+    umbrella_org_app_name text,
+    created int64,
+    created_by text,
+    updated int64,
+    updated_by text,
+    _apid_scope text,
+    PRIMARY KEY (id)
+);
+CREATE TABLE apid_config_scope (
+    id text,
+    apid_config_id text,
+    scope text,
+    created int64,
+    created_by text,
+    updated int64,
+    updated_by text,
+    _apid_scope text,
+    PRIMARY KEY (id)
+);
+`)
+	if err != nil {
+		log.Panic("Unable to initialize DB", err)
+	}
 }

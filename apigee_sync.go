@@ -1,22 +1,24 @@
 package apidApigeeSync
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/30x/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
-	"strings"
 	"time"
 )
 
 // todo: The following was largely copied from old APID - needs review
 
-var latestMsgID int64
+var latestSequence int64
 var token string
-var tokenActive bool
+var tokenActive, downloadSnapshot, downloadBootSnapshot, gotSequence bool
+var lastSequence string
+var snapshotInfo string
 
 /*
  * Helper function that sleeps for N seconds, if comm. with change agent
@@ -55,29 +57,45 @@ func updatePeriodicChanges() {
  */
 func pollChangeAgent() error {
 
-	changesUri, err := url.Parse(config.GetString(configProxyServerBaseURI))
+	if downloadSnapshot != true {
+		log.Error("Waiting for snapshot download to complete")
+		return errors.New("Snapshot download in progress...")
+	}
+	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
 	if err != nil {
-		log.Errorf("bad url value for config %s: %s", configProxyServerBaseURI, err)
+		log.Errorf("bad url value for config %s: %s", changesUri, err)
 		return err
 	}
-	changesUri.Path = path.Join(changesUri.Path, "/v1/edgex/changeagent/changes")
+	changesUri.Path = path.Join(changesUri.Path, "/changes")
+
+	/*
+	 * FIXME: This is a hack, while the correct procedure it to use the
+	 * bootstrap scope
+	 */
+	configId := config.GetString(configScopeId)
 
 	for {
 		log.Debug("polling...")
-		org := config.GetString(configOrganization)
-		/* token not valid try again */
 		if tokenActive == false {
-			status := getTokenForOrg(org)
+			/* token not valid?, get a new token */
+			status := getBearerToken()
 			if status == false {
 				return errors.New("Unable to get new token")
 			}
 		}
+		/* Find the scopes associated with the config id */
+		scopes := findScopesforId(configId)
 
 		/* A Blocking call for 1 Minute  */
 		v := url.Values{}
-		v.Add("since", strconv.FormatInt(int64(latestMsgID), 10))
+		if gotSequence == true {
+			v.Add("since", lastSequence)
+		}
 		v.Add("block", "60")
-		v.Add("tag", "org:"+org)
+		for _, scope := range scopes {
+			v.Add("scope", scope)
+		}
+		v.Add("snapshot", snapshotInfo)
 		changesUri.RawQuery = v.Encode()
 		uri := changesUri.String()
 		log.Info("Fetching changes: ", uri)
@@ -96,12 +114,15 @@ func pollChangeAgent() error {
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
 				tokenActive = false
+				log.Errorf("Token expired? Unauthorized request.")
 			}
 			r.Body.Close()
+			log.Errorf("Get Changes request failed with Resp err: %d",
+				r.StatusCode)
 			return err
 		}
 
-		var resp ChangeSet
+		var resp common.ChangeList
 		err = json.NewDecoder(r.Body).Decode(&resp)
 		r.Body.Close()
 		if err != nil {
@@ -110,73 +131,35 @@ func pollChangeAgent() error {
 		}
 
 		if len(resp.Changes) > 0 {
-			events.Emit(ApigeeSyncEventSelector, resp)
-
-			lastMsgID := resp.Changes[len(resp.Changes)-1].LastMsId
-			if lastMsgID > 0 {
-				log.Infof("Updated last msg id for org %s is %s", org, lastMsgID)
-
-				err = storeLastMsgID(org, lastMsgID)
-				if err != nil {
-					// todo: what is appropriate recovery (if anything)?
-					return err
-				}
-
-				latestMsgID = lastMsgID
-			}
+			events.Emit(ApigeeSyncEventSelector, &resp)
 		} else {
-			log.Error("Change message decoding error for org ", org)
+			log.Error("No Changes detected for Scopes ", scopes)
 		}
+		lastSequence = resp.LastSequence
+		gotSequence = true
 	}
 }
 
 /*
- * Persist the Last Change Id in the DB
+ * This function will (for now) use the Access Key/Secret Key/ApidConfig Id
+ * to get the bearer token, and the scopes (as comma separated scope)
  */
-func storeLastMsgID(org string, lastID int64) error {
-
-	db, err := data.DB()
-	if err != nil {
-		return err
-	}
-
-	result, err := db.Exec("UPDATE change_id SET snapshot_change_id=? WHERE org=?;", lastID, org)
-	if err != nil {
-		log.Errorf("UPDATE change_id failed (%s: %s): %s", lastID, org, err)
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err == nil && rowsAffected == 0 {
-		_, err = db.Exec("INSERT INTO change_id (snapshot_change_id, org) VALUES (?, ?);", lastID, org)
-	}
-	if err != nil {
-		log.Errorf("UPDATE change_id failed (%s: %s): %s", lastID, org, err)
-		return err
-	}
-
-	log.Info("UPDATE change_id success (%s: %s)", lastID, org)
-	return nil
-}
-
-func getTokenForOrg(org string) bool {
+func getBearerToken() bool {
 
 	uri, err := url.Parse(config.GetString(configProxyServerBaseURI))
 	if err != nil {
 		log.Error(err)
 		return false
 	}
-	uri.Path = path.Join(uri.Path, "/v1/edgex/accesstoken")
+	uri.Path = path.Join(uri.Path, "/accesstoken")
 	tokenActive = false
 
 	form := url.Values{}
-	form.Add("grantType", "client_credentials")
-	form.Add("org", org)
-	req, err := http.NewRequest("POST", uri.String(), strings.NewReader(form.Encode()))
+	form.Set("grantType", "client_credentials")
+	form.Add("client_id", config.GetString(configConsumerKey))
+	form.Add("client_secret", config.GetString(configConsumerSecret))
+	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
-
-	consumerKey := config.GetString(configConsumerKey)
-	req.SetBasicAuth(consumerKey, config.GetString(configConsumerSecret))
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -202,7 +185,7 @@ func getTokenForOrg(org string) bool {
 	}
 	token = oauthResp.AccessToken
 	tokenActive = true
-	log.Info("Got a new token for Consumer: ", consumerKey)
+	log.Info("Got a new token..")
 	return true
 }
 
@@ -223,26 +206,38 @@ type oauthTokenResp struct {
 
 func Redirect(req *http.Request, via []*http.Request) error {
 	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Add("org", config.GetString(configOrganization))
+	req.Header.Add("org", config.GetString(configScopeId))
 	return nil
 }
 
-func downloadSnapshot() error {
+func DownloadSnapshot() error {
 
-	org := config.GetString(configOrganization)
-	status := getTokenForOrg(org)
+RETRY:
+	var scopes []string
+
+	/* Get the bearer token */
+	status := getBearerToken()
 	if status == false {
 		return errors.New("Unable to get new token")
 	}
-	snapshotUri, err := url.Parse(config.GetString(configProxyServerBaseURI))
+	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {
-		log.Errorf("bad url value for config %s: %s", configProxyServerBaseURI, err)
-		return err
+		log.Fatalf("bad url value for config %s: %s", snapshotUri, err)
 	}
-	snapshotUri.Path = path.Join(snapshotUri.Path, "/v1/edgex/snapshots?org")
+
+	if downloadBootSnapshot == false {
+		scopes = append(scopes, (config.GetString(configScopeId)))
+	} else {
+		scopes = findScopesforId(config.GetString(configScopeId))
+	}
+
+	/* Frame and send the snapshot request */
+	snapshotUri.Path = path.Join(snapshotUri.Path, "/snapshots")
 
 	v := url.Values{}
-	v.Add("tag", org)
+	for _, scope := range scopes {
+		v.Add("scopes", scope)
+	}
 	snapshotUri.RawQuery = v.Encode()
 	uri := snapshotUri.String()
 	log.Info("Snapshot Download : ", uri)
@@ -252,29 +247,60 @@ func downloadSnapshot() error {
 	}
 	req, err := http.NewRequest("GET", uri, nil)
 	req.Header.Add("Authorization", "Bearer "+token)
-	resp, err := client.Do(req)
+	r, err := client.Do(req)
 	if err != nil {
-		log.Error("API Proxy comm error: [%s] ", err)
+		log.Fatalf("Snapshotserver comm error: [%s] ", err)
+	}
+	defer r.Body.Close()
+
+	/* Decode the Snapshot server response */
+	var resp common.Snapshot
+	err = json.NewDecoder(r.Body).Decode(&resp)
+	if err != nil {
+		log.Fatalf("JSON Response Data not parsable: [%s] ", err)
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 200 {
-		rawjson, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Error("Snapshot response read error: [%s] ", err)
-			return err
-		}
 
-		err = data.InsertSnapshotDB(rawjson)
-		if err != nil {
-			log.Error("Insert Snapshot error: [%s] ", err)
-			return err
+	/*
+	 * The idea here is that you download snapshot for the scopes
+	 * associated with the apidconfig Id, and then download the
+	 * data based on the scopes retrieved in the first round
+	 */
+	if r.StatusCode == 200 {
+		log.Info("Emit Snapshot response to plugins")
+		events.Emit(ApigeeSyncEventSelector, &resp)
+		snapshotInfo = resp.SnapshotInfo
+		if downloadBootSnapshot == false {
+			downloadBootSnapshot = true
+			goto RETRY
+		} else if downloadBootSnapshot == true {
+			downloadSnapshot = true
 		}
-
-		log.Info("Got a new DB from Snapshot server")
-		return err
+	} else {
+		log.Fatalf("Snapshot server Connect failed. Resp code %d", r.StatusCode)
 	}
-	log.Info("Snapshot server Connect failed. Resp code %d", resp.StatusCode)
+
 	return err
+}
 
+func findScopesforId(configId string) (scopes []string) {
+
+	var scope string
+	db, err := data.DB()
+	if err != nil {
+		log.Errorf("DB open Error: %s", err)
+		return nil
+	}
+
+	rows, err := db.Query("select scope from APID_CONFIG_SCOPE where apid_config_id = $1", configId)
+	if err != nil {
+		log.Errorf("Failed to query APID_CONFIG_SCOPE. Err: %s", err)
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		rows.Scan(&scope)
+		scopes = append(scopes, scope)
+	}
+	return scopes
 }
