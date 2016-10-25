@@ -45,7 +45,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 		switch payload.Name {
 		case "apid_config":
 			for _, row := range payload.Rows {
-				insertApidConfig(row, db)
+				insertApidConfig(row, db, snapshot.SnapshotInfo)
 			}
 		case "apid_config_scope":
 			for _, row := range payload.Rows {
@@ -67,13 +67,6 @@ func processChange(changes *common.ChangeList) {
 	for _, payload := range changes.Changes {
 
 		switch payload.Table {
-		case "public.apid_config":
-		case "edgex.apid_config":
-			switch payload.Operation {
-			case 1:
-				insertApidConfig(payload.NewRow, db)
-			}
-
 		case "public.apid_config_scope":
 		case "edgex.apid_config_scope":
 			switch payload.Operation {
@@ -87,23 +80,27 @@ func processChange(changes *common.ChangeList) {
 /*
  * INSERT INTO APP_CREDENTIAL op
  */
-func insertApidConfig(ele common.Row, db *sql.DB) {
+func insertApidConfig(ele common.Row, db *sql.DB, snapInfo string) bool {
 
 	var scope, id, name, orgAppName, createdBy, updatedBy, Description string
 	var updated, created int64
 
-	txn, _ := db.Begin()
-	err := ele.Get("id", &id)
-	err = ele.Get("_apid_scope", &scope)
-	err = ele.Get("name", &name)
-	err = ele.Get("umbrella_org_app_name", &orgAppName)
-	err = ele.Get("created", &created)
-	err = ele.Get("created_by", &createdBy)
-	err = ele.Get("updated", &updated)
-	err = ele.Get("updated_by", &updatedBy)
-	err = ele.Get("description", &Description)
+	ele.Get("id", &id)
+	ele.Get("_apid_scope", &scope)
+	ele.Get("name", &name)
+	ele.Get("umbrella_org_app_name", &orgAppName)
+	ele.Get("created", &created)
+	ele.Get("created_by", &createdBy)
+	ele.Get("updated", &updated)
+	ele.Get("updated_by", &updatedBy)
+	ele.Get("description", &Description)
 
-	_, err = txn.Exec("INSERT INTO apid_config (id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by)VALUES(?,?,?,?,?,?,?,?);",
+	stmt, err := db.Prepare("INSERT INTO APID_CONFIG (id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);")
+	if err != nil {
+		log.Error("INSERT APID_CONFIG Failed: ", err)
+		return false
+	}
+	_, err = stmt.Exec(
 		id,
 		scope,
 		name,
@@ -112,14 +109,14 @@ func insertApidConfig(ele common.Row, db *sql.DB) {
 		createdBy,
 		updated,
 		updatedBy,
-		Description)
+		snapInfo)
 
 	if err != nil {
-		log.Error("INSERT  Failed: ", id, ", ", scope, ")", err)
-		txn.Rollback()
+		log.Error("INSERT APID_CONFIG Failed: ", id, ", ", scope, ")", err)
+		return false
 	} else {
-		log.Info("INSERT  Success: (", id, ", ", scope, ")")
-		txn.Commit()
+		log.Info("INSERT APID_CONFIG Success: (", id, ", ", scope, ")")
+		return true
 	}
 
 }
@@ -127,22 +124,23 @@ func insertApidConfig(ele common.Row, db *sql.DB) {
 /*
  * INSERT INTO APP_CREDENTIAL op
  */
-func insertApidConfigScope(ele common.Row, db *sql.DB) {
+func insertApidConfigScope(ele common.Row, db *sql.DB) bool {
 
 	var id, scopeId, apiConfigId, scope, createdBy, updatedBy string
 	var created, updated int64
 
-	txn, _ := db.Begin()
-	err := ele.Get("id", &id)
-	err = ele.Get("_apid_scope", &scopeId)
-	err = ele.Get("apid_config_id", &apiConfigId)
-	err = ele.Get("scope", &scope)
-	err = ele.Get("created", &created)
-	err = ele.Get("created_by", &createdBy)
-	err = ele.Get("updated", &updated)
-	err = ele.Get("updated_by", &updatedBy)
+	ele.Get("id", &id)
+	ele.Get("_apid_scope", &scopeId)
+	ele.Get("apid_config_id", &apiConfigId)
+	ele.Get("scope", &scope)
+	ele.Get("created", &created)
+	ele.Get("created_by", &createdBy)
+	ele.Get("updated", &updated)
+	ele.Get("updated_by", &updatedBy)
 
-	_, err = txn.Exec("INSERT INTO apid_config_scope (id, _apid_scope, apid_config_id, scope, created, created_by, updated, updated_by)VALUES(?,?,?,?,?,?,?,?);",
+	stmt, err := db.Prepare("INSERT INTO APID_CONFIG_SCOPE (id, _apid_scope, apid_config_id, scope, created, created_by, updated, updated_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8);")
+
+	_, err = stmt.Exec(
 		id,
 		scopeId,
 		apiConfigId,
@@ -153,11 +151,11 @@ func insertApidConfigScope(ele common.Row, db *sql.DB) {
 		updatedBy)
 
 	if err != nil {
-		log.Error("INSERT CRED Failed: ", id, ", ", scope, ")", err)
-		txn.Rollback()
+		log.Error("INSERT APID_CONFIG_SCOPE Failed: ", id, ", ", scope, ")", err)
+		return false
 	} else {
-		log.Info("INSERT CRED Success: (", id, ", ", scope, ")")
-		txn.Commit()
+		log.Info("INSERT APID_CONFIG_SCOPE Success: (", id, ", ", scope, ")")
+		return true
 	}
 
 }

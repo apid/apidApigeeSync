@@ -68,10 +68,6 @@ func pollChangeAgent() error {
 	}
 	changesUri.Path = path.Join(changesUri.Path, "/changes")
 
-	/*
-	 * FIXME: This is a hack, while the correct procedure it to use the
-	 * bootstrap scope
-	 */
 	configId := config.GetString(configScopeId)
 
 	for {
@@ -83,18 +79,26 @@ func pollChangeAgent() error {
 				return errors.New("Unable to get new token")
 			}
 		}
+
 		/* Find the scopes associated with the config id */
 		scopes := findScopesforId(configId)
-
-		/* A Blocking call for 1 Minute  */
 		v := url.Values{}
+
+		/* Sequence added to the query if available */
 		if gotSequence == true {
 			v.Add("since", lastSequence)
 		}
 		v.Add("block", "60")
+
+		/*
+		 * Include all the scopes associated with the config Id
+		 * The Config Id is included as well, as it acts as the
+		 * Bootstrap scope
+		 */
 		for _, scope := range scopes {
 			v.Add("scope", scope)
 		}
+		v.Add("scope", configId)
 		v.Add("snapshot", snapshotInfo)
 		changesUri.RawQuery = v.Encode()
 		uri := changesUri.String()
@@ -130,6 +134,7 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
 			events.Emit(ApigeeSyncEventSelector, &resp)
 		} else {
@@ -210,9 +215,18 @@ func Redirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+/* Method downloads the snapshot in a two phased manner.
+ * Phase 1: Use the apidConfigId as the bootstrap scope, and
+ * get the apid_config and apid_config_scope from the snapshot
+ * server.
+ * Phase 2: Get all the scopes fetches from phase 1, and issue
+ * the second call to the snapshot server to get all the data
+ * associated with the scope(s).
+ * Emit the data for the necessary plugins to process.
+ */
 func DownloadSnapshot() error {
 
-RETRY:
+PHASE_2:
 	var scopes []string
 
 	/* Get the bearer token */
@@ -247,9 +261,31 @@ RETRY:
 	}
 	req, err := http.NewRequest("GET", uri, nil)
 	req.Header.Add("Authorization", "Bearer "+token)
+
+	/* Set the transport protocol type based on conf file input */
+	if config.GetString(configSnapshotProtocol) == "json" {
+		req.Header.Set("Accept", "application/json")
+	} else {
+		req.Header.Set("Accept", "application/proto")
+	}
+
+	/* Issue the request to the snapshot server */
 	r, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Snapshotserver comm error: [%s] ", err)
+
+		/*
+		 * Check if there is some data already, if there is,
+		 * Proceed, else exit the service (Scopes & snapshotInfo
+		 * have to be present for changeserver to function)
+		 */
+		snapshotInfo = findSnapshotInfo(config.GetString(configScopeId))
+		if snapshotInfo == "" {
+			log.Fatalf("Snapshotserver comm error: [%s] ", err)
+		} else {
+			log.Error("Snapshot server down, Proceeding with local data")
+			downloadSnapshot = true
+			return nil
+		}
 	}
 	defer r.Body.Close()
 
@@ -264,7 +300,7 @@ RETRY:
 	/*
 	 * The idea here is that you download snapshot for the scopes
 	 * associated with the apidconfig Id, and then download the
-	 * data based on the scopes retrieved in the first round
+	 * data based on the scopes retrieved in the first phase
 	 */
 	if r.StatusCode == 200 {
 		log.Info("Emit Snapshot response to plugins")
@@ -272,7 +308,7 @@ RETRY:
 		snapshotInfo = resp.SnapshotInfo
 		if downloadBootSnapshot == false {
 			downloadBootSnapshot = true
-			goto RETRY
+			goto PHASE_2
 		} else if downloadBootSnapshot == true {
 			downloadSnapshot = true
 		}
@@ -283,6 +319,10 @@ RETRY:
 	return err
 }
 
+/*
+ * For the given apidConfigId, this function will retrieve all the scopes
+ * associated with it
+ */
 func findScopesforId(configId string) (scopes []string) {
 
 	var scope string
@@ -303,4 +343,27 @@ func findScopesforId(configId string) (scopes []string) {
 		scopes = append(scopes, scope)
 	}
 	return scopes
+}
+
+/*
+ * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
+ */
+func findSnapshotInfo(configId string) (snapshotInfo string) {
+
+	db, err := data.DB()
+	if err != nil {
+		log.Errorf("DB open Error: %s", err)
+		return ""
+	}
+
+	rows, err := db.Query("select snapshotInfo from APID_CONFIG where id = $1", configId)
+	if err != nil {
+		log.Errorf("Failed to query APID_CONFIG. Err: %s", err)
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		rows.Scan(&snapshotInfo)
+	}
+	return snapshotInfo
 }

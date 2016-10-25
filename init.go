@@ -14,8 +14,9 @@ const (
 	configConsumerKey         = "apigeesync_consumer_key"
 	configConsumerSecret      = "apigeesync_consumer_secret"
 	configScopeId             = "apigeesync_bootstrap_id"
-
-	ApigeeSyncEventSelector = "ApigeeSync"
+	configSnapshotProtocol    = "apigeesync_snapshot_proto"
+	configUnitTestMode        = "apigeesync_UnitTest_mode"
+	ApigeeSyncEventSelector   = "ApigeeSync"
 )
 
 var (
@@ -86,6 +87,7 @@ CREATE TABLE apid_config (
     updated int64,
     updated_by text,
     _apid_scope text,
+    snapshotInfo text,
     PRIMARY KEY (id)
 );
 CREATE TABLE apid_config_scope (
