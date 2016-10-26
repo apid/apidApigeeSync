@@ -28,10 +28,9 @@ var (
 
 func init() {
 	apid.RegisterPlugin(initPlugin)
-	apid.RegisterPostPlugin(postinitPlugin)
 }
 
-func postinitPlugin(services apid.Services) error {
+func postInitPlugins() {
 
 	log.Debug("start post plugin init")
 	/* call to Download Snapshot info */
@@ -43,8 +42,6 @@ func postinitPlugin(services apid.Services) error {
 
 	events.Listen(ApigeeSyncEventSelector, &handler{})
 	log.Debug("Done post plugin init")
-	return nil
-
 }
 
 func initPlugin(services apid.Services) error {
@@ -54,6 +51,8 @@ func initPlugin(services apid.Services) error {
 	config = services.Config()
 	data = services.Data()
 	events = services.Events()
+
+	events.Listen(apid.PluginsInitializedEvent, postInitPlugins)
 
 	config.SetDefault(configPollInterval, 120)
 
