@@ -28,6 +28,23 @@ var (
 
 func init() {
 	apid.RegisterPlugin(initPlugin)
+	apid.RegisterPostPlugin(postinitPlugin)
+}
+
+func postinitPlugin(services apid.Services) error {
+
+	log.Debug("start post plugin init")
+	/* call to Download Snapshot info */
+	go DownloadSnapshot()
+
+	/* Begin Looking for changes periodically */
+	log.Debug("starting update goroutine")
+	go updatePeriodicChanges()
+
+	events.Listen(ApigeeSyncEventSelector, &handler{})
+	log.Debug("Done post plugin init")
+	return nil
+
 }
 
 func initPlugin(services apid.Services) error {
@@ -60,15 +77,6 @@ func initPlugin(services apid.Services) error {
 	if count == 0 {
 		createTables(db)
 	}
-
-	/* call to Download Snapshot info */
-	go DownloadSnapshot()
-
-	/* Begin Looking for changes periodically */
-	log.Debug("starting update goroutine")
-	go updatePeriodicChanges()
-
-	events.Listen(ApigeeSyncEventSelector, &handler{})
 
 	log.Debug("end init")
 
