@@ -30,18 +30,20 @@ func init() {
 	apid.RegisterPlugin(initPlugin)
 }
 
-func postInitPlugins() {
+func postInitPlugins(event apid.Event) {
 
-	log.Debug("start post plugin init")
-	/* call to Download Snapshot info */
-	go DownloadSnapshot()
+	if event == apid.PluginsInitializedEvent {
+		log.Debug("start post plugin init")
+		/* call to Download Snapshot info */
+		go DownloadSnapshot()
 
-	/* Begin Looking for changes periodically */
-	log.Debug("starting update goroutine")
-	go updatePeriodicChanges()
+		/* Begin Looking for changes periodically */
+		log.Debug("starting update goroutine")
+		go updatePeriodicChanges()
 
-	events.Listen(ApigeeSyncEventSelector, &handler{})
-	log.Debug("Done post plugin init")
+		events.Listen(ApigeeSyncEventSelector, &handler{})
+		log.Debug("Done post plugin init")
+	}
 }
 
 func initPlugin(services apid.Services) error {
@@ -52,7 +54,12 @@ func initPlugin(services apid.Services) error {
 	data = services.Data()
 	events = services.Events()
 
-	events.Listen(apid.PluginsInitializedEvent, postInitPlugins)
+	/* This callback function will get called, once all the plugins are
+	 * initialized (not just this plugin). This is needed because,
+	 * DownloadSnapshots/Changes etc have to begin to be processed only
+	 * after all the plugins are intialized
+	 */
+	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	config.SetDefault(configPollInterval, 120)
 

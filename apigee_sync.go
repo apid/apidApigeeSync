@@ -280,7 +280,7 @@ PHASE_2:
 		 */
 		snapshotInfo = findSnapshotInfo(config.GetString(configScopeId))
 		if snapshotInfo == "" {
-			log.Fatalf("Snapshotserver comm error: [%s] ", err)
+			log.Fatalf("No local data, Snapshotserver comm error: [%s] ", err)
 		} else {
 			log.Error("Snapshot server down, Proceeding with local data")
 			downloadSnapshot = true
@@ -313,7 +313,7 @@ PHASE_2:
 			downloadSnapshot = true
 		}
 	} else {
-		log.Fatalf("Snapshot server Connect failed. Resp code %d", r.StatusCode)
+		log.Fatalf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
 	}
 
 	return err
