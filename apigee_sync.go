@@ -232,7 +232,7 @@ PHASE_2:
 	/* Get the bearer token */
 	status := getBearerToken()
 	if status == false {
-		return errors.New("Unable to get new token")
+		log.Fatal("Unable to get Bearer token or is Invalid")
 	}
 	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {
@@ -250,7 +250,7 @@ PHASE_2:
 
 	v := url.Values{}
 	for _, scope := range scopes {
-		v.Add("scopes", scope)
+		v.Add("scope", scope)
 	}
 	snapshotUri.RawQuery = v.Encode()
 	uri := snapshotUri.String()
@@ -275,7 +275,7 @@ PHASE_2:
 
 		/*
 		 * Check if there is some data already, if there is,
-		 * Proceed, else exit the service (Scopes & snapshotInfo
+		 * Proceed, else exit the service (apid_config & snapshotInfo
 		 * have to be present for changeserver to function)
 		 */
 		snapshotInfo = findSnapshotInfo(config.GetString(configScopeId))
@@ -293,10 +293,19 @@ PHASE_2:
 	var resp common.Snapshot
 	err = json.NewDecoder(r.Body).Decode(&resp)
 	if err != nil {
-		log.Fatalf("JSON Response Data not parsable: [%s] ", err)
-		return err
-	}
 
+		/*
+		 *If the data set is empty, allow it to proceed, as changeserver
+		 * will feed data. Since Bootstrapping has passed, it has the
+		 * Bootstrap config id to function.
+		 */
+		if downloadBootSnapshot == false {
+			log.Fatal("JSON Response Data not parsable: ", err)
+		} else {
+			downloadSnapshot = true
+			return nil
+		}
+	}
 	/*
 	 * The idea here is that you download snapshot for the scopes
 	 * associated with the apidconfig Id, and then download the

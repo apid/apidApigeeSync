@@ -67,8 +67,7 @@ func processChange(changes *common.ChangeList) {
 	for _, payload := range changes.Changes {
 
 		switch payload.Table {
-		case "public.apid_config_scope":
-		case "edgex.apid_config_scope":
+		case "public.apid_config_scope", "edgex.apid_config_scope":
 			switch payload.Operation {
 			case 1:
 				insertApidConfigScope(payload.NewRow, db)
