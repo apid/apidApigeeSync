@@ -223,11 +223,20 @@ func Redirect(req *http.Request, via []*http.Request) error {
  * the second call to the snapshot server to get all the data
  * associated with the scope(s).
  * Emit the data for the necessary plugins to process.
+ * If there is already previous data in sqlite, donot fetch
+ * again from snapshot server.
  */
 func DownloadSnapshot() error {
 
-PHASE_2:
 	var scopes []string
+	snapshotInfo = findSnapshotInfo(config.GetString(configScopeId))
+	if snapshotInfo != "" {
+		log.Debug("Proceeding with local Sqlite data")
+		downloadSnapshot = true
+		return nil
+	}
+
+PHASE_2:
 
 	/* Get the bearer token */
 	status := getBearerToken()
@@ -272,20 +281,7 @@ PHASE_2:
 	/* Issue the request to the snapshot server */
 	r, err := client.Do(req)
 	if err != nil {
-
-		/*
-		 * Check if there is some data already, if there is,
-		 * Proceed, else exit the service (apid_config & snapshotInfo
-		 * have to be present for changeserver to function)
-		 */
-		snapshotInfo = findSnapshotInfo(config.GetString(configScopeId))
-		if snapshotInfo == "" {
-			log.Fatalf("No local data, Snapshotserver comm error: [%s] ", err)
-		} else {
-			log.Error("Snapshot server down, Proceeding with local data")
-			downloadSnapshot = true
-			return nil
-		}
+		log.Fatalf("Snapshotserver comm error: [%s] ", err)
 	}
 	defer r.Body.Close()
 
