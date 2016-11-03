@@ -43,11 +43,11 @@ func processSnapshot(snapshot *common.Snapshot) {
 	for _, payload := range snapshot.Tables {
 
 		switch payload.Name {
-		case "apid_config":
+		case "edgex.apid_config":
 			for _, row := range payload.Rows {
 				insertApidConfig(row, db, snapshot.SnapshotInfo)
 			}
-		case "apid_config_scope":
+		case "edgex.apid_config_scope":
 			for _, row := range payload.Rows {
 				insertApidConfigScope(row, db)
 			}
@@ -67,7 +67,7 @@ func processChange(changes *common.ChangeList) {
 	for _, payload := range changes.Changes {
 
 		switch payload.Table {
-		case "public.apid_config_scope", "edgex.apid_config_scope":
+		case "edgex.apid_config_scope":
 			switch payload.Operation {
 			case 1:
 				insertApidConfigScope(payload.NewRow, db)

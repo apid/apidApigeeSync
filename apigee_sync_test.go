@@ -46,7 +46,7 @@ var _ = Describe("api", func() {
 
 				err := req.ParseForm()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(req.Form.Get("grantType")).To(Equal("client_credentials"))
+				Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
 				Expect(req.Form.Get("org")).To(Equal(org))
 
 				res := oauthTokenResp{}

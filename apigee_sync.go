@@ -160,7 +160,7 @@ func getBearerToken() bool {
 	tokenActive = false
 
 	form := url.Values{}
-	form.Set("grantType", "client_credentials")
+	form.Set("grant_type", "client_credentials")
 	form.Add("client_id", config.GetString(configConsumerKey))
 	form.Add("client_secret", config.GetString(configConsumerSecret))
 	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
