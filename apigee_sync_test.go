@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
-	"github.com/30x/transicator/common"
+	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"io/ioutil"
