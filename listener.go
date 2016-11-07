@@ -48,9 +48,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 				insertApidConfig(row, db, snapshot.SnapshotInfo)
 			}
 		case "edgex.apid_config_scope":
-			for _, row := range payload.Rows {
-				insertApidConfigScope(row, db)
-			}
+			insertApidConfigScopes(payload.Rows, db)
 		}
 	}
 }
@@ -58,19 +56,20 @@ func processSnapshot(snapshot *common.Snapshot) {
 func processChange(changes *common.ChangeList) {
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
-
+	var rows []common.Row
 	db, err := data.DB()
 	if err != nil {
 		panic("Unable to access Sqlite DB")
 	}
 
 	for _, payload := range changes.Changes {
-
+		rows = nil
 		switch payload.Table {
 		case "edgex.apid_config_scope":
 			switch payload.Operation {
 			case 1:
-				insertApidConfigScope(payload.NewRow, db)
+				rows = append(rows, payload.NewRow)
+				insertApidConfigScopes(rows, db)
 			}
 		}
 	}
@@ -84,6 +83,14 @@ func insertApidConfig(ele common.Row, db *sql.DB, snapInfo string) bool {
 	var scope, id, name, orgAppName, createdBy, updatedBy, Description string
 	var updated, created int64
 
+	prep, err := db.Prepare("INSERT INTO APID_CONFIG (id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);")
+	if err != nil {
+		log.Error("INSERT APID_CONFIG Failed: ", err)
+		return false
+	}
+
+	txn, err := db.Begin()
+
 	ele.Get("id", &id)
 	ele.Get("_apid_scope", &scope)
 	ele.Get("name", &name)
@@ -94,12 +101,7 @@ func insertApidConfig(ele common.Row, db *sql.DB, snapInfo string) bool {
 	ele.Get("updated_by", &updatedBy)
 	ele.Get("description", &Description)
 
-	stmt, err := db.Prepare("INSERT INTO APID_CONFIG (id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);")
-	if err != nil {
-		log.Error("INSERT APID_CONFIG Failed: ", err)
-		return false
-	}
-	_, err = stmt.Exec(
+	_, err = txn.Stmt(prep).Exec(
 		id,
 		scope,
 		name,
@@ -112,9 +114,11 @@ func insertApidConfig(ele common.Row, db *sql.DB, snapInfo string) bool {
 
 	if err != nil {
 		log.Error("INSERT APID_CONFIG Failed: ", id, ", ", scope, ")", err)
+		txn.Rollback()
 		return false
 	} else {
 		log.Info("INSERT APID_CONFIG Success: (", id, ", ", scope, ")")
+		txn.Commit()
 		return true
 	}
 
@@ -123,38 +127,47 @@ func insertApidConfig(ele common.Row, db *sql.DB, snapInfo string) bool {
 /*
  * INSERT INTO APP_CREDENTIAL op
  */
-func insertApidConfigScope(ele common.Row, db *sql.DB) bool {
+func insertApidConfigScopes(rows []common.Row, db *sql.DB) bool {
 
 	var id, scopeId, apiConfigId, scope, createdBy, updatedBy string
 	var created, updated int64
 
-	ele.Get("id", &id)
-	ele.Get("_apid_scope", &scopeId)
-	ele.Get("apid_config_id", &apiConfigId)
-	ele.Get("scope", &scope)
-	ele.Get("created", &created)
-	ele.Get("created_by", &createdBy)
-	ele.Get("updated", &updated)
-	ele.Get("updated_by", &updatedBy)
-
-	stmt, err := db.Prepare("INSERT INTO APID_CONFIG_SCOPE (id, _apid_scope, apid_config_id, scope, created, created_by, updated, updated_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8);")
-
-	_, err = stmt.Exec(
-		id,
-		scopeId,
-		apiConfigId,
-		scope,
-		created,
-		createdBy,
-		updated,
-		updatedBy)
-
+	prep, err := db.Prepare("INSERT INTO APID_CONFIG_SCOPE (id, _apid_scope, apid_config_id, scope, created, created_by, updated, updated_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8);")
 	if err != nil {
-		log.Error("INSERT APID_CONFIG_SCOPE Failed: ", id, ", ", scope, ")", err)
+		log.Error("INSERT APID_CONFIG_SCOPE Failed: ", err)
 		return false
-	} else {
-		log.Info("INSERT APID_CONFIG_SCOPE Success: (", id, ", ", scope, ")")
-		return true
 	}
 
+	txn, err := db.Begin()
+	for _, ele := range rows {
+
+		ele.Get("id", &id)
+		ele.Get("_apid_scope", &scopeId)
+		ele.Get("apid_config_id", &apiConfigId)
+		ele.Get("scope", &scope)
+		ele.Get("created", &created)
+		ele.Get("created_by", &createdBy)
+		ele.Get("updated", &updated)
+		ele.Get("updated_by", &updatedBy)
+
+		_, err = txn.Stmt(prep).Exec(
+			id,
+			scopeId,
+			apiConfigId,
+			scope,
+			created,
+			createdBy,
+			updated,
+			updatedBy)
+
+		if err != nil {
+			log.Error("INSERT APID_CONFIG_SCOPE Failed: ", id, ", ", scope, ")", err)
+			txn.Rollback()
+			return false
+		} else {
+			log.Info("INSERT APID_CONFIG_SCOPE Success: (", id, ", ", scope, ")")
+		}
+	}
+	txn.Commit()
+	return true
 }

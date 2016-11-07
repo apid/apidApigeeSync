@@ -102,6 +102,7 @@ CREATE TABLE apid_config (
     updated_by text,
     _apid_scope text,
     snapshotInfo text,
+    lastSequence text,
     PRIMARY KEY (id)
 );
 CREATE TABLE apid_config_scope (

@@ -41,8 +41,8 @@ func updatePeriodicChanges() {
 			} else {
 				times = pollInterval
 			}
-			log.Debugf("sleep for %d secs", time.Duration(times))
-			time.Sleep(time.Duration(times) * time.Second)
+			log.Debugf("Connecting to changeserver...")
+			time.Sleep(time.Duration(times) * 100 * time.Millisecond)
 		} else {
 			// Reset sleep interval
 			times = 1
@@ -151,6 +151,7 @@ func pollChangeAgent() error {
  */
 func getBearerToken() bool {
 
+	log.Info("Getting a Bearer token.")
 	uri, err := url.Parse(config.GetString(configProxyServerBaseURI))
 	if err != nil {
 		log.Error(err)
@@ -168,7 +169,7 @@ func getBearerToken() bool {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Error(err)
+		log.Error("Unable to Connect to Edge Proxy Server ", err)
 		return false
 	}
 	defer resp.Body.Close()
@@ -178,7 +179,7 @@ func getBearerToken() bool {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(err)
+		log.Error("Unable to read EdgeProxy Sever response ", err)
 		return false
 	}
 
@@ -190,7 +191,7 @@ func getBearerToken() bool {
 	}
 	token = oauthResp.AccessToken
 	tokenActive = true
-	log.Info("Got a new token..")
+	log.Info("Got a new Bearer token.")
 	return true
 }
 
@@ -251,9 +252,25 @@ PHASE_2:
 	if downloadBootSnapshot == false {
 		scopes = append(scopes, (config.GetString(configScopeId)))
 	} else {
-		scopes = findScopesforId(config.GetString(configScopeId))
-	}
 
+		/*
+		 * With WAL there is a chance, commits happening might take
+		 * a bit, give some time if another session is in Committing
+		 * the scopes
+		 */
+		for count := 0; count < 60; count++ {
+			scopes = findScopesforId(config.GetString(configScopeId))
+			if scopes == nil {
+				log.Info("User Scopes not found in DB, retry in a bit.")
+				time.Sleep(time.Duration(count) * 100 * time.Millisecond)
+			} else {
+				break
+			}
+		}
+		if scopes == nil {
+			log.Fatal("Scope cannot be found to download snapshot")
+		}
+	}
 	/* Frame and send the snapshot request */
 	snapshotUri.Path = path.Join(snapshotUri.Path, "/snapshots")
 
