@@ -52,7 +52,7 @@ func updatePeriodicChanges() {
 }
 
 /*
- * Long polls every 2 minutes the change agent. Parses the response from
+ * Long polls every 45 seconds the change agent. Parses the response from
  * change agent and raises an event.
  */
 func pollChangeAgent() error {
@@ -88,7 +88,7 @@ func pollChangeAgent() error {
 		if gotSequence == true {
 			v.Add("since", lastSequence)
 		}
-		v.Add("block", "60")
+		v.Add("block", "45")
 
 		/*
 		 * Include all the scopes associated with the config Id
