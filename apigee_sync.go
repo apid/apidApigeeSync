@@ -58,7 +58,7 @@ func updatePeriodicChanges() {
 func pollChangeAgent() error {
 
 	if downloadSnapshot != true {
-		log.Error("Waiting for snapshot download to complete")
+		log.Warning("Waiting for snapshot download to complete")
 		return errors.New("Snapshot download in progress...")
 	}
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
@@ -138,7 +138,7 @@ func pollChangeAgent() error {
 		if len(resp.Changes) > 0 {
 			events.Emit(ApigeeSyncEventSelector, &resp)
 		} else {
-			log.Error("No Changes detected for Scopes ", scopes)
+			log.Info("No Changes detected for Scopes ", scopes)
 		}
 		lastSequence = resp.LastSequence
 		gotSequence = true
