@@ -9,7 +9,7 @@ describe('accumulate request plugin', () => {
     var logger = {};
     var stats = {};
 
-    plugin = accumulateRequest.init.apply(null, config, logger, stats);
+    plugin = accumulateRequest.init.apply(null, [config, logger, stats]);
   });
 
   it('exposes an ondata_request handler', () => {

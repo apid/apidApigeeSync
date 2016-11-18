@@ -1,4 +1,4 @@
-const accumulateRequest = require('../accumulate-response/index');
+const accumulateResponse = require('../accumulate-response/index');
 const assert = require('assert');
 
 describe('accumulate response plugin', () => {
@@ -9,7 +9,7 @@ describe('accumulate response plugin', () => {
     var logger = {};
     var stats = {};
 
-    plugin = accumulateRequest.init.apply(null, config, logger, stats);
+    plugin = accumulateResponse.init.apply(null, [config, logger, stats]);
   });
 
   it('exposes an ondata_response handler', () => {
