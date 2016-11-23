@@ -1,7 +1,6 @@
 package apidApigeeSync
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/30x/apid"
 )
@@ -89,7 +88,7 @@ func initPlugin(services apid.Services) error {
 	return nil
 }
 
-func createTables(db *sql.DB) {
+func createTables(db apid.DB) {
 	_, err := db.Exec(`
 CREATE TABLE apid_config (
     id text,
