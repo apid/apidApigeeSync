@@ -19,10 +19,11 @@ const (
 )
 
 var (
-	log    apid.LogService
-	config apid.ConfigService
-	data   apid.DataService
-	events apid.EventsService
+	log           apid.LogService
+	config        apid.ConfigService
+	data          apid.DataService
+	events        apid.EventsService
+	gapidConfigId string
 )
 
 func init() {
@@ -34,7 +35,7 @@ func postInitPlugins(event apid.Event) {
 	if event == apid.PluginsInitializedEvent {
 		log.Debug("start post plugin init")
 		/* call to Download Snapshot info */
-		go DownloadSnapshot()
+		go DownloadSnapshots()
 
 		/* Begin Looking for changes periodically */
 		log.Debug("starting update goroutine")
@@ -61,7 +62,7 @@ func initPlugin(services apid.Services) error {
 	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	config.SetDefault(configPollInterval, 120)
-
+	gapidConfigId = config.GetString(configScopeId)
 	db, err := data.DB()
 	if err != nil {
 		log.Panic("Unable to access DB", err)

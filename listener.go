@@ -21,6 +21,7 @@ func (h *handler) Handle(e apid.Event) {
 	if err != nil {
 		panic("Unable to access Sqlite DB")
 	}
+
 	txn, err := db.Begin()
 	if err != nil {
 		log.Error("Unable to create Sqlite transaction")
