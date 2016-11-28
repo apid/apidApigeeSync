@@ -5,9 +5,6 @@ var Quota = require('volos-quota-memory');
 var debug = require('debug')('gateway:quota');
 
 module.exports.init = function(config, logger, stats) {
-  console.log('CONFIG START');
-  console.log(config);
-  console.log('CONFIG END');
   var quotas = {}; // productName -> connectMiddleware
 
   var options = {
@@ -17,7 +14,6 @@ module.exports.init = function(config, logger, stats) {
   Object.keys(config).forEach(function(productName) {
     var product = config[productName];
     if (!product.uri && !product.key && !product.secret && !product.allow && !product.interval) {
-      console.log('Not enough info to configure quota');
       return; // skip non-quota config
     }
 
