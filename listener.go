@@ -36,7 +36,7 @@ func (h *handler) Handle(e apid.Event) {
 		if ok {
 			res = processChange(changeSet, txn)
 		} else {
-			log.Fatal("Received Invalid event. This shouldn't happen!")
+			log.Fatal("Received invalid event: %v", e)
 		}
 	}
 	if res == true {

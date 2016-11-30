@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-// todo: The following was largely copied from old APID - needs review
-
-var latestSequence int64
 var token string
 var tokenActive, downloadDataSnapshot, downloadBootSnapshot, chfin bool
 var lastSequence string
@@ -270,7 +267,7 @@ func Redirect(req *http.Request, via []*http.Request) error {
  * the second call to the snapshot server to get all the data
  * associated with the scope(s).
  * Emit the data for the necessary plugins to process.
- * If there is already previous data in sqlite, donot fetch
+ * If there is already previous data in sqlite, don't fetch
  * again from snapshot server.
  */
 func DownloadSnapshots() {
@@ -283,6 +280,21 @@ func DownloadSnapshots() {
 	if gsnapshotInfo != "" {
 		downloadDataSnapshot = true
 		downloadBootSnapshot = true
+
+		log.Infof("Starting on downloaded snapshot: %s", gsnapshotInfo)
+
+		// verify DB is accessible
+		_, err := data.DBVersion(gsnapshotInfo)
+		if err != nil {
+			log.Panicf("Database inaccessible: %v", err)
+		}
+
+		// allow plugins to start immediately on existing database
+		snap := &common.Snapshot{
+			SnapshotInfo: gsnapshotInfo,
+		}
+		events.Emit(ApigeeSyncEventSelector, snap)
+
 		return
 	}
 
@@ -294,7 +306,7 @@ func DownloadSnapshots() {
 	 * Snapshot
 	 */
 	for count := 0; count < 60; count++ {
-		if downloadBootSnapshot == false {
+		if !downloadBootSnapshot {
 			log.Debug("Waiting for bootscope snapshot download...")
 			time.Sleep(time.Duration(count) * 100 * time.Millisecond)
 		} else {
@@ -303,7 +315,7 @@ func DownloadSnapshots() {
 	}
 
 	/* Phase 2 */
-	if downloadBootSnapshot == true && downloadDataSnapshot == true {
+	if downloadBootSnapshot && downloadDataSnapshot {
 		log.Debug("Proceeding with existing Sqlite data")
 	} else if downloadBootSnapshot == true {
 		log.Debug("Proceed to download Snapshot for data scopes")
@@ -423,7 +435,7 @@ func findScopesforId(configId string) (scopes []string) {
 }
 
 /*
- * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
+ * Retrieve LastSequence for the given apidConfigId from apid_config table
  */
 func findLastSeqInfo(configId string) (info string) {
 
@@ -446,7 +458,7 @@ func findLastSeqInfo(configId string) (info string) {
 }
 
 /*
- * Retrieve LastSequence for the given apidConfigId from apid_config table
+ * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
  */
 func findSnapshotInfo(configId string) (info string) {
 

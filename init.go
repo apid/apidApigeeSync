@@ -57,7 +57,7 @@ func initPlugin(services apid.Services) error {
 	/* This callback function will get called, once all the plugins are
 	 * initialized (not just this plugin). This is needed because,
 	 * DownloadSnapshots/Changes etc have to begin to be processed only
-	 * after all the plugins are intialized
+	 * after all the plugins are initialized
 	 */
 	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
