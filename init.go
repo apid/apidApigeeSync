@@ -14,7 +14,7 @@ const (
 	configConsumerSecret      = "apigeesync_consumer_secret"
 	configScopeId             = "apigeesync_bootstrap_id"
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
-	configUnitTestMode        = "apigeesync_UnitTest_mode"
+	configTimeLimit           = "apigeesync_timelimit_in_secs"
 	ApigeeSyncEventSelector   = "ApigeeSync"
 )
 
@@ -62,6 +62,7 @@ func initPlugin(services apid.Services) error {
 	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	config.SetDefault(configPollInterval, 120)
+	config.SetDefault(configTimeLimit, 60)
 	gapidConfigId = config.GetString(configScopeId)
 	db, err := data.DB()
 	if err != nil {

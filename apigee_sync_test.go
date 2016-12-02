@@ -192,7 +192,7 @@ var _ = Describe("api", func() {
 		config.Set(configScopeId, scope)
 		config.Set(configConsumerKey, key)
 		config.Set(configConsumerSecret, secret)
-
+		config.Set(configTimeLimit, 60)
 		// set up temporary test database
 		tmpDir, err := ioutil.TempDir("", "apigee_sync_test")
 		Expect(err).NotTo(HaveOccurred())
@@ -230,7 +230,7 @@ var _ = Describe("api", func() {
 					// There should be 2 scopes now
 					_, ok := event.(*common.ChangeList)
 					if ok {
-						time.Sleep(200 * time.Millisecond)
+						time.Sleep(1 * time.Second)
 						db, err := data.DB()
 						Expect(err).NotTo(HaveOccurred())
 						err = db.QueryRow("Select count(scp.id) from apid_config_scope as scp INNER JOIN apid_config as ap WHERE scp.apid_config_id = ap.id").Scan(&scount)
@@ -255,7 +255,37 @@ var _ = Describe("api", func() {
 		apid.Events().Listen(ApigeeSyncEventSelector, h1)
 		events.ListenFunc(apid.EventDeliveredSelector, donehandler)
 
-	})
+	}, 10)
+
+	It("Plugin does not respond in time", func(done Done) {
+		defer func() {
+			if r := recover(); r != nil {
+				var ok bool
+				_, ok = r.(error)
+				if !ok {
+					Expect(r).Should(Equal("Never got ack from plugins. Investigate.."))
+				} else {
+					Fail("Unexpected panic handling error")
+				}
+			}
+
+		}()
+		h2 := &test_handler{
+			"sync data",
+			func(event apid.Event) {
+				_, ok := event.(*common.ChangeList)
+				if ok {
+					// Sleep more than tolerated
+					time.Sleep(5 * time.Second)
+					close(done)
+				} else {
+					Fail("Unexpected event")
+				}
+			},
+		}
+		config.Set(configTimeLimit, 2)
+		apid.Events().Listen(ApigeeSyncEventSelector, h2)
+	}, 10)
 
 })
 

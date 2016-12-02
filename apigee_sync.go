@@ -64,7 +64,7 @@ func updatePeriodicChanges() {
 				times = pollInterval
 			}
 			log.Debugf("Connecting to changeserver...")
-			time.Sleep(time.Duration(times) * 100 * time.Millisecond)
+			time.Sleep(time.Duration(times) * time.Second)
 		} else {
 			// Reset sleep interval
 			times = 1
@@ -168,18 +168,17 @@ func pollChangeAgent() error {
 			 * The plugins should have finished what they are doing.
 			 * Wait till they are done.
 			 * If they take longer than expected - abort apid(?)
-			 * (Should there be a configurable Fudge factor?) FIXME
 			 */
-			for count := 0; count < 1000; count++ {
+			for count := 0; count < config.GetInt(configTimeLimit); count++ {
 				if chfin == false {
 					log.Info("Waiting for plugins to complete...")
-					time.Sleep(time.Duration(count) * 100 * time.Millisecond)
+					time.Sleep(time.Duration(count) * time.Second)
 				} else {
 					break
 				}
 			}
 			if chfin == false {
-				log.Fatal("Never got ack from plugins. Investigate..")
+				log.Panicf("Never got ack from plugins. Investigate..")
 			}
 		} else {
 			log.Info("No Changes detected for Scopes ", scopes)
@@ -300,15 +299,14 @@ func DownloadSnapshots() {
 
 	/* Phase 1 */
 	DownloadSnapshot()
-
 	/*
 	 * Give some time for all the plugins to process the Downloaded
 	 * Snapshot
 	 */
-	for count := 0; count < 60; count++ {
+	for count := 0; count < config.GetInt(configTimeLimit); count++ {
 		if !downloadBootSnapshot {
 			log.Debug("Waiting for bootscope snapshot download...")
-			time.Sleep(time.Duration(count) * 100 * time.Millisecond)
+			time.Sleep(time.Duration(count) * time.Second)
 		} else {
 			break
 		}
