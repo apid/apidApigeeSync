@@ -3,13 +3,13 @@ const assert = require('assert');
 
 var exampleConfig = { 
   EdgeMicroTestProduct: {
-    allow: '3',
-    interval: '1',
-    timeUnit: 'minute',
-    bufferSize: 10000,
-    uri: 'https://edgemicroservices-us-east-1.apigee.net/edgemicro/quotas/organization/ws-poc3/environment/test',
-    key: 'b7b69b6bd79e778782af9a653ae9c4d91e65440d8acbc7e969437a8a8dc13612',
-    secret: 'c273ec588e22f29f3165fda450fee27f2c0703a08904ebecdbf379b5ac71090a' 
+    allow: process.env.QUOTA_ALLOW,
+    interval: process.env.QUOTA_INTERVAL,
+    timeUnit: process.env.QUOTA_TIMEUNIT,
+    bufferSize: process.env.QUOTA_BUFFERSIZE,
+    uri: process.env.QUOTA_URI,
+    key: process.env.QUOTA_KEY,
+    secret: process.env.QUOTA_SECRET 
   }
 }
 
