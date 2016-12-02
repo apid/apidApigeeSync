@@ -17,20 +17,11 @@ import (
 var _ = Describe("api", func() {
 
 	var server *httptest.Server
+	scope := "bootstrap"
+	phase := 0
+	var h1 *test_handler
 
 	BeforeSuite(func() {
-		apid.Initialize(factory.DefaultServicesFactory())
-	})
-
-	AfterSuite(func() {
-		apid.Events().Close()
-		server.Close()
-	})
-
-	It("perform sync round-trip", func(done Done) {
-		scount := 0
-		phase := 0
-		scope := "bootstrap"
 		key := "XXXXXXX"
 		secret := "YYYYYYY"
 
@@ -54,7 +45,7 @@ var _ = Describe("api", func() {
 				return
 			}
 
-			// next requests are for changes
+			// next requests are for snapshot
 			if req.URL.Path == "/snapshots" {
 				Expect(req.Method).To(Equal("GET"))
 				q := req.URL.Query()
@@ -191,6 +182,7 @@ var _ = Describe("api", func() {
 			Fail("should not reach")
 		}))
 
+		apid.Initialize(factory.DefaultServicesFactory())
 		config = apid.Config()
 		config.Set(configProxyServerBaseURI, server.URL)
 		config.Set(configSnapServerBaseURI, server.URL)
@@ -210,8 +202,17 @@ var _ = Describe("api", func() {
 
 		// start process -  plugin will automatically start polling
 		apid.InitializePlugins()
+	})
 
-		h := &test_handler{
+	AfterSuite(func() {
+		apid.Events().Close()
+		server.Close()
+	})
+
+	It("perform sync round-trip", func(done Done) {
+		scount := 0
+		phase = 0
+		h1 = &test_handler{
 			"sync data",
 			func(event apid.Event) {
 				_, ok := event.(*common.Snapshot)
@@ -244,8 +245,18 @@ var _ = Describe("api", func() {
 			},
 		}
 
-		apid.Events().Listen(ApigeeSyncEventSelector, h)
+		donehandler := func(e apid.Event) {
+			if rsp, ok := e.(apid.EventDeliveryEvent); ok {
+				Expect(rsp.Description).Should(Equal("event complete"))
+			} else {
+				Fail("Unexpected event")
+			}
+		}
+		apid.Events().Listen(ApigeeSyncEventSelector, h1)
+		events.ListenFunc(apid.EventDeliveredSelector, donehandler)
+
 	})
+
 })
 
 type test_handler struct {
