@@ -4,7 +4,7 @@
   "description": "Plugins for Apige Edge Microgateway",
   "main": "index.js",
   "scripts": {
-    "test": "bin/test"
+    "test": "./node_modules/.bin/mocha -R spec"
   },
   "dependencies": {
     "async": "^1.4.2",
