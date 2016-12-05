@@ -244,7 +244,16 @@ var _ = Describe("api", func() {
 			},
 		}
 
+		donehandler := func(e apid.Event) {
+			if rsp, ok := e.(apid.EventDeliveryEvent); ok {
+				Expect(rsp.Description).Should(Equal("event complete"))
+			} else {
+				Fail("Unexpected event")
+			}
+		}
 		apid.Events().Listen(ApigeeSyncEventSelector, h)
+		events.ListenFunc(apid.EventDeliveredSelector, donehandler)
+
 	})
 })
 
