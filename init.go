@@ -32,7 +32,16 @@ func init() {
 
 func postInitPlugins(event apid.Event) {
 
-	if event == apid.PluginsInitializedEvent {
+	if pie, ok := event.(apid.PluginsInitializedEvent); ok {
+
+		// todo: temporary example. do whatever registration logic is needed...
+		for _, plugin := range pie.Plugins {
+			name := plugin.Name
+			version := plugin.Version
+			schemaVersion := plugin.ExtraData["schemaVersion"]
+			log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version, schemaVersion)
+		}
+
 		log.Debug("start post plugin init")
 		/* call to Download Snapshot info */
 		go DownloadSnapshots()
@@ -46,7 +55,7 @@ func postInitPlugins(event apid.Event) {
 	}
 }
 
-func initPlugin(services apid.Services) error {
+func initPlugin(services apid.Services) (apid.PluginData, error) {
 	log = services.Log().ForModule("apigeeSync")
 	log.Debug("start init")
 
@@ -71,7 +80,7 @@ func initPlugin(services apid.Services) error {
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret, configSnapServerBaseURI, configChangeServerBaseURI} {
 		if !config.IsSet(key) {
-			return fmt.Errorf("Missing required config value: %s", key)
+			return pluginData, fmt.Errorf("Missing required config value: %s", key)
 		}
 	}
 
@@ -86,7 +95,7 @@ func initPlugin(services apid.Services) error {
 
 	log.Debug("end init")
 
-	return nil
+	return pluginData, nil
 }
 
 func createTables(db apid.DB) {
