@@ -100,7 +100,7 @@ func insertApidConfig(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
 	var scope, id, name, orgAppName, createdBy, updatedBy, Description string
 	var updated, created int64
 
-	prep, err := txn.Prepare("INSERT INTO APID_CONFIG (id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);")
+	prep, err := txn.Prepare("INSERT INTO APID_CONFIG (id, instance_id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);")
 	if err != nil {
 		log.Error("INSERT APID_CONFIG Failed: ", err)
 		return false
@@ -121,6 +121,7 @@ func insertApidConfig(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
 		s := txn.Stmt(prep)
 		_, err = s.Exec(
 			id,
+			guuid,
 			scope,
 			name,
 			orgAppName,

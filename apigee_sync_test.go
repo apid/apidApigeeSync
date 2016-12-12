@@ -53,6 +53,7 @@ var _ = Describe("api", func() {
 				err = json.Unmarshal(plinfo, &plugInfo)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(plugInfo[0].Name).To(Equal("apidApigeeSync"))
+				Expect(plugInfo[0].SchemaVersion).To(Equal("0.0.1"))
 
 				res := oauthTokenResp{}
 				res.AccessToken = "accesstoken"

@@ -47,7 +47,7 @@ func generate_uuid() string {
 	if numRead != len(buff) || err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf("%x-%x-%x-%x-%x-%x\n", unix32bits, buff[0:2], buff[2:4], buff[4:6], buff[6:8], buff[8:])
+	return fmt.Sprintf("%x-%x-%x-%x-%x-%x", unix32bits, buff[0:2], buff[2:4], buff[4:6], buff[6:8], buff[8:])
 }
 
 func init() {
@@ -103,7 +103,10 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	config = services.Config()
 	data = services.Data()
 	events = services.Events()
-	guuid = generate_uuid()
+	guuid = findapidConfigInfo("instance_id")
+	if guuid == "" {
+		guuid = generate_uuid()
+	}
 
 	/* If The Instance has no name configured, just re-use UUID */
 	ginstName = config.GetString(configName)
@@ -150,6 +153,7 @@ func createTables(db apid.DB) {
 	_, err := db.Exec(`
 CREATE TABLE apid_config (
     id text,
+    instance_id text,
     name text,
     description text,
     umbrella_org_app_name text,

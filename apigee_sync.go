@@ -94,7 +94,7 @@ func pollChangeAgent() error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = findLastSeqInfo(gapidConfigId)
+	lastSequence = findapidConfigInfo("lastSequence")
 	for {
 		log.Debug("polling...")
 		if tokenActive == false {
@@ -281,7 +281,7 @@ func DownloadSnapshots() {
 	 * Skip Downloading snapshot, if there is already a snapshot
 	 * available from previous run of APID
 	 */
-	gsnapshotInfo = findSnapshotInfo(gapidConfigId)
+	gsnapshotInfo = findapidConfigInfo("snapshotInfo")
 	if gsnapshotInfo != "" {
 		downloadDataSnapshot = true
 		downloadBootSnapshot = true
@@ -440,40 +440,17 @@ func findScopesforId(configId string) (scopes []string) {
 }
 
 /*
- * Retrieve LastSequence for the given apidConfigId from apid_config table
- */
-func findLastSeqInfo(configId string) (info string) {
-
-	db, err := data.DB()
-	if err != nil {
-		log.Errorf("DB open Error: %s", err)
-		return ""
-	}
-
-	rows, err := db.Query("select lastSequence from APID_CONFIG where id = $1", configId)
-	if err != nil {
-		log.Errorf("Failed to query APID_CONFIG. Err: %s", err)
-		return ""
-	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&info)
-	}
-	return info
-}
-
-/*
  * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
  */
-func findSnapshotInfo(configId string) (info string) {
+func findapidConfigInfo(qparam string) (info string) {
 
 	db, err := data.DB()
 	if err != nil {
 		log.Errorf("DB open Error: %s", err)
 		return ""
 	}
-
-	rows, err := db.Query("select snapshotInfo from APID_CONFIG where id = $1", configId)
+	query := "select " + qparam + " from APID_CONFIG"
+	rows, err := db.Query(query)
 	if err != nil {
 		log.Errorf("Failed to query APID_CONFIG. Err: %s", err)
 		return ""
@@ -500,14 +477,14 @@ func persistChange(lastChange string) bool {
 		log.Error("Unable to create Sqlite transaction")
 		return false
 	}
-	prep, err := txn.Prepare("UPDATE APID_CONFIG SET lastSequence=$1 WHERE id=$2;")
+	prep, err := txn.Prepare("UPDATE APID_CONFIG SET lastSequence=$1;")
 	if err != nil {
 		log.Error("INSERT APID_CONFIG Failed: ", err)
 		return false
 	}
 	defer prep.Close()
 	s := txn.Stmt(prep)
-	_, err = s.Exec(lastChange, gapidConfigId)
+	_, err = s.Exec(lastChange)
 	s.Close()
 	if err != nil {
 		log.Error("UPDATE APID_CONFIG_SCOPE Failed: ", err)
