@@ -17,6 +17,7 @@ import (
 var _ = Describe("api", func() {
 
 	var server *httptest.Server
+	var plugInfo []pluginDetail
 
 	BeforeSuite(func() {
 		apid.Initialize(factory.DefaultServicesFactory())
@@ -45,6 +46,13 @@ var _ = Describe("api", func() {
 				err := req.ParseForm()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
+				Expect(req.Form.Get("status")).To(Equal("ONLINE"))
+				Expect(req.Form.Get("apid_cluster_Id")).To(Equal("bootstrap"))
+				Expect(req.Form.Get("display_name")).To(Equal("testhost"))
+				plinfo := []byte(req.Form.Get("plugin_details"))
+				err = json.Unmarshal(plinfo, &plugInfo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plugInfo[0].Name).To(Equal("apidApigeeSync"))
 
 				res := oauthTokenResp{}
 				res.AccessToken = "accesstoken"
@@ -196,6 +204,8 @@ var _ = Describe("api", func() {
 		config.Set(configSnapServerBaseURI, server.URL)
 		config.Set(configChangeServerBaseURI, server.URL)
 		config.Set(configScopeId, "apid_config_scope_0")
+		config.Set(configName, "testhost")
+
 		config.Set(configSnapshotProtocol, "json")
 		config.Set(configScopeId, scope)
 		config.Set(configConsumerKey, key)

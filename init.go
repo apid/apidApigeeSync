@@ -1,8 +1,11 @@
 package apidApigeeSync
 
 import (
+	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"github.com/30x/apid"
+	"time"
 )
 
 const (
@@ -14,7 +17,7 @@ const (
 	configConsumerSecret      = "apigeesync_consumer_secret"
 	configScopeId             = "apigeesync_bootstrap_id"
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
-	configUnitTestMode        = "apigeesync_UnitTest_mode"
+	configName                = "apigeesync_instance_name"
 	ApigeeSyncEventSelector   = "ApigeeSync"
 )
 
@@ -24,22 +27,60 @@ var (
 	data          apid.DataService
 	events        apid.EventsService
 	gapidConfigId string
+	guuid         string
+	ginstName     string
+	gpgInfo       string
 )
+
+type pluginDetail struct {
+	Name          string `json:"name"`
+	SchemaVersion string `json:"schemaVer"`
+}
+
+/*
+ * generates a random uuid (mix of timestamp & crypto random string)
+ */
+func generate_uuid() string {
+	unix32bits := uint32(time.Now().UTC().Unix())
+	buff := make([]byte, 12)
+	numRead, err := rand.Read(buff)
+	if numRead != len(buff) || err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x-%x\n", unix32bits, buff[0:2], buff[2:4], buff[4:6], buff[6:8], buff[8:])
+}
 
 func init() {
 	apid.RegisterPlugin(initPlugin)
 }
 
 func postInitPlugins(event apid.Event) {
-
+	var plinfoDetails []pluginDetail
 	if pie, ok := event.(apid.PluginsInitializedEvent); ok {
 
-		// todo: temporary example. do whatever registration logic is needed...
+		/*
+		 * Store the plugin details in the heap. Needed during
+		 * Bearer token generation request
+		 */
 		for _, plugin := range pie.Plugins {
 			name := plugin.Name
 			version := plugin.Version
-			schemaVersion := plugin.ExtraData["schemaVersion"]
-			log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version, schemaVersion)
+			log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version)
+			if schemaVersion, ok := plugin.ExtraData["schemaVersion"].(string); ok {
+				inf := pluginDetail{
+					Name:          name,
+					SchemaVersion: schemaVersion}
+				plinfoDetails = append(plinfoDetails, inf)
+			}
+		}
+		if plinfoDetails == nil {
+			log.Panicf("No Plugins registered!")
+		} else {
+			pgInfo, err := json.Marshal(plinfoDetails)
+			if err != nil {
+				log.Panic("Unable to masrhal plugin data", err)
+			}
+			gpgInfo = (string(pgInfo[:]))
 		}
 
 		log.Debug("start post plugin init")
@@ -62,6 +103,13 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	config = services.Config()
 	data = services.Data()
 	events = services.Events()
+	guuid = generate_uuid()
+
+	/* If The Instance has no name configured, just re-use UUID */
+	ginstName = config.GetString(configName)
+	if ginstName == "" {
+		ginstName = guuid
+	}
 
 	/* This callback function will get called, once all the plugins are
 	 * initialized (not just this plugin). This is needed because,

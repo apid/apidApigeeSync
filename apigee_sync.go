@@ -201,10 +201,15 @@ func getBearerToken() bool {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 	tokenActive = false
-
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Add("client_id", config.GetString(configConsumerKey))
+	form.Add("display_name", ginstName)
+	form.Add("apid_instance_id", guuid)
+	form.Add("apid_cluster_Id", gapidConfigId)
+	form.Add("status", "ONLINE")
+	form.Add("created_at", time.Now().Format(time.RFC3339))
+	form.Add("plugin_details", gpgInfo)
 	form.Add("client_secret", config.GetString(configConsumerSecret))
 	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
