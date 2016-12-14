@@ -18,6 +18,12 @@ var tokenActive, downloadDataSnapshot, downloadBootSnapshot, chfin bool
 var lastSequence string
 var gsnapshotInfo string
 
+func add_headers(req *http.Request) {
+	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Set("apid_instance_id", guuid)
+	req.Header.Set("apid_cluster_Id", gapidConfigId)
+}
+
 func donehandler(e apid.Event) {
 	if rsp, ok := e.(apid.EventDeliveryEvent); ok {
 		if rsp.Description == "event complete" {
@@ -132,7 +138,7 @@ func pollChangeAgent() error {
 		/* If error, break the loop, and retry after interval */
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", uri, nil)
-		req.Header.Add("Authorization", "Bearer "+token)
+		add_headers(req)
 		r, err := client.Do(req)
 		if err != nil {
 			log.Errorf("change agent comm error: %s", err)
@@ -368,7 +374,7 @@ func DownloadSnapshot() {
 		CheckRedirect: Redirect,
 	}
 	req, err := http.NewRequest("GET", uri, nil)
-	req.Header.Add("Authorization", "Bearer "+token)
+	add_headers(req)
 
 	/* Set the transport protocol type based on conf file input */
 	if config.GetString(configSnapshotProtocol) == "json" {

@@ -71,6 +71,7 @@ var _ = Describe("api", func() {
 				if phase == 0 {
 					phase = 1
 					Expect(q.Get("scope")).To(Equal(scope))
+					Expect(req.Header.Get("apid_cluster_Id")).To(Equal("bootstrap"))
 
 					apidcfgItem := common.Row{}
 					apidcfgItems := []common.Row{}
@@ -156,6 +157,7 @@ var _ = Describe("api", func() {
 			// next requests are for changes
 			if req.URL.Path == "/changes" {
 				Expect(req.Method).To(Equal("GET"))
+				Expect(req.Header.Get("apid_cluster_Id")).To(Equal("bootstrap"))
 				q := req.URL.Query()
 				Expect(q.Get("snapshot")).To(Equal("snapinfo1"))
 				scparams := q["scope"]
