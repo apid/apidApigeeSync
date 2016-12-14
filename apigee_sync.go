@@ -204,15 +204,16 @@ func getBearerToken() bool {
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Add("client_id", config.GetString(configConsumerKey))
-	form.Add("display_name", ginstName)
-	form.Add("apid_instance_id", guuid)
-	form.Add("apid_cluster_Id", gapidConfigId)
-	form.Add("status", "ONLINE")
-	form.Add("created_at", time.Now().Format(time.RFC3339))
-	form.Add("plugin_details", gpgInfo)
 	form.Add("client_secret", config.GetString(configConsumerSecret))
 	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
+	req.Header.Set("display_name", ginstName)
+	req.Header.Set("apid_instance_id", guuid)
+	req.Header.Set("apid_cluster_Id", gapidConfigId)
+	req.Header.Set("status", "ONLINE")
+	req.Header.Set("created_at", time.Now().Format(time.RFC3339))
+	req.Header.Set("plugin_details", gpgInfo)
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -479,7 +480,7 @@ func persistChange(lastChange string) bool {
 	}
 	prep, err := txn.Prepare("UPDATE APID_CONFIG SET lastSequence=$1;")
 	if err != nil {
-		log.Error("INSERT APID_CONFIG Failed: ", err)
+		log.Error("UPDATE APID_CONFIG Failed: ", err)
 		return false
 	}
 	defer prep.Close()
