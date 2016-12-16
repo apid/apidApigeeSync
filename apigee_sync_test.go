@@ -53,7 +53,7 @@ var _ = Describe("api", func() {
 				err = json.Unmarshal(plinfo, &plugInfo)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(plugInfo[0].Name).To(Equal("apidApigeeSync"))
-				Expect(plugInfo[0].SchemaVersion).To(Equal("0.0.1"))
+				Expect(plugInfo[0].SchemaVersion).To(Equal("0.0.2"))
 
 				res := oauthTokenResp{}
 				res.AccessToken = "accesstoken"
@@ -86,7 +86,7 @@ var _ = Describe("api", func() {
 						Value: scope,
 						Type:  1,
 					}
-					apidcfgItem["_apid_scope"] = scv
+					apidcfgItem["_change_selector"] = scv
 					apidcfgItems = append(apidcfgItems, apidcfgItem)
 
 					scv = &common.ColumnVal{
@@ -99,19 +99,35 @@ var _ = Describe("api", func() {
 						Value: "apid_config_scope_id_0",
 						Type:  1,
 					}
-					apidcfgItemCh["_apid_scope"] = scv
+					apidcfgItemCh["_change_selector"] = scv
 
 					scv = &common.ColumnVal{
 						Value: scope,
 						Type:  1,
 					}
-					apidcfgItemCh["apid_config_id"] = scv
+					apidcfgItemCh["apid_cluster_id"] = scv
 
 					scv = &common.ColumnVal{
-						Value: "att~prod",
+						Value: "ert452",
 						Type:  1,
 					}
 					apidcfgItemCh["scope"] = scv
+
+					{
+						scv = &common.ColumnVal{
+							Value: "att",
+							Type:  1,
+						}
+						apidcfgItemCh["org"] = scv
+
+					}
+					{
+						scv = &common.ColumnVal{
+							Value: "prod",
+							Type:  1,
+						}
+						apidcfgItemCh["env"] = scv
+					}
 
 					apidcfgItemsCh = append(apidcfgItemsCh, apidcfgItemCh)
 
@@ -120,11 +136,11 @@ var _ = Describe("api", func() {
 
 					res.Tables = []common.Table{
 						{
-							Name: "edgex.apid_config",
+							Name: "edgex.apid_cluster",
 							Rows: apidcfgItems,
 						},
 						{
-							Name: "edgex.apid_config_scope",
+							Name: "edgex.data_scope",
 							Rows: apidcfgItemsCh,
 						},
 					}
@@ -135,7 +151,7 @@ var _ = Describe("api", func() {
 					return
 				} else {
 					phase = 2
-					Expect(q.Get("scope")).To(Equal("att~prod"))
+					Expect(q.Get("scope")).To(Equal("ert452"))
 					res := &common.Snapshot{}
 					res.SnapshotInfo = "snapinfo1"
 
@@ -161,7 +177,7 @@ var _ = Describe("api", func() {
 				q := req.URL.Query()
 				Expect(q.Get("snapshot")).To(Equal("snapinfo1"))
 				scparams := q["scope"]
-				Expect(scparams).To(ContainElement("att~prod"))
+				Expect(scparams).To(ContainElement("ert452"))
 				Expect(scparams).To(ContainElement("bootstrap"))
 
 				res := &common.ChangeList{}
@@ -179,17 +195,31 @@ var _ = Describe("api", func() {
 					Value: scope,
 					Type:  1,
 				}
-				mpItems["apid_config_id"] = scv
+				mpItems["apid_cluster_id"] = scv
 
 				scv = &common.ColumnVal{
-					Value: "att~test",
+					Value: "ert452",
 					Type:  1,
 				}
 				mpItems["scope"] = scv
+				{
+					scv = &common.ColumnVal{
+						Value: "att",
+						Type:  1,
+					}
+					mpItems["org"] = scv
+				}
+				{
+					scv = &common.ColumnVal{
+						Value: "prod",
+						Type:  1,
+					}
+					mpItems["env"] = scv
+				}
 
 				res.Changes = []common.Change{
 					{
-						Table:     "edgex.apid_config_scope",
+						Table:     "edgex.data_scope",
 						NewRow:    mpItems,
 						Operation: 1,
 					},
@@ -206,11 +236,11 @@ var _ = Describe("api", func() {
 		config.Set(configProxyServerBaseURI, server.URL)
 		config.Set(configSnapServerBaseURI, server.URL)
 		config.Set(configChangeServerBaseURI, server.URL)
-		config.Set(configScopeId, "apid_config_scope_0")
+		config.Set(configApidClusterId, "apid_config_scope_0")
 		config.Set(configName, "testhost")
 
 		config.Set(configSnapshotProtocol, "json")
-		config.Set(configScopeId, scope)
+		config.Set(configApidClusterId, scope)
 		config.Set(configConsumerKey, key)
 		config.Set(configConsumerSecret, secret)
 
@@ -233,7 +263,7 @@ var _ = Describe("api", func() {
 						db, err := data.DB()
 						Expect(err).NotTo(HaveOccurred())
 						// verify event data (post snapshot)
-						err = db.QueryRow("Select count(scp.id) from apid_config_scope as scp INNER JOIN apid_config as ap WHERE scp.apid_config_id = ap.id").Scan(&scount)
+						err = db.QueryRow("Select count(scp.id) from data_scope as scp INNER JOIN apid_cluster as ap WHERE scp.apid_cluster_id = ap.id").Scan(&scount)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(scount).Should(Equal(1))
 					}
@@ -245,7 +275,7 @@ var _ = Describe("api", func() {
 						time.Sleep(200 * time.Millisecond)
 						db, err := data.DB()
 						Expect(err).NotTo(HaveOccurred())
-						err = db.QueryRow("Select count(scp.id) from apid_config_scope as scp INNER JOIN apid_config as ap WHERE scp.apid_config_id = ap.id").Scan(&scount)
+						err = db.QueryRow("Select count(scp.id) from data_scope as scp INNER JOIN apid_cluster as ap WHERE scp.apid_cluster_id = ap.id").Scan(&scount)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(scount).Should(Equal(2))
 						close(done)

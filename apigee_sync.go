@@ -433,9 +433,9 @@ func findScopesforId(configId string) (scopes []string) {
 		return nil
 	}
 
-	rows, err := db.Query("select scope from APID_CONFIG_SCOPE where apid_config_id = $1", configId)
+	rows, err := db.Query("select scope from DATA_SCOPE where apid_cluster_id = $1", configId)
 	if err != nil {
-		log.Errorf("Failed to query APID_CONFIG_SCOPE. Err: %s", err)
+		log.Errorf("Failed to query DATA_SCOPE. Err: %s", err)
 		return nil
 	}
 	defer rows.Close()
@@ -456,10 +456,10 @@ func findapidConfigInfo(qparam string) (info string) {
 		log.Errorf("DB open Error: %s", err)
 		return ""
 	}
-	query := "select " + qparam + " from APID_CONFIG"
+	query := "select " + qparam + " from APID_CLUSTER"
 	rows, err := db.Query(query)
 	if err != nil {
-		log.Errorf("Failed to query APID_CONFIG. Err: %s", err)
+		log.Errorf("Failed to query APID_CLUSTER. Err: %s", err)
 		return ""
 	}
 	defer rows.Close()
@@ -484,9 +484,9 @@ func persistChange(lastChange string) bool {
 		log.Error("Unable to create Sqlite transaction")
 		return false
 	}
-	prep, err := txn.Prepare("UPDATE APID_CONFIG SET lastSequence=$1;")
+	prep, err := txn.Prepare("UPDATE APID_CLUSTER SET lastSequence=$1;")
 	if err != nil {
-		log.Error("UPDATE APID_CONFIG Failed: ", err)
+		log.Error("UPDATE APID_CLUSTER Failed: ", err)
 		return false
 	}
 	defer prep.Close()
@@ -494,11 +494,11 @@ func persistChange(lastChange string) bool {
 	_, err = s.Exec(lastChange)
 	s.Close()
 	if err != nil {
-		log.Error("UPDATE APID_CONFIG_SCOPE Failed: ", err)
+		log.Error("UPDATE DATA_SCOPE Failed: ", err)
 		txn.Rollback()
 		return false
 	} else {
-		log.Info("UPDATE  APID_CONFIG_SCOPE Success: (", lastChange, ")")
+		log.Info("UPDATE  DATA_SCOPE Success: (", lastChange, ")")
 		txn.Commit()
 		return true
 	}

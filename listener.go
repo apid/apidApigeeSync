@@ -55,10 +55,10 @@ func processSnapshot(snapshot *common.Snapshot, txn *sql.Tx) bool {
 	for _, payload := range snapshot.Tables {
 
 		switch payload.Name {
-		case "edgex.apid_config":
-			res = insertApidConfig(payload.Rows, txn, snapshot.SnapshotInfo)
-		case "edgex.apid_config_scope":
-			res = insertApidConfigScopes(payload.Rows, txn)
+		case "edgex.apid_cluster":
+			res = insertApidCluster(payload.Rows, txn, snapshot.SnapshotInfo)
+		case "edgex.data_scope":
+			res = insertDataScopes(payload.Rows, txn)
 		}
 		if res == false {
 			log.Error("Error encountered in Downloading Snapshot for ApidApigeeSync")
@@ -77,11 +77,11 @@ func processChange(changes *common.ChangeList, txn *sql.Tx) bool {
 	for _, payload := range changes.Changes {
 		rows = nil
 		switch payload.Table {
-		case "edgex.apid_config_scope":
+		case "edgex.data_scope":
 			switch payload.Operation {
 			case common.Insert:
 				rows = append(rows, payload.NewRow)
-				res = insertApidConfigScopes(rows, txn)
+				res = insertDataScopes(rows, txn)
 			}
 		}
 		if res == false {
@@ -95,21 +95,21 @@ func processChange(changes *common.ChangeList, txn *sql.Tx) bool {
 /*
  * INSERT INTO APP_CREDENTIAL op
  */
-func insertApidConfig(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
+func insertApidCluster(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
 
 	var scope, id, name, orgAppName, createdBy, updatedBy, Description string
 	var updated, created int64
 
-	prep, err := txn.Prepare("INSERT INTO APID_CONFIG (id, instance_id, _apid_scope, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);")
+	prep, err := txn.Prepare("INSERT INTO APID_CLUSTER (id, instance_id, _change_selector, name, umbrella_org_app_name, created, created_by, updated, updated_by, snapshotInfo)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);")
 	if err != nil {
-		log.Error("INSERT APID_CONFIG Failed: ", err)
+		log.Error("INSERT APID_CLUSTER Failed: ", err)
 		return false
 	}
 	defer prep.Close()
 
 	for _, ele := range rows {
 		ele.Get("id", &id)
-		ele.Get("_apid_scope", &scope)
+		ele.Get("_change_selector", &scope)
 		ele.Get("name", &name)
 		ele.Get("umbrella_org_app_name", &orgAppName)
 		ele.Get("created", &created)
@@ -132,10 +132,10 @@ func insertApidConfig(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
 			snapInfo)
 		s.Close()
 		if err != nil {
-			log.Error("INSERT APID_CONFIG Failed: ", id, ", ", scope, ")", err)
+			log.Error("INSERT APID_CLUSTER Failed: ", id, ", ", scope, ")", err)
 			return false
 		} else {
-			log.Info("INSERT APID_CONFIG Success: (", id, ", ", scope, ")")
+			log.Info("INSERT APID_CLUSTER Success: (", id, ", ", scope, ")")
 		}
 	}
 	return true
@@ -144,14 +144,14 @@ func insertApidConfig(rows []common.Row, txn *sql.Tx, snapInfo string) bool {
 /*
  * INSERT INTO APP_CREDENTIAL op
  */
-func insertApidConfigScopes(rows []common.Row, txn *sql.Tx) bool {
+func insertDataScopes(rows []common.Row, txn *sql.Tx) bool {
 
-	var id, scopeId, apiConfigId, scope, createdBy, updatedBy string
+	var id, scopeId, apiConfigId, scope, createdBy, updatedBy, org, env string
 	var created, updated int64
 
-	prep, err := txn.Prepare("INSERT INTO APID_CONFIG_SCOPE (id, _apid_scope, apid_config_id, scope, created, created_by, updated, updated_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8);")
+	prep, err := txn.Prepare("INSERT INTO DATA_SCOPE (id, _change_selector, apid_cluster_id, scope, org, env,  created, created_by, updated, updated_by)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);")
 	if err != nil {
-		log.Error("INSERT APID_CONFIG_SCOPE Failed: ", err)
+		log.Error("INSERT DATA_SCOPE Failed: ", err)
 		return false
 	}
 	defer prep.Close()
@@ -159,9 +159,11 @@ func insertApidConfigScopes(rows []common.Row, txn *sql.Tx) bool {
 	for _, ele := range rows {
 
 		ele.Get("id", &id)
-		ele.Get("_apid_scope", &scopeId)
-		ele.Get("apid_config_id", &apiConfigId)
+		ele.Get("_change_selector", &scopeId)
+		ele.Get("apid_cluster_id", &apiConfigId)
 		ele.Get("scope", &scope)
+		ele.Get("org", &org)
+		ele.Get("env", &env)
 		ele.Get("created", &created)
 		ele.Get("created_by", &createdBy)
 		ele.Get("updated", &updated)
@@ -173,6 +175,8 @@ func insertApidConfigScopes(rows []common.Row, txn *sql.Tx) bool {
 			scopeId,
 			apiConfigId,
 			scope,
+			org,
+			env,
 			created,
 			createdBy,
 			updated,
@@ -180,10 +184,10 @@ func insertApidConfigScopes(rows []common.Row, txn *sql.Tx) bool {
 		s.Close()
 
 		if err != nil {
-			log.Error("INSERT APID_CONFIG_SCOPE Failed: ", id, ", ", scope, ")", err)
+			log.Error("INSERT DATA_SCOPE Failed: ", id, ", ", scope, ")", err)
 			return false
 		} else {
-			log.Info("INSERT APID_CONFIG_SCOPE Success: (", id, ", ", scope, ")")
+			log.Info("INSERT DATA_SCOPE Success: (", id, ", ", scope, ")")
 		}
 	}
 	return true

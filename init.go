@@ -15,7 +15,7 @@ const (
 	configChangeServerBaseURI = "apigeesync_change_server_base"
 	configConsumerKey         = "apigeesync_consumer_key"
 	configConsumerSecret      = "apigeesync_consumer_secret"
-	configScopeId             = "apigeesync_bootstrap_id"
+	configApidClusterId       = "apigeesync_cluster_id"
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
 	configName                = "apigeesync_instance_name"
 	ApigeeSyncEventSelector   = "ApigeeSync"
@@ -122,7 +122,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	config.SetDefault(configPollInterval, 120)
-	gapidConfigId = config.GetString(configScopeId)
+	gapidConfigId = config.GetString(configApidClusterId)
 	db, err := data.DB()
 	if err != nil {
 		log.Panic("Unable to access DB", err)
@@ -136,7 +136,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	}
 
 	var count int
-	row := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='apid_config' COLLATE NOCASE;")
+	row := db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='apid_cluster' COLLATE NOCASE;")
 	if err := row.Scan(&count); err != nil {
 		log.Panic("Unable to setup database", err)
 	}
@@ -151,7 +151,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 
 func createTables(db apid.DB) {
 	_, err := db.Exec(`
-CREATE TABLE apid_config (
+CREATE TABLE apid_cluster (
     id text,
     instance_id text,
     name text,
@@ -161,20 +161,22 @@ CREATE TABLE apid_config (
     created_by text,
     updated int64,
     updated_by text,
-    _apid_scope text,
+    _change_selector text,
     snapshotInfo text,
     lastSequence text,
     PRIMARY KEY (id)
 );
-CREATE TABLE apid_config_scope (
+CREATE TABLE data_scope (
     id text,
-    apid_config_id text,
+    apid_cluster_id text,
     scope text,
+    org text,
+    env text,
     created int64,
     created_by text,
     updated int64,
     updated_by text,
-    _apid_scope text,
+    _change_selector text,
     PRIMARY KEY (id)
 );
 `)
