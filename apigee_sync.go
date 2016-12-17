@@ -22,6 +22,7 @@ func add_headers(req *http.Request) {
 	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("apid_instance_id", guuid)
 	req.Header.Set("apid_cluster_Id", gapidConfigId)
+	req.Header.Set("updated_at_time", time.Now().Format(time.RFC3339))
 }
 
 func donehandler(e apid.Event) {
@@ -217,7 +218,7 @@ func getBearerToken() bool {
 	req.Header.Set("apid_instance_id", guuid)
 	req.Header.Set("apid_cluster_Id", gapidConfigId)
 	req.Header.Set("status", "ONLINE")
-	req.Header.Set("created_at", time.Now().Format(time.RFC3339))
+	req.Header.Set("created_at_time", time.Now().Format(time.RFC3339))
 	req.Header.Set("plugin_details", gpgInfo)
 
 	client := &http.Client{}
