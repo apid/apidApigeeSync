@@ -91,4 +91,17 @@ describe('accumulate request plugin', () => {
 
     plugin.ondata_request.apply(null, [req, {}, Buffer.alloc(5, 'a'), cb]);
   });
+
+  it('will call the callback with null if no data events are provided.', (done) => {
+    var onend_cb = (err, result) => {
+      assert.equal(err, null);
+      assert.equal(result, null); 
+      done();
+    } 
+
+    var req = {};
+
+    plugin.onend_request.apply(null, [req, {}, null, onend_cb]);  
+
+  });
 })
