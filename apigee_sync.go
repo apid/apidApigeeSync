@@ -38,10 +38,9 @@ func donehandler(e apid.Event) {
 					log.Debug("Updated data SnapshotInfo")
 				}
 			} else if ev, ok := rsp.Event.(*common.ChangeList); ok {
-				lastSequence = ev.LastSequence
-				status := persistChange(lastSequence)
-				if status == false {
-					log.Fatal("Unable to update Sequence in DB")
+				if ev.LastSequence != lastSequence {
+					lastSequence = ev.LastSequence
+					persistChange(lastSequence)
 				}
 				chfin = true
 			}
@@ -190,6 +189,14 @@ func pollChangeAgent() error {
 			}
 		} else {
 			log.Info("No Changes detected for Scopes ", scopes)
+
+			// The change server has told us there are no changes. We must update
+			// our "last sequence" pointer -- otherwise the change server will
+			// eventually tell us that our snapshot is too old
+			lastSequence = resp.LastSequence
+			if !persistChange(lastSequence) {
+				log.Error("Error persisting change to database")
+			}
 		}
 	}
 }
@@ -458,14 +465,11 @@ func findapidConfigInfo(qparam string) (info string) {
 		return ""
 	}
 	query := "select " + qparam + " from APID_CONFIG"
-	rows, err := db.Query(query)
+	row := db.QueryRow(query)
+	err = row.Scan(&info)
 	if err != nil {
 		log.Errorf("Failed to query APID_CONFIG. Err: %s", err)
 		return ""
-	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&info)
 	}
 	return info
 }
@@ -480,28 +484,11 @@ func persistChange(lastChange string) bool {
 		log.Errorf("DB open Error: %s", err)
 		return false
 	}
-	txn, err := db.Begin()
-	if err != nil {
-		log.Error("Unable to create Sqlite transaction")
-		return false
-	}
-	prep, err := txn.Prepare("UPDATE APID_CONFIG SET lastSequence=$1;")
+
+	_, err = db.Exec("UPDATE APID_CONFIG SET lastSequence=$1;", lastChange)
 	if err != nil {
 		log.Error("UPDATE APID_CONFIG Failed: ", err)
 		return false
 	}
-	defer prep.Close()
-	s := txn.Stmt(prep)
-	_, err = s.Exec(lastChange)
-	s.Close()
-	if err != nil {
-		log.Error("UPDATE APID_CONFIG_SCOPE Failed: ", err)
-		txn.Rollback()
-		return false
-	} else {
-		log.Info("UPDATE  APID_CONFIG_SCOPE Success: (", lastChange, ")")
-		txn.Commit()
-		return true
-	}
-
+	return true
 }
