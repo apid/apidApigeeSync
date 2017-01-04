@@ -79,7 +79,7 @@ describe('accumulate response plugin', () => {
     plugin.onend_response.apply(null, [{}, res, Buffer.alloc(5, 'a'), onend_cb]);  
   });
 
-  it('will create a req._chunks object on the request object', (done) => {
+  it('will create a res._chunks object on the request object', (done) => {
     var res = {};
     var cb = (err, result) => {
       assert.equal(err, null);
@@ -91,4 +91,17 @@ describe('accumulate response plugin', () => {
 
     plugin.ondata_response.apply(null, [{}, res, Buffer.alloc(5, 'a'), cb]);
   });
+
+  it('will callback with null if no response body is present in targetResponse', (done) => {
+    var res = {};
+    var cb = (err, result) => {
+      assert.equal(err, null);
+      assert.equal(result, null);
+      done();
+    }
+
+    plugin.onend_response.apply(null, [{}, res, null, cb]);
+
+  });
+
 })
