@@ -4,7 +4,7 @@ const assert = require('assert');
 var exampleConfig = { 
   EdgeMicroTestProduct: {
     allow: process.env.QUOTA_ALLOW,
-    interval: process.env.QUOTA_INTERVAL,
+    interval: Number(process.env.QUOTA_INTERVAL),
     timeUnit: process.env.QUOTA_TIMEUNIT,
     bufferSize: process.env.QUOTA_BUFFERSIZE,
     uri: process.env.QUOTA_URI,
