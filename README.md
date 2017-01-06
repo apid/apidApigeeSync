@@ -8,7 +8,6 @@ changes events onto the apid Event service. It also coordinates DB initializatio
 | name                         | description              |
 |------------------------------|--------------------------|
 | apigeesync_poll_interval     | int. seconds. default: 5 |
-| apigeesync_organization      | string. name. required.  |
 | apigeesync_proxy_server_base | string. url. required.   |
 | apigeesync_consumer_key      | string. required.        |
 | apigeesync_consumer_secret   | string. required.        |
