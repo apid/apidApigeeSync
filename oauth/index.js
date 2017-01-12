@@ -32,11 +32,13 @@ module.exports.init = function (config, logger, stats) {
       } else if (config.allowNoAuthorization) {
         return next();
       } else {
+        debug('missing_authorization');
         return sendError(req, res, next, logger, stats, 'missing_authorization', 'Missing Authorization header');
       }
     } else {
       var header = authHeaderRegex.exec(req.headers[authHeaderName]);
       if (!header || header.length < 2) {
+        debug('Invalid Authorization Header');
         return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
       }
 
@@ -74,8 +76,14 @@ module.exports.init = function (config, logger, stats) {
       json: { 'apiKey': apiKey },
       headers: { 'x-dna-api-key': apiKey }
     }, function (err, response, body) {
-      if (err) return sendError(req, res, next, logger, stats, 'gateway_timeout', err.message);
-      if (response.statusCode !== 200) return sendError(req, res, next, logger, stats, 'access_denied', response.statusMessage);
+      if (err) {
+        debug('verify apikey gateway timeout');
+        return sendError(req, res, next, logger, stats, 'gateway_timeout', err.message);
+      }
+      if (response.statusCode !== 200) {
+        debug('verify apikey access_denied');
+        return sendError(req, res, next, logger, stats, 'access_denied', response.statusMessage);
+      }
       verify(body, config, logger, stats, middleware, req, res, next, apiKey);
     });
   }
@@ -100,10 +108,12 @@ module.exports.init = function (config, logger, stats) {
         } else {
 
           if (err.name === 'TokenExpiredError') {
+            debug('Token expired error');
             return sendError(req, res, next, logger, stats, 'access_denied');
           }
 
           // todo: check other properties and/or give client more info?
+          debug('invalid token');
           return sendError(req, res, next, logger, stats, 'invalid_token');
         }
       }
@@ -164,12 +174,12 @@ module.exports.init = function (config, logger, stats) {
 // then check if that proxy is one of the authorized proxies in bootstrap
 const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAuthorized(config, urlPath, proxy, decodedToken) {
 
-  if (!decodedToken.api_product_list) { return false; }
+  if (!decodedToken.api_product_list) { debug('no api product list'); return false; }
 
   return decodedToken.api_product_list.some(function (product) {
 
     const validProxyNames = config.product_to_proxy[product];
-    if (!validProxyNames) { return false; }
+    if (!validProxyNames) { debug('no proxies found for product'); return false; }
 
     const apiproxies = config.product_to_api_resource[product];
     var matchesProxyRules = false;
@@ -177,6 +187,7 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
       apiproxies.forEach(function (tempApiProxy) {
           if(matchesProxyRules){
             //found one
+            debug('found matching proxy rule');
             return;
           }
           const apiproxy = tempApiProxy.includes(proxy.base_path)

@@ -1,0 +1,24 @@
+{
+  "name": "edgemicro-json2xml",
+  "version": "1.0.0",
+  "description": "This plugin transforms JSON to XML and vice versa based on the Accept and Content-Type http headers",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "srinandan",
+  "license": "Apache 2.0",
+  "dependencies": {
+    "debug": "^2.2.0",
+    "js2xmlparser": "^2.0.2",
+    "xml2js": "^0.4.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apigee/microgateway-plugins.git"
+  },
+  "bugs": {
+    "url": "https://github.com/apigee/microgateway-plugins/issues"
+  },
+  "homepage": "https://github.com/apigee/microgateway-plugins#readme"
+}
