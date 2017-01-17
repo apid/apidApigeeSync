@@ -220,35 +220,28 @@ func findApidConfigInfo(qparam string) (info string) {
  * Persist the last change Id each time a change has been successfully
  * processed by the plugin(s)
  */
-func persistChange(lastChange string) bool {
+func persistChange(lastChange string) error {
 
 	log.Debugf("persistChange: %s", lastChange)
 
 	db := getDB()
 
-	txn, err := db.Begin()
-	if err != nil {
-		log.Errorf("Unable to create Sqlite transaction: %v", err)
-		return false
-	}
-	prep, err := txn.Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
+	stmt, err := db.Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
 	if err != nil {
 		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
-		return false
+		return err
 	}
-	defer prep.Close()
-	s := txn.Stmt(prep)
-	_, err = s.Exec(lastChange)
-	s.Close()
+	defer stmt.Close()
+
+	_, err = stmt.Exec(lastChange)
 	if err != nil {
 		log.Errorf("UPDATE DATA_SCOPE Failed: %v", err)
-		txn.Rollback()
-		return false
+		return err
 	}
 
-	log.Info("UPDATE DATA_SCOPE Success: (", lastChange, ")")
-	txn.Commit()
-	return true
+	log.Infof("UPDATE DATA_SCOPE Success: %s", lastChange)
+
+	return nil
 }
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {

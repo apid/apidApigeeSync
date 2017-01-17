@@ -30,8 +30,8 @@ func postPluginDataDelivery(e apid.Event) {
 
 		if ev, ok := ede.Event.(*common.ChangeList); ok {
 			lastSequence = ev.LastSequence
-			status := persistChange(lastSequence)
-			if status == false {
+			err := persistChange(lastSequence)
+			if err != nil {
 				log.Panic("Unable to update Sequence in DB")
 			}
 			changeFinished = true
