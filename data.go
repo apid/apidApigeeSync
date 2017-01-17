@@ -267,7 +267,6 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
 			return
 		} else {
-			log.Print("*** err: ", err)
 			// first start - no row, generate a UUID and store it
 			err = nil
 			info.InstanceID = generateUUID()
