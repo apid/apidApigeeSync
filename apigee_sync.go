@@ -14,43 +14,44 @@ import (
 )
 
 var token string
-var tokenActive, downloadDataSnapshot, downloadBootSnapshot, chfin bool
+var downloadDataSnapshot, downloadBootSnapshot, changeFinished bool
 var lastSequence string
-var gsnapshotInfo string
 
-func add_headers(req *http.Request) {
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("apid_instance_id", guuid)
-	req.Header.Set("apid_cluster_Id", gapidConfigId)
+func addHeaders(req *http.Request) {
+	req.Header.Add("Authorization", "Bearer " + token)
+	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
+	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 }
 
-func donehandler(e apid.Event) {
-	if rsp, ok := e.(apid.EventDeliveryEvent); ok {
-		if rsp.Description == "event complete" {
-			if ev, ok := rsp.Event.(*common.Snapshot); ok {
-				if downloadBootSnapshot == false {
-					downloadBootSnapshot = true
-					log.Debug("Updated bootstrap SnapshotInfo")
-				} else {
-					gsnapshotInfo = ev.SnapshotInfo
-					downloadDataSnapshot = true
-					log.Debug("Updated data SnapshotInfo")
-				}
-			} else if ev, ok := rsp.Event.(*common.ChangeList); ok {
+func postPluginDataDelivery(e apid.Event) {
+
+	if ede, ok := e.(apid.EventDeliveryEvent); ok {
+
+		if ev, ok := ede.Event.(*common.ChangeList); ok {
+			if lastSequence != ev.LastSequence {
 				lastSequence = ev.LastSequence
-				status := persistChange(lastSequence)
-				if status == false {
-					log.Fatal("Unable to update Sequence in DB")
+				err := persistChange(lastSequence)
+				if err != nil {
+					log.Panic("Unable to update Sequence in DB")
 				}
-				chfin = true
+			}
+			changeFinished = true
+
+		} else if _, ok := ede.Event.(*common.Snapshot); ok {
+			if downloadBootSnapshot == false {
+				downloadBootSnapshot = true
+				log.Debug("Updated bootstrap SnapshotInfo")
+			} else {
+				downloadDataSnapshot = true
+				log.Debug("Updated data SnapshotInfo")
 			}
 		}
 	}
 }
 
 /*
- * Helper function that sleeps for N seconds, if comm. with change agent
+ * Helper function that sleeps for N seconds if comm with change agent
  * fails. The retry interval gradually is incremented each time it fails
  * till it reaches the Polling Int time, and after which it constantly
  * retries at the polling time interval
@@ -61,10 +62,13 @@ func updatePeriodicChanges() {
 	pollInterval := config.GetInt(configPollInterval)
 	for {
 		startTime := time.Second
-		_ = pollChangeAgent() // todo: handle error
+		err := pollChangeAgent()
+		if err != nil {
+			log.Debugf("Error connecting to changeserver: %v", err)
+		}
 		endTime := time.Second
 		// Gradually increase retry interval, and max at some level
-		if endTime-startTime <= 1 {
+		if endTime - startTime <= 1 {
 			if times < pollInterval {
 				times++
 			} else {
@@ -87,7 +91,7 @@ func updatePeriodicChanges() {
 func pollChangeAgent() error {
 
 	if downloadDataSnapshot != true {
-		log.Warning("Waiting for snapshot download to complete")
+		log.Warn("Waiting for snapshot download to complete")
 		return errors.New("Snapshot download in progress...")
 	}
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
@@ -101,10 +105,10 @@ func pollChangeAgent() error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = findapidConfigInfo("lastSequence")
+	lastSequence = findApidConfigInfo(lastSequence)
 	for {
 		log.Debug("polling...")
-		if tokenActive == false {
+		if token == "" {
 			/* token not valid?, get a new token */
 			status := getBearerToken()
 			if status == false {
@@ -113,7 +117,7 @@ func pollChangeAgent() error {
 		}
 
 		/* Find the scopes associated with the config id */
-		scopes := findScopesforId(gapidConfigId)
+		scopes := findScopesForId(apidInfo.ClusterID)
 		v := url.Values{}
 
 		/* Sequence added to the query if available */
@@ -130,16 +134,16 @@ func pollChangeAgent() error {
 		for _, scope := range scopes {
 			v.Add("scope", scope)
 		}
-		v.Add("scope", gapidConfigId)
-		v.Add("snapshot", gsnapshotInfo)
+		v.Add("scope", apidInfo.ClusterID)
+		v.Add("snapshot", apidInfo.LastSnapshot)
 		changesUri.RawQuery = v.Encode()
 		uri := changesUri.String()
-		log.Info("Fetching changes: ", uri)
+		log.Debugf("Fetching changes: %s", uri)
 
 		/* If error, break the loop, and retry after interval */
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", uri, nil)
-		add_headers(req)
+		addHeaders(req)
 		r, err := client.Do(req)
 		if err != nil {
 			log.Errorf("change agent comm error: %s", err)
@@ -149,12 +153,11 @@ func pollChangeAgent() error {
 		/* If the call is not Authorized, update flag */
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
-				tokenActive = false
+				token = ""
 				log.Errorf("Token expired? Unauthorized request.")
 			}
 			r.Body.Close()
-			log.Errorf("Get Changes request failed with Resp err: %d",
-				r.StatusCode)
+			log.Errorf("Get Changes request failed with Resp err: %d", r.StatusCode)
 			return err
 		}
 
@@ -162,14 +165,22 @@ func pollChangeAgent() error {
 		err = json.NewDecoder(r.Body).Decode(&resp)
 		r.Body.Close()
 		if err != nil {
-			log.Errorf("JSON Response Data not parsable: [%s] ", err)
+			log.Errorf("JSON Response Data not parsable: %v", err)
 			return err
+		}
+
+		if lastSequence != resp.LastSequence {
+			lastSequence = resp.LastSequence
+			err := persistChange(lastSequence)
+			if err != nil {
+				log.Panic("Unable to update Sequence in DB")
+			}
 		}
 
 		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
-			chfin = false
-			events.ListenFunc(apid.EventDeliveredSelector, donehandler)
+			changeFinished = false
+			events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 			events.Emit(ApigeeSyncEventSelector, &resp)
 			/*
 			 * The plugins should have finished what they are doing.
@@ -178,18 +189,26 @@ func pollChangeAgent() error {
 			 * (Should there be a configurable Fudge factor?) FIXME
 			 */
 			for count := 0; count < 1000; count++ {
-				if chfin == false {
-					log.Info("Waiting for plugins to complete...")
+				if changeFinished == false {
+					log.Debug("Waiting for plugins to complete...")
 					time.Sleep(time.Duration(count) * 100 * time.Millisecond)
 				} else {
 					break
 				}
 			}
-			if chfin == false {
-				log.Fatal("Never got ack from plugins. Investigate..")
+			if changeFinished == false {
+				log.Panic("Never got ack from plugins. Investigate.")
 			}
 		} else {
-			log.Info("No Changes detected for Scopes ", scopes)
+			log.Debugf("No Changes detected for Scopes: %s", scopes)
+
+			if lastSequence != resp.LastSequence {
+				lastSequence = resp.LastSequence
+				err := persistChange(lastSequence)
+				if err != nil {
+					log.Panic("Unable to update Sequence in DB")
+				}
+			}
 		}
 	}
 }
@@ -200,26 +219,27 @@ func pollChangeAgent() error {
  */
 func getBearerToken() bool {
 
-	log.Info("Getting a Bearer token.")
+	log.Debug("Getting a Bearer token.")
 	uri, err := url.Parse(config.GetString(configProxyServerBaseURI))
 	if err != nil {
 		log.Error(err)
 		return false
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
-	tokenActive = false
+
+	token = ""
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Add("client_id", config.GetString(configConsumerKey))
 	form.Add("client_secret", config.GetString(configConsumerSecret))
 	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
-	req.Header.Set("display_name", ginstName)
-	req.Header.Set("apid_instance_id", guuid)
-	req.Header.Set("apid_cluster_Id", gapidConfigId)
+	req.Header.Set("display_name", apidInfo.InstanceName)
+	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
+	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("status", "ONLINE")
 	req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
-	req.Header.Set("plugin_details", gpgInfo)
+	req.Header.Set("plugin_details", apidPluginDetails)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -245,8 +265,7 @@ func getBearerToken() bool {
 		return false
 	}
 	token = oauthResp.AccessToken
-	tokenActive = true
-	log.Info("Got a new Bearer token.")
+	log.Debug("Got a new Bearer token.")
 	return true
 }
 
@@ -267,7 +286,7 @@ type oauthTokenResp struct {
 
 func Redirect(req *http.Request, via []*http.Request) error {
 	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Add("org", gapidConfigId)
+	req.Header.Add("org", apidInfo.ClusterID)
 	return nil
 }
 
@@ -283,28 +302,25 @@ func Redirect(req *http.Request, via []*http.Request) error {
  * If there is already previous data in sqlite, don't fetch
  * again from snapshot server.
  */
-func DownloadSnapshots() {
+func bootstrap() {
 
-	/*
-	 * Skip Downloading snapshot, if there is already a snapshot
-	 * available from previous run of APID
-	 */
-	gsnapshotInfo = findapidConfigInfo("snapshotInfo")
-	if gsnapshotInfo != "" {
+	// Skip Downloading snapshot if there is already a snapshot available from previous run of APID
+	if apidInfo.LastSnapshot != "" {
+
 		downloadDataSnapshot = true
 		downloadBootSnapshot = true
 
-		log.Infof("Starting on downloaded snapshot: %s", gsnapshotInfo)
+		log.Infof("Starting on downloaded snapshot: %s", apidInfo.LastSnapshot)
 
-		// verify DB is accessible
-		_, err := data.DBVersion(gsnapshotInfo)
+		// ensure DB version will be accessible on behalf of dependant plugins
+		_, err := data.DBVersion(apidInfo.LastSnapshot)
 		if err != nil {
 			log.Panicf("Database inaccessible: %v", err)
 		}
 
-		// allow plugins to start immediately on existing database
+		// allow plugins (including this one) to start immediately on existing database
 		snap := &common.Snapshot{
-			SnapshotInfo: gsnapshotInfo,
+			SnapshotInfo: apidInfo.LastSnapshot,
 		}
 		events.Emit(ApigeeSyncEventSelector, snap)
 
@@ -312,7 +328,7 @@ func DownloadSnapshots() {
 	}
 
 	/* Phase 1 */
-	DownloadSnapshot()
+	downloadSnapshot()
 
 	/*
 	 * Give some time for all the plugins to process the Downloaded
@@ -332,20 +348,22 @@ func DownloadSnapshots() {
 		log.Debug("Proceeding with existing Sqlite data")
 	} else if downloadBootSnapshot == true {
 		log.Debug("Proceed to download Snapshot for data scopes")
-		DownloadSnapshot()
+		downloadSnapshot()
 	} else {
-		log.Fatal("Snapshot for bootscope failed")
+		log.Panic("Snapshot for bootscope failed")
 	}
 }
 
-func DownloadSnapshot() {
+func downloadSnapshot() {
+
+	log.Debugf("downloadSnapshot")
 
 	var scopes []string
 
 	/* Get the bearer token */
 	status := getBearerToken()
 	if status == false {
-		log.Fatal("Unable to get Bearer token or is Invalid")
+		log.Panic("Unable to get Bearer token or is Invalid")
 	}
 	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {
@@ -353,12 +371,12 @@ func DownloadSnapshot() {
 	}
 
 	if downloadBootSnapshot == false {
-		scopes = append(scopes, (gapidConfigId))
+		scopes = append(scopes, apidInfo.ClusterID)
 	} else {
-		scopes = findScopesforId(gapidConfigId)
+		scopes = findScopesForId(apidInfo.ClusterID)
 	}
 	if scopes == nil {
-		log.Fatal("Scope cannot be found to download snapshot")
+		log.Panic("Scope cannot be found to download snapshot")
 	}
 	/* Frame and send the snapshot request */
 	snapshotUri.Path = path.Join(snapshotUri.Path, "/snapshots")
@@ -369,13 +387,13 @@ func DownloadSnapshot() {
 	}
 	snapshotUri.RawQuery = v.Encode()
 	uri := snapshotUri.String()
-	log.Info("Snapshot Download : ", uri)
+	log.Info("Snapshot Download: ", uri)
 
 	client := &http.Client{
 		CheckRedirect: Redirect,
 	}
 	req, err := http.NewRequest("GET", uri, nil)
-	add_headers(req)
+	addHeaders(req)
 
 	/* Set the transport protocol type based on conf file input */
 	if config.GetString(configSnapshotProtocol) == "json" {
@@ -397,11 +415,10 @@ func DownloadSnapshot() {
 	if err != nil {
 
 		if downloadBootSnapshot == false {
-			log.Fatal("JSON Response Data not parsable: ", err)
+			log.Fatalf("JSON Response Data not parsable: %v", err)
 		} else {
-
 			/*
-			 * If the data set is empty, allow it to proceed, as changeserver
+			 * If the data set is empty, allow it to proceed, as change server
 			 * will feed data. Since Bootstrapping has passed, it has the
 			 * Bootstrap config id to function.
 			 */
@@ -412,96 +429,11 @@ func DownloadSnapshot() {
 
 	if r.StatusCode == 200 {
 		log.Info("Emit Snapshot response to plugins")
-		events.ListenFunc(apid.EventDeliveredSelector, donehandler)
+		events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 		events.Emit(ApigeeSyncEventSelector, &resp)
 
 	} else {
 		log.Fatalf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
-	}
-
-}
-
-/*
- * For the given apidConfigId, this function will retrieve all the scopes
- * associated with it
- */
-func findScopesforId(configId string) (scopes []string) {
-
-	var scope string
-	db, err := data.DB()
-	if err != nil {
-		log.Errorf("DB open Error: %s", err)
-		return nil
-	}
-
-	rows, err := db.Query("select scope from DATA_SCOPE where apid_cluster_id = $1", configId)
-	if err != nil {
-		log.Errorf("Failed to query DATA_SCOPE. Err: %s", err)
-		return nil
-	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&scope)
-		scopes = append(scopes, scope)
-	}
-	return scopes
-}
-
-/*
- * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
- */
-func findapidConfigInfo(qparam string) (info string) {
-
-	db, err := data.DB()
-	if err != nil {
-		log.Errorf("DB open Error: %s", err)
-		return ""
-	}
-	query := "select " + qparam + " from APID_CLUSTER"
-	rows, err := db.Query(query)
-	if err != nil {
-		log.Errorf("Failed to query APID_CLUSTER. Err: %s", err)
-		return ""
-	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&info)
-	}
-	return info
-}
-
-/*
- * Persist the last change Id each time a change has been successfully
- * processed by the plugin(s)
- */
-func persistChange(lastChange string) bool {
-	db, err := data.DB()
-	if err != nil {
-		log.Errorf("DB open Error: %s", err)
-		return false
-	}
-	txn, err := db.Begin()
-	if err != nil {
-		log.Error("Unable to create Sqlite transaction")
-		return false
-	}
-	prep, err := txn.Prepare("UPDATE APID_CLUSTER SET lastSequence=$1;")
-	if err != nil {
-		log.Error("UPDATE APID_CLUSTER Failed: ", err)
-		return false
-	}
-	defer prep.Close()
-	s := txn.Stmt(prep)
-	_, err = s.Exec(lastChange)
-	s.Close()
-	if err != nil {
-		log.Error("UPDATE DATA_SCOPE Failed: ", err)
-		txn.Rollback()
-		return false
-	} else {
-		log.Info("UPDATE  DATA_SCOPE Success: (", lastChange, ")")
-		txn.Commit()
-		return true
 	}
 
 }
