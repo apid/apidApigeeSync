@@ -5,6 +5,11 @@ import (
 	"github.com/apigee-labs/transicator/common"
 )
 
+const (
+	LISTENER_TABLE_APID_CLUSTER  = "edgex.apid_cluster"
+	LISTENER_TABLE_DATA_SCOPE    = "edgex.data_scope"
+)
+
 type handler struct {
 }
 
@@ -46,7 +51,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 	for _, table := range snapshot.Tables {
 
 		switch table.Name {
-		case "edgex.apid_cluster":
+		case LISTENER_TABLE_APID_CLUSTER:
 			if len(table.Rows) != 1 {
 				log.Panic("Illegal state for apid_cluster. Must be a single row.")
 			}
@@ -56,7 +61,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 				log.Panic("Snapshot update failed: %v", err)
 			}
 
-		case "edgex.data_scope":
+		case LISTENER_TABLE_DATA_SCOPE:
 			for _, row := range table.Rows {
 				ds := makeDataScopeFromRow(row)
 				err := insertDataScope(ds, tx)
@@ -79,7 +84,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 
 	setDB(db)
-	log.Debug("Snapshot processed")
+	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
 }
 
 func processChangeList(changes *common.ChangeList) {
@@ -108,9 +113,8 @@ func processChangeList(changes *common.ChangeList) {
 				ds := makeDataScopeFromRow(change.NewRow)
 				err = insertDataScope(ds, tx)
 			case common.Delete:
-				var id string
-				change.OldRow.Get("ID", &id)
-				deleteDataScope(id, tx)
+				ds := makeDataScopeFromRow(change.OldRow)
+				deleteDataScope(ds, tx)
 			default:
 				// common.Update is not allowed
 				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
@@ -132,7 +136,7 @@ func makeApidClusterFromRow(row common.Row) dataApidCluster {
 	dac := dataApidCluster{}
 
 	row.Get("id", &dac.ID)
-	row.Get("_change_selector", &dac.Scope)
+	row.Get("_change_selector", &dac.ChangeSelector)
 	row.Get("name", &dac.Name)
 	row.Get("umbrella_org_app_name", &dac.OrgAppName)
 	row.Get("created", &dac.Created)
@@ -149,7 +153,7 @@ func makeDataScopeFromRow(row common.Row) dataDataScope {
 	ds := dataDataScope{}
 
 	row.Get("id", &ds.ID)
-	row.Get("_change_selector", &ds.Scope)
+	row.Get("_change_selector", &ds.ChangeSelector)
 	row.Get("apid_cluster_id", &ds.ClusterID)
 	row.Get("scope", &ds.Scope)
 	row.Get("org", &ds.Org)

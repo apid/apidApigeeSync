@@ -103,7 +103,7 @@ func pollChangeAgent() error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = findApidConfigInfo("last_sequence")
+	lastSequence = findApidConfigInfo(lastSequence)
 	for {
 		log.Debug("polling...")
 		if token == "" {
@@ -337,6 +337,8 @@ func bootstrap() {
 }
 
 func downloadSnapshot() {
+
+	log.Debugf("downloadSnapshot")
 
 	var scopes []string
 

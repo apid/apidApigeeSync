@@ -7,6 +7,7 @@ import (
 	"time"
 	"fmt"
 	"crypto/rand"
+	"errors"
 )
 
 var (
@@ -15,13 +16,13 @@ var (
 )
 
 type dataApidCluster struct {
-	Scope, ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
-	Updated, Created int64
+	ChangeSelector, ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
+	Updated, Created string
 }
 
 type dataDataScope struct {
-	ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
-	Updated, Created int64
+	ChangeSelector, ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
+	Updated, Created string
 }
 
 /*
@@ -42,9 +43,9 @@ func initDB(db apid.DB) error {
 	    name text,
 	    description text,
 	    umbrella_org_app_name text,
-	    created int64,
+	    created text,
 	    created_by text,
-	    updated int64,
+	    updated text,
 	    updated_by text,
 	    _change_selector text,
 	    last_sequence text,
@@ -56,12 +57,12 @@ func initDB(db apid.DB) error {
 	    scope text,
 	    org text,
 	    env text,
-	    created int64,
+	    created text,
 	    created_by text,
-	    updated int64,
+	    updated text,
 	    updated_by text,
 	    _change_selector text,
-	    PRIMARY KEY (id)
+	    PRIMARY KEY (id, apid_cluster_id)
 	);
 	`)
 	if err != nil {
@@ -85,7 +86,6 @@ func setDB(db apid.DB) {
 	dbMux.Unlock()
 }
 
-
 func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 
 	log.Debugf("inserting into APID_CLUSTER: %v", dac)
@@ -93,8 +93,9 @@ func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 	stmt, err := txn.Prepare(`
 	INSERT INTO APID_CLUSTER
 		(id, _change_selector, name, umbrella_org_app_name,
-		created, created_by, updated, updated_by)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
+		created, created_by, updated, updated_by,
+		description)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
 	`)
 	if err != nil {
 		log.Errorf("prepare insert into APID_CLUSTER transaction Failed: %v", err)
@@ -103,14 +104,9 @@ func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		dac.ID,
-		dac.Scope,
-		dac.Name,
-		dac.OrgAppName,
-		dac.Created,
-		dac.CreatedBy,
-		dac.Updated,
-		dac.UpdatedBy)
+		dac.ID, dac.ChangeSelector, dac.Name, dac.OrgAppName,
+		dac.Created, dac.CreatedBy, dac.Updated, dac.UpdatedBy,
+		dac.Description)
 
 	if err != nil {
 		log.Errorf("insert APID_CLUSTER failed: %v", err)
@@ -127,8 +123,8 @@ func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
 	INSERT INTO DATA_SCOPE
 		(id, apid_cluster_id, scope, org,
 		env, created, created_by, updated,
-		updated_by)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
+		updated_by, _change_selector)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
 	`)
 	if err != nil {
 		log.Errorf("insert DATA_SCOPE failed: %v", err)
@@ -137,74 +133,33 @@ func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		ds.ID,
-		ds.ClusterID,
-		ds.Scope,
-		ds.Org,
-		ds.Env,
-		ds.Created,
-		ds.CreatedBy,
-		ds.Updated,
-		ds.UpdatedBy)
+		ds.ID, ds.ClusterID, ds.Scope, ds.Org,
+		ds.Env, ds.Created, ds.CreatedBy, ds.Updated,
+		ds.UpdatedBy, ds.ChangeSelector)
 
 	if err != nil {
-		log.Error("insert DATA_SCOPE failed: %v", err)
+		log.Errorf("insert DATA_SCOPE failed: %v", err)
 		return err
 	}
 
 	return nil
 }
 
-func updateDataScope(ds dataDataScope, txn *sql.Tx) error {
+func deleteDataScope(ds dataDataScope, txn *sql.Tx) error {
 
-	log.Debug("update DATA_SCOPE: %v", ds)
+	log.Debugf("delete DATA_SCOPE: %v", ds)
 
-	stmt, err := txn.Prepare(`
-	UPDATE DATA_SCOPE
-	SET apid_cluster_id=$2, scope=$3, org=$4, env=$5,
-		created=$6, created_by=$7, updated=$8, updated_by=$9
-	WHERE id=$1
-	`)
+	stmt, err := txn.Prepare("DELETE FROM DATA_SCOPE WHERE id=$1 and apid_cluster_id=$2")
 	if err != nil {
 		log.Errorf("update DATA_SCOPE failed: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(
-		ds.ID,
-		ds.ClusterID,
-		ds.Scope,
-		ds.Org,
-		ds.Env,
-		ds.Created,
-		ds.CreatedBy,
-		ds.Updated,
-		ds.UpdatedBy)
+	_, err = stmt.Exec(ds.ID, ds.ClusterID)
 
 	if err != nil {
-		log.Error("update DATA_SCOPE failed: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func deleteDataScope(id string, txn *sql.Tx) error {
-
-	log.Debug("delete DATA_SCOPE: %v", id)
-
-	stmt, err := txn.Prepare("DELETE FROM DATA_SCOPE WHERE id=$1")
-	if err != nil {
-		log.Errorf("update DATA_SCOPE failed: %v", err)
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(id)
-
-	if err != nil {
-		log.Error("delete DATA_SCOPE failed: %v", err)
+		log.Errorf("delete DATA_SCOPE failed: %v", err)
 		return err
 	}
 
@@ -273,12 +228,12 @@ func persistChange(lastChange string) bool {
 
 	txn, err := db.Begin()
 	if err != nil {
-		log.Error("Unable to create Sqlite transaction")
+		log.Errorf("Unable to create Sqlite transaction: %v", err)
 		return false
 	}
 	prep, err := txn.Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
 	if err != nil {
-		log.Error("UPDATE APID_CLUSTER Failed: ", err)
+		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
 		return false
 	}
 	defer prep.Close()
@@ -286,7 +241,7 @@ func persistChange(lastChange string) bool {
 	_, err = s.Exec(lastChange)
 	s.Close()
 	if err != nil {
-		log.Error("UPDATE DATA_SCOPE Failed: ", err)
+		log.Errorf("UPDATE DATA_SCOPE Failed: %v", err)
 		txn.Rollback()
 		return false
 	}
@@ -305,17 +260,20 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		return
 	}
 
-	err = db.QueryRow("SELECT instance_id, last_snapshot_info FROM APID").
+	err = db.QueryRow("SELECT instance_id, last_snapshot_info FROM APID LIMIT 1").
 		Scan(&info.InstanceID, &info.LastSnapshot)
-	if err != nil && err != sql.ErrNoRows {
-		log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
-		return
-	} else {
-		// first start - no row, generate a UUID and store it
-		err = nil
-		info.InstanceID = generateUUID()
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
+			return
+		} else {
+			log.Print("*** err: ", err)
+			// first start - no row, generate a UUID and store it
+			err = nil
+			info.InstanceID = generateUUID()
 
-		db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
+			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
+		}
 	}
 
 	// if name not explicitly configured, just use InstanceID
@@ -336,8 +294,18 @@ func updateApidInstanceInfo() error {
 		return err
 	}
 
-	_, err = db.Exec("UPDATE APID SET last_snapshot_info=? WHERE instance_id=?",
-		apidInfo.LastSnapshot, apidInfo.InstanceID)
+	rows, err := db.Exec(`
+		INSERT OR REPLACE
+		INTO APID (instance_id, last_snapshot_info)
+		VALUES (?, ?)`,
+		apidInfo.InstanceID, apidInfo.LastSnapshot)
+	if err != nil {
+		return err
+	}
+	n, err := rows.RowsAffected()
+	if err == nil && n == 0 {
+		err = errors.New("no rows affected")
+	}
 
 	return err
 }
