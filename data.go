@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"github.com/30x/apid"
 	"sync"
-	"time"
 	"fmt"
 	"crypto/rand"
 	"errors"
@@ -307,11 +306,13 @@ func updateApidInstanceInfo() error {
  */
 func generateUUID() string {
 
-	unix32bits := uint32(time.Now().UTC().Unix())
-	buff := make([]byte, 12)
+	buff := make([]byte, 16)
 	numRead, err := rand.Read(buff)
 	if numRead != len(buff) || err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf("%x-%x-%x-%x-%x-%x", unix32bits, buff[0:2], buff[2:4], buff[4:6], buff[6:8], buff[8:])
+	/* uuid v4 spec */
+	buff[6] = (buff[6] | 0x40) & 0x4F
+	buff[8] = (buff[8] | 0x80) & 0xBF
+	return fmt.Sprintf("%x-%x-%x-%x-%x", buff[0:4], buff[4:6], buff[6:8], buff[8:10], buff[10:])
 }
