@@ -29,10 +29,12 @@ func postPluginDataDelivery(e apid.Event) {
 	if ede, ok := e.(apid.EventDeliveryEvent); ok {
 
 		if ev, ok := ede.Event.(*common.ChangeList); ok {
-			lastSequence = ev.LastSequence
-			err := persistChange(lastSequence)
-			if err != nil {
-				log.Panic("Unable to update Sequence in DB")
+			if lastSequence != ev.LastSequence {
+				lastSequence = ev.LastSequence
+				err := persistChange(lastSequence)
+				if err != nil {
+					log.Panic("Unable to update Sequence in DB")
+				}
 			}
 			changeFinished = true
 
@@ -167,6 +169,14 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		if lastSequence != resp.LastSequence {
+			lastSequence = resp.LastSequence
+			err := persistChange(lastSequence)
+			if err != nil {
+				log.Panic("Unable to update Sequence in DB")
+			}
+		}
+
 		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
 			changeFinished = false
@@ -191,6 +201,14 @@ func pollChangeAgent() error {
 			}
 		} else {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
+
+			if lastSequence != resp.LastSequence {
+				lastSequence = resp.LastSequence
+				err := persistChange(lastSequence)
+				if err != nil {
+					log.Panic("Unable to update Sequence in DB")
+				}
+			}
 		}
 	}
 }
