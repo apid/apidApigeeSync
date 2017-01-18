@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/30x/apid"
+	"os"
 )
 
 const (
@@ -48,6 +49,15 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 
 	config = services.Config()
 	config.SetDefault(configPollInterval, 120)
+	log.Infof("Setting defaults")
+	{
+		name, errh := os.Hostname()
+		if errh != nil & config.GetString(configName) == nil {
+			panic(fmt.Errorf("Not able to get hostname for kernel. Please set '%s' property in config",configName))
+		}
+		log.Infof("Hostname reported by kernel : %s", name)
+		config.SetDefault(configName, name)
+	}
 
 	data = services.Data()
 	events = services.Events()
