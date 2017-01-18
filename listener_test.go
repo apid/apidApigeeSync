@@ -30,21 +30,6 @@ var _ = Describe("listener", func() {
 			Expect(getDB() == expectedDB).Should(BeTrue())
 		})
 
-		It("should fail if zero apid_cluster rows", func() {
-
-			event := common.Snapshot{
-				SnapshotInfo: "test_snapshot_fail",
-				Tables: []common.Table{
-					{
-						Name: LISTENER_TABLE_APID_CLUSTER,
-						Rows: []common.Row{},
-					},
-				},
-			}
-
-			Expect(func() { handler.Handle(&event) }).To(Panic())
-		})
-
 		It("should fail if more than one apid_cluster rows", func() {
 
 			event := common.Snapshot{

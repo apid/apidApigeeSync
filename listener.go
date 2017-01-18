@@ -52,13 +52,15 @@ func processSnapshot(snapshot *common.Snapshot) {
 
 		switch table.Name {
 		case LISTENER_TABLE_APID_CLUSTER:
-			if len(table.Rows) != 1 {
+			if len(table.Rows) > 1 {
 				log.Panic("Illegal state for apid_cluster. Must be a single row.")
 			}
-			ac := makeApidClusterFromRow(table.Rows[0])
-			err := insertApidCluster(ac, tx)
-			if err != nil {
-				log.Panic("Snapshot update failed: %v", err)
+			for _, row := range table.Rows {
+				ac := makeApidClusterFromRow(row)
+				err := insertApidCluster(ac, tx)
+				if err != nil {
+					log.Panic("Snapshot update failed: %v", err)
+				}
 			}
 
 		case LISTENER_TABLE_DATA_SCOPE:
