@@ -59,6 +59,9 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(req.Header.Get("Content-Type")).To(Equal("application/x-www-form-urlencoded; param=value"))
 
 		err := req.ParseForm()
+		// TODO: Test framework cannot handle this assertions and
+		// this handler just stops and sends back ""
+		// we need to handle it differently
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
 		Expect(req.Header.Get("status")).To(Equal("ONLINE"))
