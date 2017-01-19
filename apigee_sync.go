@@ -259,6 +259,7 @@ func getBearerToken() bool {
 	}
 
 	var oauthResp oauthTokenResp
+	log.Debugf("Response: %s ", body)
 	err = json.Unmarshal(body, &oauthResp)
 	if err != nil {
 		log.Error(err)
@@ -361,7 +362,7 @@ func downloadSnapshot() {
 	/* Get the bearer token */
 	status := getBearerToken()
 	if status == false {
-		log.Panic("Unable to get Bearer token or is Invalid")
+		log.Errorf("Unable to get Bearer token or is Invalid")
 	}
 	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {

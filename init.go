@@ -4,28 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/30x/apid"
+	"os"
 )
 
 const (
-	configPollInterval        = "apigeesync_poll_interval"
-	configProxyServerBaseURI  = "apigeesync_proxy_server_base"
-	configSnapServerBaseURI   = "apigeesync_snapshot_server_base"
+	configPollInterval = "apigeesync_poll_interval"
+	configProxyServerBaseURI = "apigeesync_proxy_server_base"
+	configSnapServerBaseURI = "apigeesync_snapshot_server_base"
 	configChangeServerBaseURI = "apigeesync_change_server_base"
-	configConsumerKey         = "apigeesync_consumer_key"
-	configConsumerSecret      = "apigeesync_consumer_secret"
-	configApidClusterId       = "apigeesync_cluster_id"
-	configSnapshotProtocol    = "apigeesync_snapshot_proto"
-	configName                = "apigeesync_instance_name"
-	ApigeeSyncEventSelector   = "ApigeeSync"
+	configConsumerKey = "apigeesync_consumer_key"
+	configConsumerSecret = "apigeesync_consumer_secret"
+	configApidClusterId = "apigeesync_cluster_id"
+	configSnapshotProtocol = "apigeesync_snapshot_proto"
+	configName = "apigeesync_instance_name"
+	ApigeeSyncEventSelector = "ApigeeSync"
 )
 
 var (
-	log               apid.LogService
-	config            apid.ConfigService
-	data              apid.DataService
-	events            apid.EventsService
-
-	apidInfo	  apidInstanceInfo
+	log apid.LogService
+	config apid.ConfigService
+	data apid.DataService
+	events apid.EventsService
+	apidInfo apidInstanceInfo
 	apidPluginDetails string
 )
 
@@ -42,12 +42,27 @@ func init() {
 	apid.RegisterPlugin(initPlugin)
 }
 
+func InitDefaults(configService apid.ConfigService) {
+	configService.SetDefault(configPollInterval, 120)
+	name, errh := os.Hostname()
+	if (errh != nil) && (len(configService.GetString(configName)) == 0) {
+		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
+		name = "Undefined"
+	}
+	configService.SetDefault(configName, name)
+	log.Debugf("Using %s as display name", configService.GetString(configName))
+}
+
+func SetLogger(logger apid.LogService)  {
+	log = logger
+}
+
 func initPlugin(services apid.Services) (apid.PluginData, error) {
-	log = services.Log().ForModule("apigeeSync")
+	SetLogger(services.Log().ForModule("apigeeSync"));
 	log.Debug("start init")
 
 	config = services.Config()
-	config.SetDefault(configPollInterval, 120)
+	InitDefaults(config);
 
 	data = services.Data()
 	events = services.Events()

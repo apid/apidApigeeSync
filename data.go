@@ -11,17 +11,17 @@ import (
 
 var (
 	unsafeDB apid.DB
-	dbMux    sync.RWMutex
+	dbMux sync.RWMutex
 )
 
 type dataApidCluster struct {
 	ChangeSelector, ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
-	Updated, Created string
+	Updated, Created                                                        string
 }
 
 type dataDataScope struct {
 	ChangeSelector, ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
-	Updated, Created string
+	Updated, Created                                                     string
 }
 
 /*
@@ -266,11 +266,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
 		}
 	}
-
-	// if name not explicitly configured, just use InstanceID
-	config.SetDefault(configName, info.InstanceID)
 	info.InstanceName = config.GetString(configName)
-
 	// not stored in DB
 	info.ClusterID = config.GetString(configApidClusterId)
 
@@ -304,6 +300,8 @@ func updateApidInstanceInfo() error {
 /*
  * generates a random uuid (mix of timestamp & crypto random string)
  */
+
+//TODO: Change to https://tools.ietf.org/html/rfc4122 based implementation such as https://github.com/google/uuid
 func generateUUID() string {
 
 	buff := make([]byte, 16)
