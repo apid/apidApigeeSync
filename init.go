@@ -99,12 +99,12 @@ func postInitPlugins(event apid.Event) {
 		for _, plugin := range pie.Plugins {
 			name := plugin.Name
 			version := plugin.Version
-			log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version)
 			if schemaVersion, ok := plugin.ExtraData["schemaVersion"].(string); ok {
 				inf := pluginDetail{
 					Name:          name,
 					SchemaVersion: schemaVersion}
 				plinfoDetails = append(plinfoDetails, inf)
+				log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version, schemaVersion)
 			}
 		}
 		if plinfoDetails == nil {
