@@ -170,7 +170,10 @@ var _ = BeforeSuite(func(done Done) {
 			return
 		} else {
 			phase = 2
-			Expect(q.Get("scope")).To(Equal("ert452"))
+			scopes := q["scope"]
+			Expect(len(scopes)).Should(Equal(2))
+			Expect(scopes).To(ContainElement(testScope))
+			Expect(scopes).To(ContainElement("ert452"))
 			res := &common.Snapshot{}
 			res.SnapshotInfo = "snapinfo1"
 
@@ -207,9 +210,9 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(req.Header.Get("apid_cluster_Id")).To(Equal("bootstrap"))
 		q := req.URL.Query()
 		Expect(q.Get("snapshot")).To(Equal("snapinfo1"))
-		scparams := q["scope"]
-		Expect(scparams).To(ContainElement("ert452"))
-		Expect(scparams).To(ContainElement("bootstrap"))
+		scope := q["scope"]
+		Expect(scope).To(ContainElement("ert452"))
+		Expect(scope).To(ContainElement(testScope))
 
 		res := &common.ChangeList{}
 

@@ -75,7 +75,7 @@ func updatePeriodicChanges() {
 				times = pollInterval
 			}
 			log.Debugf("Connecting to changeserver...")
-			time.Sleep(time.Duration(times) * 100 * time.Millisecond)
+			time.Sleep(time.Duration(times) * 200 * time.Millisecond)
 		} else {
 			// Reset sleep interval
 			times = 1
@@ -91,7 +91,7 @@ func updatePeriodicChanges() {
 func pollChangeAgent() error {
 
 	if downloadDataSnapshot != true {
-		log.Warn("Waiting for snapshot download to complete")
+		log.Debug("Waiting for snapshot download to complete")
 		return errors.New("Snapshot download in progress...")
 	}
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
@@ -99,7 +99,7 @@ func pollChangeAgent() error {
 		log.Errorf("bad url value for config %s: %s", changesUri, err)
 		return err
 	}
-	changesUri.Path = path.Join(changesUri.Path, "/changes")
+	changesUri.Path = path.Join(changesUri.Path, "changes")
 
 	/*
 	 * Check to see if we have lastSequence already saved in the DB,
@@ -219,7 +219,7 @@ func pollChangeAgent() error {
  */
 func getBearerToken() bool {
 
-	log.Debug("Getting a Bearer token.")
+	log.Info("Getting a Bearer token...")
 	uri, err := url.Parse(config.GetString(configProxyServerBaseURI))
 	if err != nil {
 		log.Error(err)
@@ -358,8 +358,6 @@ func downloadSnapshot() {
 
 	log.Debugf("downloadSnapshot")
 
-	var scopes []string
-
 	/* Get the bearer token */
 	status := getBearerToken()
 	if status == false {
@@ -370,16 +368,16 @@ func downloadSnapshot() {
 		log.Fatalf("bad url value for config %s: %s", snapshotUri, err)
 	}
 
-	if downloadBootSnapshot == false {
-		scopes = append(scopes, apidInfo.ClusterID)
-	} else {
+	var scopes []string
+	if downloadBootSnapshot {
 		scopes = findScopesForId(apidInfo.ClusterID)
 	}
-	if scopes == nil {
-		log.Panic("Scope cannot be found to download snapshot")
-	}
+
+	// always include boot cluster
+	scopes = append(scopes, apidInfo.ClusterID)
+
 	/* Frame and send the snapshot request */
-	snapshotUri.Path = path.Join(snapshotUri.Path, "/snapshots")
+	snapshotUri.Path = path.Join(snapshotUri.Path, "snapshots")
 
 	v := url.Values{}
 	for _, scope := range scopes {
@@ -387,7 +385,7 @@ func downloadSnapshot() {
 	}
 	snapshotUri.RawQuery = v.Encode()
 	uri := snapshotUri.String()
-	log.Info("Snapshot Download: ", uri)
+	log.Infof("Snapshot Download: %s", uri)
 
 	client := &http.Client{
 		CheckRedirect: Redirect,
@@ -405,7 +403,7 @@ func downloadSnapshot() {
 	/* Issue the request to the snapshot server */
 	r, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Snapshotserver comm error: [%s] ", err)
+		log.Fatalf("Snapshotserver comm error: %v", err)
 	}
 	defer r.Body.Close()
 
@@ -414,9 +412,7 @@ func downloadSnapshot() {
 	err = json.NewDecoder(r.Body).Decode(&resp)
 	if err != nil {
 
-		if downloadBootSnapshot == false {
-			log.Fatalf("JSON Response Data not parsable: %v", err)
-		} else {
+		if downloadBootSnapshot {
 			/*
 			 * If the data set is empty, allow it to proceed, as change server
 			 * will feed data. Since Bootstrapping has passed, it has the
@@ -424,16 +420,17 @@ func downloadSnapshot() {
 			 */
 			downloadDataSnapshot = true
 			return
+		} else {
+			log.Fatalf("JSON Response Data not parsable: %v", err)
 		}
 	}
 
 	if r.StatusCode == 200 {
-		log.Info("Emit Snapshot response to plugins")
+		log.Info("Emitting Snapshot to plugins")
 		events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 		events.Emit(ApigeeSyncEventSelector, &resp)
 
 	} else {
 		log.Fatalf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
 	}
-
 }
