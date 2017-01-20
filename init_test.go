@@ -16,8 +16,9 @@ var _ = Describe("init", func() {
 		It("accept display name from config", func() {
 			config.Set(configName, "aa01")
 			initDefaults()
-			getApidInstanceInfo()
-			Expect(apidInfo.InstanceName).To(Equal("aa01"))
+			var apidInfoLatest apidInstanceInfo
+			apidInfoLatest , _ = getApidInstanceInfo()
+			Expect(apidInfoLatest.InstanceName).To(Equal("aa01"))
 		})
 
 	})

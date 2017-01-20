@@ -245,8 +245,6 @@ func persistChange(lastChange string) error {
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	info.InstanceName = config.GetString(configName)
-	log.Info("Using the !!!!!!!!!!!!!!!!!!! %s", info.InstanceName)
-	// not stored in DB
 	info.ClusterID = config.GetString(configApidClusterId)
 
 	// always use default database for this
