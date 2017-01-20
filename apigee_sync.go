@@ -18,7 +18,7 @@ var downloadDataSnapshot, downloadBootSnapshot, changeFinished bool
 var lastSequence string
 
 func addHeaders(req *http.Request) {
-	req.Header.Add("Authorization", "Bearer " + token)
+	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
@@ -68,7 +68,7 @@ func updatePeriodicChanges() {
 		}
 		endTime := time.Second
 		// Gradually increase retry interval, and max at some level
-		if endTime - startTime <= 1 {
+		if endTime-startTime <= 1 {
 			if times < pollInterval {
 				times++
 			} else {

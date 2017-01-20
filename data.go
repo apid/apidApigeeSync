@@ -1,17 +1,17 @@
 package apidApigeeSync
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"errors"
+	"fmt"
 	"github.com/30x/apid"
 	"sync"
-	"fmt"
-	"crypto/rand"
-	"errors"
 )
 
 var (
 	unsafeDB apid.DB
-	dbMux sync.RWMutex
+	dbMux    sync.RWMutex
 )
 
 type dataApidCluster struct {
@@ -244,6 +244,10 @@ func persistChange(lastChange string) error {
 }
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {
+	info.InstanceName = config.GetString(configName)
+	log.Info("Using the !!!!!!!!!!!!!!!!!!! %s", info.InstanceName)
+	// not stored in DB
+	info.ClusterID = config.GetString(configApidClusterId)
 
 	// always use default database for this
 	var db apid.DB
@@ -266,10 +270,6 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
 		}
 	}
-	info.InstanceName = config.GetString(configName)
-	// not stored in DB
-	info.ClusterID = config.GetString(configApidClusterId)
-
 	return
 }
 

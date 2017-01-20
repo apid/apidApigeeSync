@@ -1,31 +1,24 @@
-package apidApigeeSync_test;
+package apidApigeeSync
 
 import (
-	"testing"
-	"github.com/30x/apid"
-	"github.com/30x/apidApigeeSync"
-	"github.com/30x/apid/config"
-	"github.com/30x/apid/logger"
-	"os"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-func TestInitDefaultsDefaultHostname(t *testing.T) {
-	var cs apid.ConfigService
-	cs = config.GetConfig()
-	apidApigeeSync.SetLogger(logger.NewLogger("init_test.go","DEBUG"))
-	apidApigeeSync.InitDefaults(cs)
-	name, _ := os.Hostname()
-	if cs.Get("apigeesync_instance_name") != name {
-		t.Errorf("got %s, expected %s", cs.Get("apigeesync_instance_name"),name)
-	}
-}
-func TestInitDefaultsNameFromFile(t *testing.T) {
-	var cs apid.ConfigService
-	cs = config.GetConfig()
-	cs.Set("apigeesync_instance_name","myname")
-	apidApigeeSync.SetLogger(logger.NewLogger("init_test.go","DEBUG"))
-	apidApigeeSync.InitDefaults(cs)
-	if cs.Get("apigeesync_instance_name") != "myname" {
-		t.Errorf("got %s, expected %s", cs.Get("apigeesync_instance_name"),"myname")
-	}
-}
+var _ = Describe("init", func() {
+
+	Context("Apid Instance display name", func() {
+
+		It("should be hostname by defauls", func() {
+			initDefaults()
+			Expect(apidInfo.InstanceName).To(Equal("testhost"))
+		})
+		It("accept display name from config", func() {
+			config.Set(configName, "aa01")
+			initDefaults()
+			getApidInstanceInfo()
+			Expect(apidInfo.InstanceName).To(Equal("aa01"))
+		})
+
+	})
+})
