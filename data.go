@@ -1,12 +1,12 @@
 package apidApigeeSync
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"errors"
+	"fmt"
 	"github.com/30x/apid"
 	"sync"
-	"fmt"
-	"crypto/rand"
-	"errors"
 )
 
 var (
@@ -16,12 +16,12 @@ var (
 
 type dataApidCluster struct {
 	ChangeSelector, ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
-	Updated, Created string
+	Updated, Created                                                        string
 }
 
 type dataDataScope struct {
 	ChangeSelector, ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
-	Updated, Created string
+	Updated, Created                                                     string
 }
 
 /*
@@ -244,6 +244,8 @@ func persistChange(lastChange string) error {
 }
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {
+	info.InstanceName = config.GetString(configName)
+	info.ClusterID = config.GetString(configApidClusterId)
 
 	// always use default database for this
 	var db apid.DB
@@ -266,14 +268,6 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
 		}
 	}
-
-	// if name not explicitly configured, just use InstanceID
-	config.SetDefault(configName, info.InstanceID)
-	info.InstanceName = config.GetString(configName)
-
-	// not stored in DB
-	info.ClusterID = config.GetString(configApidClusterId)
-
 	return
 }
 
@@ -304,6 +298,8 @@ func updateApidInstanceInfo() error {
 /*
  * generates a random uuid (mix of timestamp & crypto random string)
  */
+
+//TODO: Change to https://tools.ietf.org/html/rfc4122 based implementation such as https://github.com/google/uuid
 func generateUUID() string {
 
 	buff := make([]byte, 16)

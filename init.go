@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/30x/apid"
+	"os"
 )
 
 const (
@@ -24,8 +25,7 @@ var (
 	config            apid.ConfigService
 	data              apid.DataService
 	events            apid.EventsService
-
-	apidInfo	  apidInstanceInfo
+	apidInfo          apidInstanceInfo
 	apidPluginDetails string
 )
 
@@ -42,12 +42,27 @@ func init() {
 	apid.RegisterPlugin(initPlugin)
 }
 
+func initDefaults() {
+	config.SetDefault(configPollInterval, 120)
+	name, errh := os.Hostname()
+	if (errh != nil) && (len(config.GetString(configName)) == 0) {
+		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
+		name = "Undefined"
+	}
+	config.SetDefault(configName, name)
+	log.Debugf("Using %s as display name", config.GetString(configName))
+}
+
+func SetLogger(logger apid.LogService) {
+	log = logger
+}
+
 func initPlugin(services apid.Services) (apid.PluginData, error) {
-	log = services.Log().ForModule("apigeeSync")
+	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
 
 	config = services.Config()
-	config.SetDefault(configPollInterval, 120)
+	initDefaults()
 
 	data = services.Data()
 	events = services.Events()
@@ -129,4 +144,3 @@ func postInitPlugins(event apid.Event) {
 		log.Debug("Done post plugin init")
 	}
 }
-

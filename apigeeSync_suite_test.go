@@ -4,17 +4,17 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"testing"
+	"encoding/json"
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
+	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"os"
-	"encoding/json"
-	"net/http"
-	"github.com/apigee-labs/transicator/common"
-	"time"
 	"strconv"
+	"testing"
+	"time"
 )
 
 var (
@@ -59,6 +59,9 @@ var _ = BeforeSuite(func(done Done) {
 		Expect(req.Header.Get("Content-Type")).To(Equal("application/x-www-form-urlencoded; param=value"))
 
 		err := req.ParseForm()
+		// TODO: Test framework cannot handle this assertions and
+		// this handler just stops and sends back ""
+		// we need to handle it differently
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
 		Expect(req.Header.Get("status")).To(Equal("ONLINE"))
@@ -377,7 +380,6 @@ var _ = BeforeEach(func() {
 	_, err = db.Exec("DELETE FROM APID")
 	Expect(err).NotTo(HaveOccurred())
 })
-
 
 var _ = AfterSuite(func() {
 	apid.Events().Close()

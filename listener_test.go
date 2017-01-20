@@ -17,7 +17,7 @@ var _ = Describe("listener", func() {
 
 			event := common.Snapshot{
 				SnapshotInfo: "test_snapshot",
-				Tables: []common.Table{},
+				Tables:       []common.Table{},
 			}
 
 			handler.Handle(&event)
@@ -54,15 +54,15 @@ var _ = Describe("listener", func() {
 						Name: LISTENER_TABLE_APID_CLUSTER,
 						Rows: []common.Row{
 							{
-								"id": &common.ColumnVal{Value: "i"},
-								"_change_selector": &common.ColumnVal{Value: "c"},
-								"name": &common.ColumnVal{Value: "n"},
+								"id":                    &common.ColumnVal{Value: "i"},
+								"_change_selector":      &common.ColumnVal{Value: "c"},
+								"name":                  &common.ColumnVal{Value: "n"},
 								"umbrella_org_app_name": &common.ColumnVal{Value: "o"},
-								"created": &common.ColumnVal{Value: "c"},
-								"created_by": &common.ColumnVal{Value: "c"},
-								"updated": &common.ColumnVal{Value: "u"},
-								"updated_by": &common.ColumnVal{Value: "u"},
-								"description": &common.ColumnVal{Value: "d"},
+								"created":               &common.ColumnVal{Value: "c"},
+								"created_by":            &common.ColumnVal{Value: "c"},
+								"updated":               &common.ColumnVal{Value: "u"},
+								"updated_by":            &common.ColumnVal{Value: "u"},
+								"description":           &common.ColumnVal{Value: "d"},
 							},
 						},
 					},
@@ -70,16 +70,16 @@ var _ = Describe("listener", func() {
 						Name: LISTENER_TABLE_DATA_SCOPE,
 						Rows: []common.Row{
 							{
-								"id": &common.ColumnVal{Value: "i"},
+								"id":               &common.ColumnVal{Value: "i"},
 								"_change_selector": &common.ColumnVal{Value: "c"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope": &common.ColumnVal{Value: "s"},
-								"org": &common.ColumnVal{Value: "o"},
-								"env": &common.ColumnVal{Value: "e"},
-								"created": &common.ColumnVal{Value: "c"},
-								"created_by": &common.ColumnVal{Value: "c"},
-								"updated": &common.ColumnVal{Value: "u"},
-								"updated_by": &common.ColumnVal{Value: "u"},
+								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
+								"scope":            &common.ColumnVal{Value: "s"},
+								"org":              &common.ColumnVal{Value: "o"},
+								"env":              &common.ColumnVal{Value: "e"},
+								"created":          &common.ColumnVal{Value: "c"},
+								"created_by":       &common.ColumnVal{Value: "c"},
+								"updated":          &common.ColumnVal{Value: "u"},
+								"updated_by":       &common.ColumnVal{Value: "u"},
 							},
 						},
 					},
@@ -172,7 +172,7 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Insert,
-							Table: LISTENER_TABLE_APID_CLUSTER,
+							Table:     LISTENER_TABLE_APID_CLUSTER,
 						},
 					},
 				}
@@ -187,7 +187,7 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Update,
-							Table: LISTENER_TABLE_APID_CLUSTER,
+							Table:     LISTENER_TABLE_APID_CLUSTER,
 						},
 					},
 				}
@@ -206,18 +206,18 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Insert,
-							Table: LISTENER_TABLE_DATA_SCOPE,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
 							NewRow: common.Row{
-								"id": &common.ColumnVal{Value: "i"},
+								"id":               &common.ColumnVal{Value: "i"},
 								"_change_selector": &common.ColumnVal{Value: "c"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope": &common.ColumnVal{Value: "s"},
-								"org": &common.ColumnVal{Value: "o"},
-								"env": &common.ColumnVal{Value: "e"},
-								"created": &common.ColumnVal{Value: "c"},
-								"created_by": &common.ColumnVal{Value: "c"},
-								"updated": &common.ColumnVal{Value: "u"},
-								"updated_by": &common.ColumnVal{Value: "u"},
+								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
+								"scope":            &common.ColumnVal{Value: "s"},
+								"org":              &common.ColumnVal{Value: "o"},
+								"env":              &common.ColumnVal{Value: "e"},
+								"created":          &common.ColumnVal{Value: "c"},
+								"created_by":       &common.ColumnVal{Value: "c"},
+								"updated":          &common.ColumnVal{Value: "u"},
+								"updated_by":       &common.ColumnVal{Value: "u"},
 							},
 						},
 					},
@@ -263,18 +263,18 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Insert,
-							Table: LISTENER_TABLE_DATA_SCOPE,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
 							NewRow: common.Row{
-								"id": &common.ColumnVal{Value: "i"},
+								"id":               &common.ColumnVal{Value: "i"},
 								"_change_selector": &common.ColumnVal{Value: "c"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope": &common.ColumnVal{Value: "s"},
-								"org": &common.ColumnVal{Value: "o"},
-								"env": &common.ColumnVal{Value: "e"},
-								"created": &common.ColumnVal{Value: "c"},
-								"created_by": &common.ColumnVal{Value: "c"},
-								"updated": &common.ColumnVal{Value: "u"},
-								"updated_by": &common.ColumnVal{Value: "u"},
+								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
+								"scope":            &common.ColumnVal{Value: "s"},
+								"org":              &common.ColumnVal{Value: "o"},
+								"env":              &common.ColumnVal{Value: "e"},
+								"created":          &common.ColumnVal{Value: "c"},
+								"created_by":       &common.ColumnVal{Value: "c"},
+								"updated":          &common.ColumnVal{Value: "u"},
+								"updated_by":       &common.ColumnVal{Value: "u"},
 							},
 						},
 					},
@@ -287,8 +287,8 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Delete,
-							Table: LISTENER_TABLE_DATA_SCOPE,
-							OldRow: insert.Changes[0].NewRow,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
+							OldRow:    insert.Changes[0].NewRow,
 						},
 					},
 				}
@@ -309,7 +309,7 @@ var _ = Describe("listener", func() {
 					Changes: []common.Change{
 						{
 							Operation: common.Update,
-							Table: LISTENER_TABLE_DATA_SCOPE,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
 						},
 					},
 				}

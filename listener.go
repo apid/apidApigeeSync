@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	LISTENER_TABLE_APID_CLUSTER  = "edgex.apid_cluster"
-	LISTENER_TABLE_DATA_SCOPE    = "edgex.data_scope"
+	LISTENER_TABLE_APID_CLUSTER = "edgex.apid_cluster"
+	LISTENER_TABLE_DATA_SCOPE   = "edgex.data_scope"
 )
 
 type handler struct {
@@ -122,7 +122,7 @@ func processChangeList(changes *common.ChangeList) {
 				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
 			}
 		}
-		if err != nil{
+		if err != nil {
 			log.Panicf("Error processing ChangeList: %v", err)
 		}
 	}
@@ -167,4 +167,3 @@ func makeDataScopeFromRow(row common.Row) dataDataScope {
 
 	return ds
 }
-
