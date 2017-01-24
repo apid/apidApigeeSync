@@ -12,6 +12,12 @@ changes events onto the apid Event service. It also coordinates DB initializatio
 | apigeesync_consumer_key      | string. required.        |
 | apigeesync_consumer_secret   | string. required.        |
 
+This plugin also populates a configuration item for dependant plugins that may need it:
+
+| name                         | description              |
+|------------------------------|--------------------------|
+| apigeesync_apid_instance_id  | string                   |
+
 ### Event Generated
 
 * Selector: "ApigeeSync"
@@ -32,10 +38,6 @@ changes events onto the apid Event service. It also coordinates DB initializatio
     6. Save Snapshot.SnapshotInfo in default DB
     7. Release old DB version
     8. Start processing change events
-
-ToDo: ApigeeSync currently only receives a new snapshot during startup, so step #4 only happens once. However, it
- will eventually receive snapshots over time and the sub-steps should be followed at that time. Plugins 
- depending on ApigeeSync for data should assume that it can happen at any time and follow the heuristic below.
 
 #### ApigeeSync-dependent plugins
 1. Initialization
