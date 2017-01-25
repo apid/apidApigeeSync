@@ -18,6 +18,9 @@ const (
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
 	configName                = "apigeesync_instance_name"
 	ApigeeSyncEventSelector   = "ApigeeSync"
+
+	// special value - set by ApigeeSync, not taken from configuration
+	configApidInstanceID      = "apigeesync_apid_instance_id"
 )
 
 var (
@@ -85,18 +88,23 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	// set up default database
 	db, err := data.DB()
 	if err != nil {
-		log.Panicf("Unable to access DB: %v", err)
+		return pluginData, fmt.Errorf("Unable to access DB: %v", err)
 	}
 	err = initDB(db)
 	if err != nil {
-		log.Panicf("Unable to initialize DB: %v", err)
+		return pluginData, fmt.Errorf("Unable to access DB: %v", err)
 	}
 	setDB(db)
 
 	apidInfo, err = getApidInstanceInfo()
 	if err != nil {
-		log.Panicf("Unable to get apid instance info: %v", err)
+		return pluginData, fmt.Errorf("Unable to get apid instance info: %v", err)
 	}
+
+	if config.IsSet(configApidInstanceID) {
+		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
+	}
+	config.Set(configApidInstanceID, apidInfo.InstanceID)
 
 	log.Debug("end init")
 
