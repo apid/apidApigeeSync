@@ -20,7 +20,10 @@ const (
 	ApigeeSyncEventSelector   = "ApigeeSync"
 
 	// special value - set by ApigeeSync, not taken from configuration
-	configApidInstanceID      = "apigeesync_apid_instance_id"
+	configApidInstanceID = "apigeesync_apid_instance_id"
+	// This will not be needed once we have plugin
+	// handling tokens.
+	bearerToken = "apigeesync_bearer_token"
 )
 
 var (
