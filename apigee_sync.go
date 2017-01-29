@@ -13,22 +13,9 @@ import (
 	"time"
 )
 
-var token string = ""
+var token string
 var downloadDataSnapshot, downloadBootSnapshot, changeFinished bool
 var lastSequence string
-
-/*
- * NOTE: FIXME XAPID-629
- * The following function is just a temporary hack for analytics plugin to
- * consume this function to get the bearer token. In the future there will
- * have to be a common plugin, that shall provide such info.
- */
-type Export struct {
-}
-
-func (c Export) GetCurrentToken() string {
-	return token
-}
 
 func addHeaders(req *http.Request) {
 	req.Header.Add("Authorization", "Bearer "+token)
