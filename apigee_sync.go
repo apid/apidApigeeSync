@@ -266,6 +266,12 @@ func getBearerToken() bool {
 		return false
 	}
 	token = oauthResp.AccessToken
+
+	/*
+	 * This stores the bearer token for any other plugin to
+	 * consume.
+	 */
+	config.Set(bearerToken, token)
 	log.Debug("Got a new Bearer token.")
 	return true
 }
