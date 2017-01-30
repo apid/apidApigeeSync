@@ -109,11 +109,8 @@ func pollChangeAgent() error {
 	for {
 		log.Debug("polling...")
 		if token == "" {
-			/* token not valid?, get a new token */
-			status := getBearerToken()
-			if status == false {
-				return errors.New("Unable to get new token")
-			}
+			// invalid token, loop until we get one
+			getBearerToken()
 		}
 
 		/* Find the scopes associated with the config id */
@@ -213,67 +210,95 @@ func pollChangeAgent() error {
 	}
 }
 
+
+// simple doubling back-off
+func createBackOff(retryIn, maxBackOff time.Duration) func() {
+	return func() {
+		log.Debugf("backoff called. will retry in %s.", retryIn)
+		time.Sleep(retryIn)
+		retryIn = retryIn * time.Duration(2)
+		if retryIn > maxBackOff {
+			retryIn = maxBackOff
+		}
+	}
+}
+
 /*
  * This function will (for now) use the Access Key/Secret Key/ApidConfig Id
  * to get the bearer token, and the scopes (as comma separated scope)
  */
-func getBearerToken() bool {
+func getBearerToken() {
 
 	log.Info("Getting a Bearer token...")
-	uri, err := url.Parse(config.GetString(configProxyServerBaseURI))
+	uriString := config.GetString(configProxyServerBaseURI)
+	uri, err := url.Parse(uriString)
 	if err != nil {
-		log.Error(err)
-		return false
+		log.Panicf("unable to parse uri config '%s' value: '%s': %v", configProxyServerBaseURI, uriString, err)
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	token = ""
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	form.Add("client_id", config.GetString(configConsumerKey))
-	form.Add("client_secret", config.GetString(configConsumerSecret))
-	req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
-	req.Header.Set("display_name", apidInfo.InstanceName)
-	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
-	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
-	req.Header.Set("status", "ONLINE")
-	req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
-	req.Header.Set("plugin_details", apidPluginDetails)
+	retryIn := 5 * time.Millisecond
+	maxBackOff := 1 * time.Minute
+	backOffFunc := createBackOff(retryIn, maxBackOff)
+	first := true
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Error("Unable to Connect to Edge Proxy Server ", err)
-		return false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Error("Oauth Request Failed with Resp Code ", resp.StatusCode)
-		return false
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error("Unable to read EdgeProxy Sever response ", err)
-		return false
-	}
+	for {
+		if first {
+			first = false
+		} else {
+			backOffFunc()
+		}
 
-	var oauthResp oauthTokenResp
-	log.Debugf("Response: %s ", body)
-	err = json.Unmarshal(body, &oauthResp)
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-	token = oauthResp.AccessToken
+		token = ""
+		form := url.Values{}
+		form.Set("grant_type", "client_credentials")
+		form.Add("client_id", config.GetString(configConsumerKey))
+		form.Add("client_secret", config.GetString(configConsumerSecret))
+		req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
+		req.Header.Set("display_name", apidInfo.InstanceName)
+		req.Header.Set("apid_instance_id", apidInfo.InstanceID)
+		req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
+		req.Header.Set("status", "ONLINE")
+		req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
+		req.Header.Set("plugin_details", apidPluginDetails)
 
-	/*
-	 * This stores the bearer token for any other plugin to
-	 * consume.
-	 */
-	config.Set(bearerToken, token)
-	log.Debug("Got a new Bearer token.")
-	return true
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			log.Errorf("Oauth Request Failed with Resp Code: %v", resp.StatusCode)
+			continue
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
+			continue
+		}
+
+		var oauthResp oauthTokenResp
+		log.Debugf("Response: %s ", body)
+		err = json.Unmarshal(body, &oauthResp)
+		if err != nil {
+			log.Error("unable to unmarshal JSON response %s: %v", string(body), err)
+			continue
+		}
+		token = oauthResp.AccessToken
+
+		/*
+		 * This stores the bearer token for any other plugin to
+		 * consume.
+		 */
+		config.Set(bearerToken, token)
+
+		log.Debug("Got a new Bearer token.")
+
+		return
+	}
 }
 
 type oauthTokenResp struct {
@@ -365,15 +390,14 @@ func downloadSnapshot() {
 
 	log.Debugf("downloadSnapshot")
 
-	/* Get the bearer token */
-	status := getBearerToken()
-	if status == false {
-		log.Errorf("Unable to get Bearer token or is Invalid")
-	}
 	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {
-		log.Fatalf("bad url value for config %s: %s", snapshotUri, err)
+		log.Panicf("bad url value for config %s: %s", snapshotUri, err)
 	}
+
+	// getBearerToken loops until good
+	getBearerToken()
+	// todo: this could expire... ensure it's called again as needed
 
 	var scopes []string
 	if downloadBootSnapshot {
@@ -397,47 +421,57 @@ func downloadSnapshot() {
 	client := &http.Client{
 		CheckRedirect: Redirect,
 	}
-	req, err := http.NewRequest("GET", uri, nil)
-	addHeaders(req)
 
-	/* Set the transport protocol type based on conf file input */
-	if config.GetString(configSnapshotProtocol) == "json" {
-		req.Header.Set("Accept", "application/json")
-	} else {
-		req.Header.Set("Accept", "application/proto")
-	}
-
-	/* Issue the request to the snapshot server */
-	r, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Snapshotserver comm error: %v", err)
-	}
-	defer r.Body.Close()
-
-	/* Decode the Snapshot server response */
-	var resp common.Snapshot
-	err = json.NewDecoder(r.Body).Decode(&resp)
-	if err != nil {
-
-		if downloadBootSnapshot {
-			/*
-			 * If the data set is empty, allow it to proceed, as change server
-			 * will feed data. Since Bootstrapping has passed, it has the
-			 * Bootstrap config id to function.
-			 */
-			downloadDataSnapshot = true
-			return
-		} else {
-			log.Fatalf("JSON Response Data not parsable: %v", err)
+	for {
+		req, err := http.NewRequest("GET", uri, nil)
+		if err != nil {
+			// should never happen, but if it does, it's unrecoverable anyway
+			log.Panicf("Snapshotserver comm error: %v", err)
 		}
-	}
+		addHeaders(req)
 
-	if r.StatusCode == 200 {
+		// Set the transport protocol type based on conf file input
+		if config.GetString(configSnapshotProtocol) == "json" {
+			req.Header.Set("Accept", "application/json")
+		} else {
+			req.Header.Set("Accept", "application/proto")
+		}
+
+		// Issue the request to the snapshot server
+		r, err := client.Do(req)
+		if err != nil {
+			log.Errorf("Snapshotserver comm error: %v", err)
+			continue
+		}
+
+		// Decode the Snapshot server response
+		var resp common.Snapshot
+		err = json.NewDecoder(r.Body).Decode(&resp)
+		r.Body.Close()
+		if err != nil {
+			if downloadBootSnapshot {
+				/*
+				 * If the data set is empty, allow it to proceed, as change server
+				 * will feed data. Since Bootstrapping has passed, it has the
+				 * Bootstrap config id to function.
+				 */
+				downloadDataSnapshot = true
+				return
+			} else {
+				log.Errorf("JSON Response Data not parsable: %v", err)
+				continue
+			}
+		}
+
+		if r.StatusCode != 200 {
+			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
+			continue
+		}
+
 		log.Info("Emitting Snapshot to plugins")
 		events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 		events.Emit(ApigeeSyncEventSelector, &resp)
 
-	} else {
-		log.Fatalf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
+		break
 	}
 }
