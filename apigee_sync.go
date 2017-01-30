@@ -422,7 +422,18 @@ func downloadSnapshot() {
 		CheckRedirect: Redirect,
 	}
 
+	retryIn := 5 * time.Millisecond
+	maxBackOff := 1 * time.Minute
+	backOffFunc := createBackOff(retryIn, maxBackOff)
+	first := true
+
 	for {
+		if first {
+			first = false
+		} else {
+			backOffFunc()
+		}
+
 		req, err := http.NewRequest("GET", uri, nil)
 		if err != nil {
 			// should never happen, but if it does, it's unrecoverable anyway
