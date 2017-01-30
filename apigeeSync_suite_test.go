@@ -51,17 +51,22 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configConsumerKey, "XXXXXXX")
 	config.Set(configConsumerSecret, "YYYYYYY")
 
+	// fake an unreliable api server - always fails the first time
+	fail := false
+
 	// mock upstream testServer
 	testRouter.HandleFunc("/accesstoken", func(w http.ResponseWriter, req *http.Request) {
-		defer GinkgoRecover()
+		// make unreliable
+		fail = !fail
+		if fail {
+			w.WriteHeader(500)
+			return
+		}
 
 		Expect(req.Method).To(Equal("POST"))
 		Expect(req.Header.Get("Content-Type")).To(Equal("application/x-www-form-urlencoded; param=value"))
 
 		err := req.ParseForm()
-		// TODO: Test framework cannot handle this assertions and
-		// this handler just stops and sends back ""
-		// we need to handle it differently
 		Expect(err).NotTo(HaveOccurred())
 		Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
 		Expect(req.Header.Get("status")).To(Equal("ONLINE"))
@@ -85,7 +90,12 @@ var _ = BeforeSuite(func(done Done) {
 	}).Methods("POST")
 
 	testRouter.HandleFunc("/snapshots", func(w http.ResponseWriter, req *http.Request) {
-		defer GinkgoRecover()
+		// make unreliable
+		fail = !fail
+		if fail {
+			w.WriteHeader(500)
+			return
+		}
 
 		q := req.URL.Query()
 
@@ -198,7 +208,11 @@ var _ = BeforeSuite(func(done Done) {
 	}).Methods("GET")
 
 	testRouter.HandleFunc("/changes", func(w http.ResponseWriter, req *http.Request) {
-		defer GinkgoRecover()
+		fail = !fail
+		if fail {
+			w.WriteHeader(500)
+			return
+		}
 
 		if req.URL.Query().Get("since") == "lastSeq_01" {
 			go func() {
@@ -270,8 +284,6 @@ var _ = BeforeSuite(func(done Done) {
 	// This is actually the first test :)
 	// Tests that entire bootstrap and set of sync operations work
 	apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
-		defer GinkgoRecover()
-
 		if s, ok := event.(*common.Snapshot); ok {
 
 			Expect(s.SnapshotInfo).Should(Equal("snapinfo1"))
