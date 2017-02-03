@@ -147,6 +147,8 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		// todo: should StatusNotChanged be a special case here?
+
 		/* If the call is not Authorized, update flag */
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
@@ -318,7 +320,7 @@ type oauthTokenResp struct {
 
 func Redirect(req *http.Request, via []*http.Request) error {
 	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Add("org", apidInfo.ClusterID)
+	req.Header.Add("org", apidInfo.ClusterID) // todo: this is strange.. is it needed?
 	return nil
 }
 

@@ -59,7 +59,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 				ac := makeApidClusterFromRow(row)
 				err := insertApidCluster(ac, tx)
 				if err != nil {
-					log.Panic("Snapshot update failed: %v", err)
+					log.Panicf("Snapshot update failed: %v", err)
 				}
 			}
 
@@ -68,7 +68,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 				ds := makeDataScopeFromRow(row)
 				err := insertDataScope(ds, tx)
 				if err != nil {
-					log.Panic("Snapshot update failed: %v", err)
+					log.Panicf("Snapshot update failed: %v", err)
 				}
 			}
 		}
