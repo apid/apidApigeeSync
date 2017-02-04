@@ -138,7 +138,6 @@ func makeApidClusterFromRow(row common.Row) dataApidCluster {
 	dac := dataApidCluster{}
 
 	row.Get("id", &dac.ID)
-	row.Get("_change_selector", &dac.ChangeSelector)
 	row.Get("name", &dac.Name)
 	row.Get("umbrella_org_app_name", &dac.OrgAppName)
 	row.Get("created", &dac.Created)
@@ -155,7 +154,6 @@ func makeDataScopeFromRow(row common.Row) dataDataScope {
 	ds := dataDataScope{}
 
 	row.Get("id", &ds.ID)
-	row.Get("_change_selector", &ds.ChangeSelector)
 	row.Get("apid_cluster_id", &ds.ClusterID)
 	row.Get("scope", &ds.Scope)
 	row.Get("org", &ds.Org)

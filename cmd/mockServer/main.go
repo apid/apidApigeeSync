@@ -7,6 +7,7 @@ import (
 	"github.com/30x/apidApigeeSync"
 )
 
+// runs a mock server standalone
 func main() {
 	apid.Initialize(factory.DefaultServicesFactory())
 
@@ -17,7 +18,6 @@ func main() {
 	config.SetDefault("api_port", "9001")
 
 	router := apid.API().Router()
-	//server := httptest.NewServer(testRouter)
 
 	params := apidApigeeSync.MockParms{
 		ReliableAPI:                 true,
@@ -28,8 +28,7 @@ func main() {
 		Organization:                "att",
 		Environment:                 "prod",
 		NumDevelopers:               5,
-		NumApplicationsPerDeveloper: 1,
-		AddDeveloperEvery:           1 * time.Second,
+		AddDeveloperEvery:           3 * time.Second,
 		UpdateDeveloperEvery:        1 * time.Second,
 		NumDeployments:              100,
 		ReplaceDeploymentEvery:      3 * time.Second,

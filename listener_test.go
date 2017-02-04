@@ -55,7 +55,6 @@ var _ = Describe("listener", func() {
 						Rows: []common.Row{
 							{
 								"id":                    &common.ColumnVal{Value: "i"},
-								"_change_selector":      &common.ColumnVal{Value: "c"},
 								"name":                  &common.ColumnVal{Value: "n"},
 								"umbrella_org_app_name": &common.ColumnVal{Value: "o"},
 								"created":               &common.ColumnVal{Value: "c"},
@@ -71,7 +70,6 @@ var _ = Describe("listener", func() {
 						Rows: []common.Row{
 							{
 								"id":               &common.ColumnVal{Value: "i"},
-								"_change_selector": &common.ColumnVal{Value: "c"},
 								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
 								"scope":            &common.ColumnVal{Value: "s"},
 								"org":              &common.ColumnVal{Value: "o"},
@@ -100,8 +98,7 @@ var _ = Describe("listener", func() {
 
 			rows, err := db.Query(`
 			SELECT id, name, description, umbrella_org_app_name,
-				created, created_by, updated, updated_by,
-				_change_selector
+				created, created_by, updated, updated_by
 			FROM APID_CLUSTER`)
 			Expect(err).NotTo(HaveOccurred())
 			defer rows.Close()
@@ -109,8 +106,7 @@ var _ = Describe("listener", func() {
 			c := dataApidCluster{}
 			for rows.Next() {
 				rows.Scan(&c.ID, &c.Name, &c.Description, &c.OrgAppName,
-					&c.Created, &c.CreatedBy, &c.Updated, &c.UpdatedBy,
-					&c.ChangeSelector)
+					&c.Created, &c.CreatedBy, &c.Updated, &c.UpdatedBy)
 				dcs = append(dcs, c)
 			}
 
@@ -125,7 +121,6 @@ var _ = Describe("listener", func() {
 			Expect(dc.CreatedBy).To(Equal("c"))
 			Expect(dc.Updated).To(Equal("u"))
 			Expect(dc.UpdatedBy).To(Equal("u"))
-			Expect(dc.ChangeSelector).To(Equal("c"))
 
 			// Data Scope
 			var dds []dataDataScope
@@ -133,7 +128,7 @@ var _ = Describe("listener", func() {
 			rows, err = db.Query(`
 			SELECT id, apid_cluster_id, scope, org,
 				env, created, created_by, updated,
-				updated_by, _change_selector
+				updated_by
 			FROM DATA_SCOPE`)
 			Expect(err).NotTo(HaveOccurred())
 			defer rows.Close()
@@ -142,7 +137,7 @@ var _ = Describe("listener", func() {
 			for rows.Next() {
 				rows.Scan(&d.ID, &d.ClusterID, &d.Scope, &d.Org,
 					&d.Env, &d.Created, &d.CreatedBy, &d.Updated,
-					&d.UpdatedBy, &d.ChangeSelector)
+					&d.UpdatedBy)
 				dds = append(dds, d)
 			}
 
@@ -157,7 +152,6 @@ var _ = Describe("listener", func() {
 			Expect(ds.CreatedBy).To(Equal("c"))
 			Expect(ds.Updated).To(Equal("u"))
 			Expect(ds.UpdatedBy).To(Equal("u"))
-			Expect(ds.ChangeSelector).To(Equal("c"))
 		})
 	})
 
@@ -209,7 +203,6 @@ var _ = Describe("listener", func() {
 							Table:     LISTENER_TABLE_DATA_SCOPE,
 							NewRow: common.Row{
 								"id":               &common.ColumnVal{Value: "i"},
-								"_change_selector": &common.ColumnVal{Value: "c"},
 								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
 								"scope":            &common.ColumnVal{Value: "s"},
 								"org":              &common.ColumnVal{Value: "o"},
@@ -230,7 +223,7 @@ var _ = Describe("listener", func() {
 				rows, err := getDB().Query(`
 				SELECT id, apid_cluster_id, scope, org,
 					env, created, created_by, updated,
-					updated_by, _change_selector
+					updated_by
 				FROM DATA_SCOPE`)
 				Expect(err).NotTo(HaveOccurred())
 				defer rows.Close()
@@ -239,7 +232,7 @@ var _ = Describe("listener", func() {
 				for rows.Next() {
 					rows.Scan(&d.ID, &d.ClusterID, &d.Scope, &d.Org,
 						&d.Env, &d.Created, &d.CreatedBy, &d.Updated,
-						&d.UpdatedBy, &d.ChangeSelector)
+						&d.UpdatedBy)
 					dds = append(dds, d)
 				}
 
@@ -254,7 +247,6 @@ var _ = Describe("listener", func() {
 				Expect(ds.CreatedBy).To(Equal("c"))
 				Expect(ds.Updated).To(Equal("u"))
 				Expect(ds.UpdatedBy).To(Equal("u"))
-				Expect(ds.ChangeSelector).To(Equal("c"))
 			})
 
 			It("delete event should delete", func() {
@@ -266,7 +258,6 @@ var _ = Describe("listener", func() {
 							Table:     LISTENER_TABLE_DATA_SCOPE,
 							NewRow: common.Row{
 								"id":               &common.ColumnVal{Value: "i"},
-								"_change_selector": &common.ColumnVal{Value: "c"},
 								"apid_cluster_id":  &common.ColumnVal{Value: "a"},
 								"scope":            &common.ColumnVal{Value: "s"},
 								"org":              &common.ColumnVal{Value: "o"},

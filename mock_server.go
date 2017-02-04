@@ -10,20 +10,25 @@ import (
 	"time"
 	"fmt"
 	. "github.com/onsi/ginkgo"
+	"math/rand"
+	"sync/atomic"
 )
+
 /*
-Currently limited to: 1 cluster, 1 data_scope, 1 organization, 1 env, 1 company
+Currently limited to:
+  1 cluster, 1 scope, 1 org, 1 env, 1 company
+  1 app & 1 product per developer
 
 Notes:
-cluster_id is static per params
-_change_selector == data_scope
-data_scope == org + env
-tenant_id == org
+  Scope ~= org + env
+  tenant_id == Scope for our purposes
+  (technically, data_scope.scope = tenant_id)
 
-company => * developer
-developer => * app
-application => * app_credential
-product => * app_credential
+Relations:
+  company => * developer
+  developer => * app
+  application => * app_credential
+  product => * app_credential
 */
 
 type MockParms struct {
@@ -35,9 +40,10 @@ type MockParms struct {
 	Organization                string
 	Environment                 string
 	NumDevelopers               int
-	NumApplicationsPerDeveloper int
 	AddDeveloperEvery           time.Duration
 	UpdateDeveloperEvery        time.Duration
+
+	// todo: deployments
 	NumDeployments              int
 	ReplaceDeploymentEvery      time.Duration
 }
@@ -51,30 +57,6 @@ func Mock(params MockParms, router apid.Router) *MockServer {
 	return m
 }
 
-func registerMockServer(testRouter apid.Router) {
-
-	p := MockParms{
-		ReliableAPI:                 true,
-		ClusterID:                   config.GetString(configApidClusterId),
-		TokenKey:                    config.GetString(configConsumerKey),
-		TokenSecret:                 config.GetString(configConsumerSecret),
-		Scope:                       "ert452",
-		Organization:                "att",
-		Environment:                 "prod",
-		NumDevelopers:               5,
-		NumApplicationsPerDeveloper: 1,
-		UpdateDeveloperEvery:        1 * time.Second,
-		NumDeployments:              100,
-		ReplaceDeploymentEvery:      3 * time.Second,
-	}
-
-	m := MockServer{}
-	m.params = p
-
-	m.init()
-	m.registerRoutes(testRouter)
-}
-
 // table name -> common.Row
 type tableRowMap map[string]common.Row
 
@@ -83,12 +65,32 @@ type MockServer struct {
 	oauthToken        string
 	snapshotID        string
 	snapshotTables    map[string][]common.Table	// key = scopeID
-	sequenceID        string
 	changeChannel     chan []byte
+	sequenceID        *int64
+	maxDevID          *int64
+}
+
+func (m *MockServer) lastSequenceID() string {
+	return strconv.FormatInt(atomic.LoadInt64(m.sequenceID), 10)
+}
+
+func (m *MockServer) nextSequenceID() string {
+	return strconv.FormatInt(atomic.AddInt64(m.sequenceID, 1), 10)
+}
+
+func (m *MockServer) nextDeveloperID() string {
+	return strconv.FormatInt(atomic.AddInt64(m.maxDevID, 1), 10)
+}
+
+func (m *MockServer) randomDeveloperID() string {
+	return strconv.FormatInt(rand.Int63n(atomic.LoadInt64(m.maxDevID)), 10)
 }
 
 func (m *MockServer) init() {
+	m.sequenceID = new(int64)
+	m.maxDevID = new(int64)
 	m.changeChannel = make(chan []byte)
+
 	go m.developerGenerator()
 
 	// cluster "scope"
@@ -126,33 +128,39 @@ func (m *MockServer) init() {
 
 	// generate one company
 	companyID := m.params.Organization
-	tenantID := m.params.Organization
+	tenantID := m.params.Scope
 	changeSelector := m.params.Scope
 	company := tableRowMap{
 		"kms.company": m.newRow(map[string]string{
 			"id": companyID,
 			"status": "Active",
 			"tenant_id": tenantID,
-			"_change_selector": changeSelector,
 			"name": companyID,
 			"display_name": companyID,
+			"_change_selector": changeSelector,
 		}),
 	}
 	snapshotTableRows = append(snapshotTableRows, company)
 
 	// generate a bunch of developers
 	for i := 0; i < m.params.NumDevelopers; i++ {
-		developerID := generateUUID()
-		devRows := m.createDeveloper(developerID)
-		productID := generateUUID()
-		productRows := m.createProduct(productID)
-		appRows := m.createApplication(developerID, productID)
-
-		developer := m.mergeTableRowMaps(devRows, productRows, appRows)
+		developer := m.createDeveloperWithProductAndApp()
 		snapshotTableRows = append(snapshotTableRows, developer)
 	}
 
 	m.snapshotTables[m.params.Scope] = m.concatTableRowMaps(snapshotTableRows...)
+}
+
+// developer, product, application, credential will have the same ID (developerID)
+func (m *MockServer) createDeveloperWithProductAndApp() tableRowMap {
+
+	developerID := m.nextDeveloperID()
+
+	devRows := m.createDeveloper(developerID)
+	productRows := m.createProduct(developerID)
+	appRows := m.createApplication(developerID, developerID, developerID, developerID)
+
+	return m.mergeTableRowMaps(devRows, productRows, appRows)
 }
 
 func (m *MockServer) registerRoutes(router apid.Router) {
@@ -223,7 +231,6 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	w.Write(body)
 }
 
-// todo: does "since" have any value?
 func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
 	m.registerFailHandler(w)
@@ -238,58 +245,30 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
-	Expect(scopes).To(ContainElement(m.params.Scope))
+	//Expect(scopes).To(ContainElement(m.params.Scope))
 
-	if block > 0 && since == m.sequenceID && since != "" {
+	if since != "" {
 		m.sendChange(w, time.Duration(block) * time.Second)
 		return
 	}
 
-	// todo: This is just legacy for the existing test in apigeeSync_suite_test
-	m.sequenceID = generateUUID()
-	res := &common.ChangeList{
-		LastSequence: m.sequenceID,
+	// todo: the following is just legacy for the existing test in apigeeSync_suite_test
+	developer := m.createDeveloperWithProductAndApp()
+	changeList := m.createInsertChange(developer)
+	body, err := json.Marshal(changeList)
+	if err != nil {
+		fmt.Printf("Error generating developer!\n%v\n", err)
 	}
-
-	apidDataScopeRow := m.newRow(map[string]string{
-		"id":              "apid_config_scope_id_1", // adding a new scope
-		"scope":           m.params.Scope,
-		"org":             m.params.Organization,
-		"env":             m.params.Environment,
-		"apid_cluster_id": m.params.ClusterID,
-	})
-
-	res.Changes = []common.Change{
-		{
-			Table:     "edgex.data_scope",
-			Operation: common.Insert,
-			NewRow:    apidDataScopeRow,
-		},
-	}
-
-	body, err := json.Marshal(res)
-	Expect(err).NotTo(HaveOccurred())
-
 	w.Write(body)
 }
 
+// generate developers w/ product and app
 func (m *MockServer) developerGenerator() {
 
-	tick := time.Tick(m.params.AddDeveloperEvery)
-	for range tick {
+	for range time.Tick(m.params.AddDeveloperEvery) {
 
-		// generate a random developer w/ product and app
-		developerID := generateUUID()
-		devRows := m.createDeveloper(developerID)
-		productID := generateUUID()
-		productRows := m.createProduct(productID)
-		appRows := m.createApplication(developerID, productID)
-
-		developer := m.mergeTableRowMaps(devRows, productRows, appRows)
+		developer := m.createDeveloperWithProductAndApp()
 		changeList := m.createInsertChange(developer)
-
-		m.sequenceID = generateUUID()
-		changeList.LastSequence = m.sequenceID
 
 		body, err := json.Marshal(changeList)
 		if err != nil {
@@ -300,6 +279,36 @@ func (m *MockServer) developerGenerator() {
 		fmt.Println(string(body))
 		m.changeChannel <- body
 	}
+}
+
+// update random developers - set username
+func (m *MockServer) developerUpdater() {
+
+	for range time.Tick(m.params.UpdateDeveloperEvery) {
+
+		developerID := m.randomDeveloperID()
+
+		oldDev := m.createDeveloper(developerID)
+		newDev := m.createDeveloper(developerID)
+
+		newRow := newDev["kms.developer"]
+		newRow["username"] = m.stringColumnVal("i_am_not_a_number")
+
+		changeList := m.createUpdateChange(oldDev, newDev)
+
+		body, err := json.Marshal(changeList)
+		if err != nil {
+			fmt.Printf("Error generating developer!\n%v\n", err)
+		}
+
+		fmt.Println("adding developer")
+		fmt.Println(string(body))
+		m.changeChannel <- body
+	}
+}
+
+func (m *MockServer) deploymentUpdater() {
+	// todo
 }
 
 func (m *MockServer) sendChange(w http.ResponseWriter, timeout time.Duration) {
@@ -347,8 +356,7 @@ func (m *MockServer) registerFailHandler(w http.ResponseWriter) {
 	RegisterFailHandler(func(message string, callerSkip ...int) {
 		w.WriteHeader(400)
 		w.Write([]byte(message))
-		fmt.Printf("sending error: %#v\n", message)
-		panic(GINKGO_PANIC)
+		panic(message)
 	})
 }
 
@@ -357,19 +365,26 @@ func (m *MockServer) newRow(keyAndVals map[string]string) (row common.Row) {
 
 	row = common.Row{}
 	for k, v := range keyAndVals {
-		row[k] = &common.ColumnVal{
-			Value: v,
-			Type:  1,
-		}
+		row[k] = m.stringColumnVal(v)
 	}
+
+	// todo: remove this once apidVerifyAPIKey can deal with not having the field
+	row["_change_selector"] = m.stringColumnVal(m.params.Scope)
+
 	return
+}
+
+func (m *MockServer) stringColumnVal(v string) *common.ColumnVal {
+	return &common.ColumnVal{
+		Value: v,
+		Type:  1,
+	}
 }
 
 func (m *MockServer) createDeveloper(developerID string) tableRowMap {
 
 	companyID := m.params.Organization
-	tenantID := m.params.Organization
-	changeSelector := m.params.Scope
+	tenantID := m.params.Scope
 
 	rows := tableRowMap{}
 
@@ -377,14 +392,12 @@ func (m *MockServer) createDeveloper(developerID string) tableRowMap {
 		"id": developerID,
 		"status": "Active",
 		"tenant_id": tenantID,
-		"_change_selector": changeSelector,
 	})
 
 	// map developer onto to existing company
 	rows["kms.company_developer"] = m.newRow(map[string]string{
 		"id": developerID,
 		"tenant_id": tenantID,
-		"_change_selector": changeSelector,
 		"company_id": companyID,
 		"developer_id": developerID,
 	})
@@ -394,36 +407,32 @@ func (m *MockServer) createDeveloper(developerID string) tableRowMap {
 
 func (m *MockServer) createProduct(productID string) tableRowMap {
 
-	tenantID := m.params.Organization
-	changeSelector := m.params.Scope
+	tenantID := m.params.Scope
+
+	environments := fmt.Sprintf("{%s}", m.params.Environment)
+	resources := fmt.Sprintf("{%s}", "/") // todo: what should be here?
 
 	rows := tableRowMap{}
-	rows["kms.product"] = m.newRow(map[string]string{
+	rows["kms.api_product"] = m.newRow(map[string]string{
 		"id": productID,
-		"api_resources": "{}",
-		"environments": "{Env_0, Env_1}",
+		"api_resources": resources,
+		"environments": environments,
 		"tenant_id": tenantID,
-		"_change_selector": changeSelector,
 	})
 	return rows
 }
 
-func (m *MockServer) createApplication(developerID, productID string) tableRowMap {
+func (m *MockServer) createApplication(developerID, productID, applicationID, credentialID string) tableRowMap {
 
-	tenantID := m.params.Organization
-	changeSelector := m.params.Scope
+	tenantID := m.params.Scope
 
 	rows := tableRowMap{}
-
-	applicationID := generateUUID()
-	credentialID := generateUUID()
 
 	rows["kms.app"] = m.newRow(map[string]string{
 		"id": applicationID,
 		"developer_id": developerID,
 		"status": "Approved",
 		"tenant_id": tenantID,
-		"_change_selector": changeSelector,
 	})
 
 	rows["kms.app_credential"] = m.newRow(map[string]string{
@@ -431,7 +440,6 @@ func (m *MockServer) createApplication(developerID, productID string) tableRowMa
 		"app_id": applicationID,
 		"tenant_id": tenantID,
 		"status": "Approved",
-		"_change_selector": changeSelector,
 	})
 
 	rows["kms.app_credential_apiproduct_mapper"] = m.newRow(map[string]string{
@@ -439,7 +447,6 @@ func (m *MockServer) createApplication(developerID, productID string) tableRowMa
 		"app_id": applicationID,
 		"appcred_id": credentialID,
 		"status": "Approved",
-		"_change_selector": changeSelector,
 		"tenant_id": tenantID,
 	})
 
@@ -449,6 +456,8 @@ func (m *MockServer) createApplication(developerID, productID string) tableRowMa
 func (m *MockServer) createInsertChange(newRows tableRowMap) common.ChangeList {
 
 	var changeList = common.ChangeList{}
+	changeList.FirstSequence = m.lastSequenceID()
+	changeList.LastSequence = m.nextSequenceID()
 	for table, row := range newRows {
 		change := common.Change{
 			Table: table,
@@ -464,6 +473,8 @@ func (m *MockServer) createInsertChange(newRows tableRowMap) common.ChangeList {
 func (m *MockServer) createDeleteChange(oldRows tableRowMap) common.ChangeList {
 
 	var changeList = common.ChangeList{}
+	changeList.FirstSequence = m.lastSequenceID()
+	changeList.LastSequence = m.nextSequenceID()
 	for table, row := range oldRows {
 		change := common.Change{
 			Table: table,
@@ -479,6 +490,8 @@ func (m *MockServer) createDeleteChange(oldRows tableRowMap) common.ChangeList {
 func (m *MockServer) createUpdateChange(oldRows, newRows tableRowMap) common.ChangeList {
 
 	var changeList = common.ChangeList{}
+	changeList.FirstSequence = m.lastSequenceID()
+	changeList.LastSequence = m.nextSequenceID()
 	for table, oldRow := range oldRows {
 		change := common.Change{
 			Table: table,
@@ -498,7 +511,7 @@ func (m *MockServer) mergeTableRowMaps(maps ...tableRowMap) tableRowMap {
 	for _, m := range maps {
 		for name, row := range m {
 			if _, ok:= merged[name]; ok {
-				panic(fmt.Sprintf("bad merge. name: %#v, row: %#v", name, row))
+				panic(fmt.Sprintf("overwrite. name: %#v, row: %#v", name, row))
 			}
 			merged[name] = row
 		}

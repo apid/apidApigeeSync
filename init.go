@@ -147,10 +147,6 @@ func postInitPlugins(event apid.Event) {
 
 		go bootstrap()
 
-		/* Begin Looking for changes periodically */
-		log.Debug("starting update goroutine")
-		go updatePeriodicChanges()
-
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")
 	}

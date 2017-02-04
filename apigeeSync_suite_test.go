@@ -43,14 +43,27 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configConsumerKey, "XXXXXXX")
 	config.Set(configConsumerSecret, "YYYYYYY")
 
-	registerMockServer(testRouter)
+	// set up mock server
+	mockParms := MockParms{
+		ReliableAPI:                 true,
+		ClusterID:                   config.GetString(configApidClusterId),
+		TokenKey:                    config.GetString(configConsumerKey),
+		TokenSecret:                 config.GetString(configConsumerSecret),
+		Scope:                       "ert452",
+		Organization:                "att",
+		Environment:                 "prod",
+	}
+	Mock(mockParms, testRouter)
 
 	// This is actually the first test :)
 	// Tests that entire bootstrap and set of sync operations work
+	var lastSnapshot *common.Snapshot
 	apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 		defer GinkgoRecover()
 
 		if s, ok := event.(*common.Snapshot); ok {
+
+			lastSnapshot = s
 
 			for _, t := range s.Tables {
 				switch t.Name {
@@ -58,19 +71,15 @@ var _ = BeforeSuite(func(done Done) {
 				case "edgex.apid_cluster":
 					Expect(t.Rows).To(HaveLen(1))
 					r := t.Rows[0]
-					var cs, id string
-					r.Get("_change_selector", &cs)
+					var id string
 					r.Get("id", &id)
-
-					Expect(cs).To(Equal("bootstrap"))
 					Expect(id).To(Equal("bootstrap"))
 
 				case "edgex.data_scope":
 					Expect(t.Rows).To(HaveLen(2))
 					r := t.Rows[1] // get the non-cluster row
 
-					var cs, id, clusterID, env, org, scope string
-					r.Get("_change_selector", &cs)
+					var id, clusterID, env, org, scope string
 					r.Get("id", &id)
 					r.Get("apid_cluster_id", &clusterID)
 					r.Get("env", &env)
@@ -78,43 +87,39 @@ var _ = BeforeSuite(func(done Done) {
 					r.Get("scope", &scope)
 
 					Expect(id).To(Equal("ert452"))
-					Expect(cs).To(Equal("ert452"))
 					Expect(scope).To(Equal("ert452"))
 					Expect(clusterID).To(Equal("bootstrap"))
 					Expect(env).To(Equal("prod"))
 					Expect(org).To(Equal("att"))
-
-				//case "kms.api_product":
-				//	Expect(t.Rows).To(HaveLen(0))
-
-				//default:
-				//	Fail("invalid table: " + t.Name)
 				}
 			}
 
 		} else if cl, ok := event.(*common.ChangeList); ok {
 
-			//Expect(cl.LastSequence).To(Equal("lastSeq_01"))
-			Expect(cl.Changes).To(HaveLen(1))
+			// ensure that snapshot switched DB versions
+			Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
+			expectedDB, err := data.DBVersion(lastSnapshot.SnapshotInfo)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getDB() == expectedDB).Should(BeTrue())
 
-			c := cl.Changes[0]
-			Expect(c.Table).To(Equal("edgex.data_scope"))
-			Expect(c.Operation).To(Equal(common.Insert))
+			Expect(cl.Changes).To(HaveLen(6))
 
-			Expect(c.NewRow).ToNot(BeNil())
+			var tables []string
+			for _, c := range cl.Changes {
+				tables = append(tables, c.Table)
+				Expect(c.NewRow).ToNot(BeNil())
 
-			var id, clusterID, env, org, scope string
-			c.NewRow.Get("id", &id)
-			c.NewRow.Get("apid_cluster_id", &clusterID)
-			c.NewRow.Get("env", &env)
-			c.NewRow.Get("org", &org)
-			c.NewRow.Get("scope", &scope)
+				var tenantID string
+				c.NewRow.Get("tenant_id", &tenantID)
+				Expect(tenantID).To(Equal("ert452"))
+			}
 
-			Expect(id).To(Equal("apid_config_scope_id_1"))
-			Expect(clusterID).To(Equal("bootstrap"))
-			Expect(env).To(Equal("prod"))
-			Expect(org).To(Equal("att"))
-			Expect(scope).To(Equal("ert452"))
+			Expect(tables).To(ContainElement("kms.app_credential"))
+			Expect(tables).To(ContainElement("kms.app_credential_apiproduct_mapper"))
+			Expect(tables).To(ContainElement("kms.developer"))
+			Expect(tables).To(ContainElement("kms.company_developer"))
+			Expect(tables).To(ContainElement("kms.api_product"))
+			Expect(tables).To(ContainElement("kms.app"))
 
 			events.ListenFunc(apid.EventDeliveredSelector, func(e apid.Event) {
 				defer GinkgoRecover()
