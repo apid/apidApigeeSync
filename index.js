@@ -9,5 +9,7 @@ module.exports = {
   quota:require('./quota'),
   'quota-memory':require('./quota-memory'),
   spikearrest:require('./spikearrest'),
-  'transform-uppercase':require('./transform-uppercase')
+  'transform-uppercase':require('./transform-uppercase'),
+  json2xml: require('./json2xml'),
+  healthcheck: require('./healthcheck')
 }
