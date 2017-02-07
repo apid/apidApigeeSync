@@ -1,9 +1,10 @@
 package main
 
 import (
+	"time"
+
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
-	"time"
 	"github.com/30x/apidApigeeSync"
 )
 
@@ -20,18 +21,18 @@ func main() {
 	router := apid.API().Router()
 
 	params := apidApigeeSync.MockParms{
-		ReliableAPI:                 true,
-		ClusterID:                   "ZZZ",
-		TokenKey:                    "XXX",
-		TokenSecret:                 "YYY",
-		Scope:                       "ert452",
-		Organization:                "att",
-		Environment:                 "prod",
-		NumDevelopers:               5,
-		AddDeveloperEvery:           3 * time.Second,
-		UpdateDeveloperEvery:        1 * time.Second,
-		NumDeployments:              100,
-		ReplaceDeploymentEvery:      3 * time.Second,
+		ReliableAPI:            true,
+		ClusterID:              "ZZZ",
+		TokenKey:               "XXX",
+		TokenSecret:            "YYY",
+		Scope:                  "ert452",
+		Organization:           "att",
+		Environment:            "prod",
+		NumDevelopers:          50000,
+		AddDeveloperEvery:      3 * time.Second,
+		UpdateDeveloperEvery:   1 * time.Second,
+		NumDeployments:         100,
+		ReplaceDeploymentEvery: 3 * time.Second,
 	}
 
 	apidApigeeSync.Mock(params, router)

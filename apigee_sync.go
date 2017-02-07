@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/30x/apid"
-	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"time"
+
+	"github.com/30x/apid"
+	"github.com/apigee-labs/transicator/common"
 )
 
 var token string
@@ -203,7 +204,6 @@ func pollChangeAgent() error {
 		}
 	}
 }
-
 
 // simple doubling back-off
 func createBackOff(retryIn, maxBackOff time.Duration) func() {
