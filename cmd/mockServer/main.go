@@ -1,7 +1,7 @@
 package main
 
 import (
-	"time"
+	"flag"
 
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
@@ -10,6 +10,17 @@ import (
 
 // runs a mock server standalone
 func main() {
+	reliable := *flag.Bool("reliable", true, "if false, server will often send 500 errors [true]")
+
+	numDevs := *flag.Int("numDevs", 2, "number of developers in snapshot [2]")
+	addDevEach := *flag.Duration("addDevEach", 0, "add a developer each duration [0s]")
+	upDevEach := *flag.Duration("upDevEach", 0, "update a developer each duration [0s]")
+
+	numDeps := *flag.Int("numDeps", 2, "number of deployments in snapshot [2]")
+	upDepEach := *flag.Duration("upDepEach", 0, "update (replace) a deployment each duration [0s]")
+
+	flag.Parse()
+
 	apid.Initialize(factory.DefaultServicesFactory())
 
 	log := apid.Log()
@@ -21,19 +32,21 @@ func main() {
 	router := apid.API().Router()
 
 	params := apidApigeeSync.MockParms{
-		ReliableAPI:            true,
-		ClusterID:              "ZZZ",
-		TokenKey:               "XXX",
-		TokenSecret:            "YYY",
-		Scope:                  "ert452",
-		Organization:           "att",
-		Environment:            "prod",
-		NumDevelopers:          50000,
-		AddDeveloperEvery:      3 * time.Second,
-		UpdateDeveloperEvery:   1 * time.Second,
-		NumDeployments:         100,
-		ReplaceDeploymentEvery: 3 * time.Second,
+		ReliableAPI:            reliable,
+		ClusterID:              "cluster",
+		TokenKey:               "key",
+		TokenSecret:            "secret",
+		Scope:                  "scope",
+		Organization:           "org",
+		Environment:            "test",
+		NumDevelopers:          numDevs,
+		AddDeveloperEvery:      addDevEach,
+		UpdateDeveloperEvery:   upDevEach,
+		NumDeployments:         numDeps,
+		ReplaceDeploymentEvery: upDepEach,
 	}
+
+	log.Printf("Params: %#v\n", params)
 
 	apidApigeeSync.Mock(params, router)
 
