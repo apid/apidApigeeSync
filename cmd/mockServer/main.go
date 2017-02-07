@@ -5,6 +5,8 @@ import (
 
 	"os"
 
+	"time"
+
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
 	"github.com/30x/apidApigeeSync"
@@ -15,14 +17,16 @@ func main() {
 	// create new flag to avoid displaying all the Ginkgo flags
 	flag := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	reliable := *flag.Bool("reliable", true, "if false, server will often send 500 errors [true]")
+	bundleURI := *flag.String("bundleURI", "", "a URI to a valid deployment bundle (default '')")
 
-	numDevs := *flag.Int("numDevs", 2, "number of developers in snapshot [2]")
-	addDevEach := *flag.Duration("addDevEach", 0, "add a developer each duration [0s]")
-	upDevEach := *flag.Duration("upDevEach", 0, "update a developer each duration [0s]")
+	reliable := *flag.Bool("reliable", true, "if false, server will often send 500 errors")
 
-	numDeps := *flag.Int("numDeps", 2, "number of deployments in snapshot [2]")
-	upDepEach := *flag.Duration("upDepEach", 0, "update (replace) a deployment each duration [0s]")
+	numDevs := *flag.Int("numDevs", 2, "number of developers in snapshot")
+	addDevEach := *flag.Duration("addDevEach", 0*time.Second, "add a developer each duration (default 0s)")
+	upDevEach := *flag.Duration("upDevEach", 0*time.Second, "update a developer each duration (default 0s)")
+
+	numDeps := *flag.Int("numDeps", 2, "number of deployments in snapshot")
+	upDepEach := *flag.Duration("upDepEach", 0*time.Second, "update (replace) a deployment each duration (default 0s)")
 
 	flag.Parse(os.Args[1:])
 
@@ -50,6 +54,7 @@ func main() {
 		UpdateDeveloperEvery:   upDevEach,
 		NumDeployments:         numDeps,
 		ReplaceDeploymentEvery: upDepEach,
+		BundleURI:              bundleURI,
 	}
 
 	log.Printf("Params: %#v\n", params)

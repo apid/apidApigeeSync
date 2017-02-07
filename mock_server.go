@@ -37,20 +37,19 @@ Relations:
 */
 
 type MockParms struct {
-	ReliableAPI          bool
-	ClusterID            string
-	TokenKey             string
-	TokenSecret          string
-	Scope                string
-	Organization         string
-	Environment          string
-	NumDevelopers        int
-	AddDeveloperEvery    time.Duration
-	UpdateDeveloperEvery time.Duration
-
-	// todo: deployments
+	ReliableAPI            bool
+	ClusterID              string
+	TokenKey               string
+	TokenSecret            string
+	Scope                  string
+	Organization           string
+	Environment            string
+	NumDevelopers          int
+	AddDeveloperEvery      time.Duration
+	UpdateDeveloperEvery   time.Duration
 	NumDeployments         int
 	ReplaceDeploymentEvery time.Duration
+	BundleURI              string
 }
 
 func Mock(params MockParms, router apid.Router) *MockServer {
@@ -463,7 +462,11 @@ func (m *MockServer) createDeployment() tableRowMap {
 	deploymentID := m.nextDeploymentID()
 	bundleID := generateUUID()
 	port := apid.Config().GetString("api_port")
-	urlString := fmt.Sprintf("http://localhost:%s/bundles/%s", port, bundleID)
+
+	urlString := m.params.BundleURI
+	if urlString == "" {
+		urlString = fmt.Sprintf("http://localhost:%s/bundles/%s", port, bundleID)
+	}
 
 	uri, err := url.Parse(urlString)
 	Expect(err).NotTo(HaveOccurred())

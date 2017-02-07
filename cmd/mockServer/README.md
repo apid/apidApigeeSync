@@ -24,18 +24,20 @@ Execute with the -h flag to see flags:
     ./mockServer -h
     Usage of ./mockServer:
       -addDevEach duration
-            add a developer each duration [0s]
+            add a developer each duration (default 0s)
+      -bundleURI string
+            a URI to a valid deployment bundle (default '')
       -numDeps int
-            number of deployments in snapshot [2] (default 2)
+            number of deployments in snapshot (default 2)
       -numDevs int
-            number of developers in snapshot [2] (default 2)
+            number of developers in snapshot (default 2)
       -reliable
-            if false, server will often send 500 errors [true] (default true)
+            if false, server will often send 500 errors (default true)
       -upDepEach duration
-            update (replace) a deployment each duration [0s]
+            update (replace) a deployment each duration (default 0s)
       -upDevEach duration
-            update a developer each duration [0s]
-         
+            update a developer each duration (default 0s)         
+
 Note: Nothing is required. 
 
 The following are the values used by default by the Mock Server: 
