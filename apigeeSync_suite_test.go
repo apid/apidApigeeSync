@@ -4,13 +4,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/30x/apid"
-	"github.com/30x/apid/factory"
 	"io/ioutil"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/30x/apid"
+	"github.com/30x/apid/factory"
 	"github.com/apigee-labs/transicator/common"
 )
 
@@ -43,15 +44,17 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configConsumerKey, "XXXXXXX")
 	config.Set(configConsumerSecret, "YYYYYYY")
 
+	log = apid.Log()
+
 	// set up mock server
 	mockParms := MockParms{
-		ReliableAPI:                 true,
-		ClusterID:                   config.GetString(configApidClusterId),
-		TokenKey:                    config.GetString(configConsumerKey),
-		TokenSecret:                 config.GetString(configConsumerSecret),
-		Scope:                       "ert452",
-		Organization:                "att",
-		Environment:                 "prod",
+		ReliableAPI:  true,
+		ClusterID:    config.GetString(configApidClusterId),
+		TokenKey:     config.GetString(configConsumerKey),
+		TokenSecret:  config.GetString(configConsumerSecret),
+		Scope:        "ert452",
+		Organization: "att",
+		Environment:  "prod",
 	}
 	Mock(mockParms, testRouter)
 

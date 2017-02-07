@@ -106,7 +106,7 @@ func (m *MockServer) popDeploymentID() string {
 func (m *MockServer) init() {
 	defer GinkgoRecover()
 	RegisterFailHandler(func(message string, callerSkip ...int) {
-		fmt.Println([]byte(message))
+		log.Errorf("Expect error: %s", message)
 		panic(message)
 	})
 
@@ -175,19 +175,19 @@ func (m *MockServer) init() {
 		developer := m.createDeveloperWithProductAndApp()
 		snapshotTableRows = append(snapshotTableRows, developer)
 	}
-	fmt.Printf("created %d developers\n", m.params.NumDevelopers)
+	log.Infof("created %d developers\n", m.params.NumDevelopers)
 
 	// generate snapshot deployments
 	for i := 0; i < m.params.NumDeployments; i++ {
 		deployment := m.createDeployment()
 		snapshotTableRows = append(snapshotTableRows, deployment)
 	}
-	fmt.Printf("created %d deployments\n", m.params.NumDeployments)
+	log.Infof("created %d deployments\n", m.params.NumDeployments)
 
 	m.snapshotTables[m.params.Scope] = m.concatTableRowMaps(snapshotTableRows...)
 
 	if m.params.NumDevelopers < 10 && m.params.NumDeployments < 10 {
-		fmt.Printf("snapshotTables: %v\n", m.snapshotTables[m.params.Scope])
+		log.Debugf("snapshotTables: %v\n", m.snapshotTables[m.params.Scope])
 	}
 }
 
@@ -274,10 +274,9 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	body, err := json.Marshal(snapshot)
 	Expect(err).NotTo(HaveOccurred())
 
+	log.Info("sending snapshot")
 	if len(body) < 10000 {
-		fmt.Printf("sending snapshot\n%v\n", string(body))
-	} else {
-		fmt.Printf("sending snapshot #bytes=%d\n", len(body))
+		log.Debugf("snapshot: %#v", string(body))
 	}
 
 	w.Write(body)
@@ -309,7 +308,7 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	changeList := m.createInsertChange(developer)
 	body, err := json.Marshal(changeList)
 	if err != nil {
-		fmt.Printf("Error generating developer!\n%v\n", err)
+		log.Errorf("Error generating developer: %v", err)
 	}
 	w.Write(body)
 }
@@ -324,11 +323,11 @@ func (m *MockServer) developerGenerator() {
 
 		body, err := json.Marshal(changeList)
 		if err != nil {
-			fmt.Printf("Error adding developer!\n%v\n", err)
+			log.Errorf("Error adding developer: %v", err)
 		}
 
-		fmt.Println("adding developer")
-		fmt.Println(string(body))
+		log.Info("adding developer")
+		log.Debugf("body: %#v", string(body))
 		m.changeChannel <- body
 	}
 }
@@ -352,11 +351,11 @@ func (m *MockServer) developerUpdater() {
 
 		body, err := json.Marshal(changeList)
 		if err != nil {
-			fmt.Printf("Error updating developer!\n%v\n", err)
+			log.Errorf("Error updating developer: %v", err)
 		}
 
-		fmt.Println("updating developer")
-		fmt.Println(string(body))
+		log.Info("updating developer")
+		log.Debugf("body: %#v", string(body))
 		m.changeChannel <- body
 	}
 }
@@ -380,11 +379,11 @@ func (m *MockServer) deploymentReplacer() {
 
 		body, err := json.Marshal(changeList)
 		if err != nil {
-			fmt.Printf("Error replacing deployment!\n%v\n", err)
+			log.Errorf("Error replacing deployment: %v", err)
 		}
 
-		fmt.Println("replacing deployment")
-		fmt.Println(string(body))
+		log.Info("replacing deployment")
+		log.Debugf("body: %#v", string(body))
 		m.changeChannel <- body
 	}
 }
@@ -393,10 +392,10 @@ func (m *MockServer) deploymentReplacer() {
 func (m *MockServer) sendChange(w http.ResponseWriter, timeout time.Duration) {
 	select {
 	case change := <-m.changeChannel:
-		fmt.Println("sending change to client")
+		log.Info("sending change to client")
 		w.Write(change)
 	case <-time.After(timeout):
-		fmt.Println("change request timeout")
+		log.Info("change request timeout")
 		w.WriteHeader(http.StatusNotModified)
 	}
 }
