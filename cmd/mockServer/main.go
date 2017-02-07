@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 
+	"os"
+
 	"github.com/30x/apid"
 	"github.com/30x/apid/factory"
 	"github.com/30x/apidApigeeSync"
@@ -10,6 +12,9 @@ import (
 
 // runs a mock server standalone
 func main() {
+	// create new flag to avoid displaying all the Ginkgo flags
+	flag := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
 	reliable := *flag.Bool("reliable", true, "if false, server will often send 500 errors [true]")
 
 	numDevs := *flag.Int("numDevs", 2, "number of developers in snapshot [2]")
@@ -19,12 +24,13 @@ func main() {
 	numDeps := *flag.Int("numDeps", 2, "number of deployments in snapshot [2]")
 	upDepEach := *flag.Duration("upDepEach", 0, "update (replace) a deployment each duration [0s]")
 
-	flag.Parse()
+	flag.Parse(os.Args[1:])
 
 	apid.Initialize(factory.DefaultServicesFactory())
 
 	log := apid.Log()
 	log.Debug("initializing...")
+	apidApigeeSync.SetLogger(log)
 
 	config := apid.Config()
 	config.SetDefault("api_port", "9001")

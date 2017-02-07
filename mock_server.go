@@ -175,19 +175,19 @@ func (m *MockServer) init() {
 		developer := m.createDeveloperWithProductAndApp()
 		snapshotTableRows = append(snapshotTableRows, developer)
 	}
-	log.Infof("created %d developers\n", m.params.NumDevelopers)
+	log.Infof("created %d developers", m.params.NumDevelopers)
 
 	// generate snapshot deployments
 	for i := 0; i < m.params.NumDeployments; i++ {
 		deployment := m.createDeployment()
 		snapshotTableRows = append(snapshotTableRows, deployment)
 	}
-	log.Infof("created %d deployments\n", m.params.NumDeployments)
+	log.Infof("created %d deployments", m.params.NumDeployments)
 
 	m.snapshotTables[m.params.Scope] = m.concatTableRowMaps(snapshotTableRows...)
 
 	if m.params.NumDevelopers < 10 && m.params.NumDeployments < 10 {
-		log.Debugf("snapshotTables: %v\n", m.snapshotTables[m.params.Scope])
+		log.Debugf("snapshotTables: %v", m.snapshotTables[m.params.Scope])
 	}
 }
 
