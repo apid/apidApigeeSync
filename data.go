@@ -15,12 +15,12 @@ var (
 )
 
 type dataApidCluster struct {
-	ChangeSelector, ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
+	ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
 	Updated, Created                                                        string
 }
 
 type dataDataScope struct {
-	ChangeSelector, ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
+	ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
 	Updated, Created                                                     string
 }
 
@@ -46,7 +46,6 @@ func initDB(db apid.DB) error {
 	    created_by text,
 	    updated text,
 	    updated_by text,
-	    _change_selector text,
 	    last_sequence text,
 	    PRIMARY KEY (id)
 	);
@@ -60,7 +59,6 @@ func initDB(db apid.DB) error {
 	    created_by text,
 	    updated text,
 	    updated_by text,
-	    _change_selector text,
 	    PRIMARY KEY (id, apid_cluster_id)
 	);
 	`)
@@ -91,9 +89,9 @@ func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 
 	stmt, err := txn.Prepare(`
 	INSERT INTO APID_CLUSTER
-		(id, _change_selector, name, umbrella_org_app_name,
+		(id, description, name, umbrella_org_app_name,
 		created, created_by, updated, updated_by,
-		description)
+		last_sequence)
 	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
 	`)
 	if err != nil {
@@ -103,9 +101,9 @@ func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		dac.ID, dac.ChangeSelector, dac.Name, dac.OrgAppName,
+		dac.ID, dac.Description, dac.Name, dac.OrgAppName,
 		dac.Created, dac.CreatedBy, dac.Updated, dac.UpdatedBy,
-		dac.Description)
+		"")
 
 	if err != nil {
 		log.Errorf("insert APID_CLUSTER failed: %v", err)
@@ -122,8 +120,8 @@ func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
 	INSERT INTO DATA_SCOPE
 		(id, apid_cluster_id, scope, org,
 		env, created, created_by, updated,
-		updated_by, _change_selector)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+		updated_by)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
 	`)
 	if err != nil {
 		log.Errorf("insert DATA_SCOPE failed: %v", err)
@@ -134,7 +132,7 @@ func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
 	_, err = stmt.Exec(
 		ds.ID, ds.ClusterID, ds.Scope, ds.Org,
 		ds.Env, ds.Created, ds.CreatedBy, ds.Updated,
-		ds.UpdatedBy, ds.ChangeSelector)
+		ds.UpdatedBy)
 
 	if err != nil {
 		log.Errorf("insert DATA_SCOPE failed: %v", err)
@@ -194,24 +192,15 @@ func findScopesForId(configId string) (scopes []string) {
 /*
  * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
  */
-func findApidConfigInfo(qparam string) (info string) {
+func getLastSequence() (lastSequence string) {
 
-	log.Debugf("findApidConfigInfo: %s", qparam)
-
-	db := getDB()
-
-	rows, err := db.Query("select ? from APID_CLUSTER", qparam)
-	if err != nil {
-		log.Errorf("Failed to query APID_CLUSTER: %v", err)
+	err := getDB().QueryRow("select last_sequence from APID_CLUSTER LIMIT 1").Scan(&lastSequence)
+	if err != nil && err != sql.ErrNoRows {
+		log.Panicf("Failed to query APID_CLUSTER: %v", err)
 		return
 	}
-	defer rows.Close()
-	for rows.Next() {
-		rows.Scan(&info)
-	}
 
-	log.Debugf("info: %s", info)
-
+	log.Debugf("lastSequence: %s", lastSequence)
 	return
 }
 
@@ -219,26 +208,24 @@ func findApidConfigInfo(qparam string) (info string) {
  * Persist the last change Id each time a change has been successfully
  * processed by the plugin(s)
  */
-func persistChange(lastChange string) error {
+func updateLastSequence(lastSequence string) error {
 
-	log.Debugf("persistChange: %s", lastChange)
+	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	db := getDB()
-
-	stmt, err := db.Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
+	stmt, err := getDB().Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
 	if err != nil {
 		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(lastChange)
+	_, err = stmt.Exec(lastSequence)
 	if err != nil {
 		log.Errorf("UPDATE DATA_SCOPE Failed: %v", err)
 		return err
 	}
 
-	log.Infof("UPDATE DATA_SCOPE Success: %s", lastChange)
+	log.Infof("UPDATE DATA_SCOPE Success: %s", lastSequence)
 
 	return nil
 }

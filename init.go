@@ -3,8 +3,9 @@ package apidApigeeSync
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/30x/apid"
 	"os"
+
+	"github.com/30x/apid"
 )
 
 const (
@@ -50,6 +51,7 @@ func init() {
 
 func initDefaults() {
 	config.SetDefault(configPollInterval, 120)
+	config.SetDefault(configSnapshotProtocol, "json")
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -86,6 +88,10 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 		if !config.IsSet(key) {
 			return pluginData, fmt.Errorf("Missing required config value: %s", key)
 		}
+	}
+	proto := config.GetString(configSnapshotProtocol)
+	if proto != "json" && proto != "proto" {
+		return pluginData, fmt.Errorf("Illegal value for %s. Must be: 'json' or 'proto'", configSnapshotProtocol)
 	}
 
 	// set up default database
@@ -146,10 +152,6 @@ func postInitPlugins(event apid.Event) {
 		log.Debug("start post plugin init")
 
 		go bootstrap()
-
-		/* Begin Looking for changes periodically */
-		log.Debug("starting update goroutine")
-		go updatePeriodicChanges()
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

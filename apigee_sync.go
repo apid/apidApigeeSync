@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/30x/apid"
-	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"time"
+
+	"github.com/30x/apid"
+	"github.com/apigee-labs/transicator/common"
 )
 
 var token string
@@ -31,7 +32,7 @@ func postPluginDataDelivery(e apid.Event) {
 		if ev, ok := ede.Event.(*common.ChangeList); ok {
 			if lastSequence != ev.LastSequence {
 				lastSequence = ev.LastSequence
-				err := persistChange(lastSequence)
+				err := updateLastSequence(lastSequence)
 				if err != nil {
 					log.Panic("Unable to update Sequence in DB")
 				}
@@ -105,7 +106,7 @@ func pollChangeAgent() error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = findApidConfigInfo(lastSequence)
+	lastSequence = getLastSequence()
 	for {
 		log.Debug("polling...")
 		if token == "" {
@@ -147,6 +148,8 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		// todo: should StatusNotChanged be a special case here?
+
 		/* If the call is not Authorized, update flag */
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
@@ -164,14 +167,6 @@ func pollChangeAgent() error {
 		if err != nil {
 			log.Errorf("JSON Response Data not parsable: %v", err)
 			return err
-		}
-
-		if lastSequence != resp.LastSequence {
-			lastSequence = resp.LastSequence
-			err := persistChange(lastSequence)
-			if err != nil {
-				log.Panic("Unable to update Sequence in DB")
-			}
 		}
 
 		/* If valid data present, Emit to plugins */
@@ -201,7 +196,7 @@ func pollChangeAgent() error {
 
 			if lastSequence != resp.LastSequence {
 				lastSequence = resp.LastSequence
-				err := persistChange(lastSequence)
+				err := updateLastSequence(lastSequence)
 				if err != nil {
 					log.Panic("Unable to update Sequence in DB")
 				}
@@ -209,7 +204,6 @@ func pollChangeAgent() error {
 		}
 	}
 }
-
 
 // simple doubling back-off
 func createBackOff(retryIn, maxBackOff time.Duration) func() {
@@ -318,7 +312,7 @@ type oauthTokenResp struct {
 
 func Redirect(req *http.Request, via []*http.Request) error {
 	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Add("org", apidInfo.ClusterID)
+	req.Header.Add("org", apidInfo.ClusterID) // todo: this is strange.. is it needed?
 	return nil
 }
 
@@ -339,9 +333,6 @@ func bootstrap() {
 	// Skip Downloading snapshot if there is already a snapshot available from previous run of APID
 	if apidInfo.LastSnapshot != "" {
 
-		downloadDataSnapshot = true
-		downloadBootSnapshot = true
-
 		log.Infof("Starting on downloaded snapshot: %s", apidInfo.LastSnapshot)
 
 		// ensure DB version will be accessible on behalf of dependant plugins
@@ -354,7 +345,12 @@ func bootstrap() {
 		snap := &common.Snapshot{
 			SnapshotInfo: apidInfo.LastSnapshot,
 		}
-		events.Emit(ApigeeSyncEventSelector, snap)
+		events.EmitWithCallback(ApigeeSyncEventSelector, snap, func(event apid.Event) {
+			downloadBootSnapshot = true
+			downloadDataSnapshot = true
+
+			go updatePeriodicChanges()
+		})
 
 		return
 	}
@@ -384,6 +380,8 @@ func bootstrap() {
 	} else {
 		log.Panic("Snapshot for bootscope failed")
 	}
+
+	go updatePeriodicChanges()
 }
 
 func downloadSnapshot() {
