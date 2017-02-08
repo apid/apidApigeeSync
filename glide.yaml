@@ -2,7 +2,6 @@ package: github.com/30x/apidApigeeSync
 import:
 - package: github.com/30x/apid
   version: master
-testImport:
 - package: github.com/onsi/ginkgo/ginkgo
   version: master
 - package: github.com/onsi/gomega
