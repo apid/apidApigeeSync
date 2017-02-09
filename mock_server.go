@@ -208,6 +208,17 @@ func (m *MockServer) registerRoutes(router apid.Router) {
 	router.HandleFunc("/snapshots", m.unreliable(m.auth(m.sendSnapshot))).Methods("GET")
 	router.HandleFunc("/changes", m.unreliable(m.auth(m.sendChanges))).Methods("GET")
 	router.HandleFunc("/bundles/{id}", m.sendDeploymentBundle).Methods("GET")
+	router.HandleFunc("/analytics", m.sendAnalyticsURL).Methods("GET")
+	router.HandleFunc("/analytics", m.putAnalyticsData).Methods("PUT")
+}
+
+func (m *MockServer) sendAnalyticsURL(w http.ResponseWriter, req *http.Request) {
+	uri := fmt.Sprintf("http://%s%s", req.Host, req.RequestURI)
+	w.Write([]byte(fmt.Sprintf("{ \"url\": \"%s\" }", uri)))
+}
+
+func (m *MockServer) putAnalyticsData(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
 }
 
 func (m *MockServer) sendDeploymentBundle(w http.ResponseWriter, req *http.Request) {

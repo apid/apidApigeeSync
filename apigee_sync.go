@@ -158,7 +158,7 @@ func pollChangeAgent() error {
 			if r.StatusCode != http.StatusNotModified {
 				log.Errorf("Get changes request failed with Resp err: %d", r.StatusCode)
 			} else {
-				log.Info("Get changes request timed out with %d", http.StatusNotModified)
+				log.Infof("Get changes request timed out with %d", http.StatusNotModified)
 			}
 			return err
 		}
