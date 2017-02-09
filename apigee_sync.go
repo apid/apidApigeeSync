@@ -148,8 +148,6 @@ func pollChangeAgent() error {
 			return err
 		}
 
-		// todo: should StatusNotChanged be a special case here?
-
 		/* If the call is not Authorized, update flag */
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
@@ -157,7 +155,12 @@ func pollChangeAgent() error {
 				log.Errorf("Token expired? Unauthorized request.")
 			}
 			r.Body.Close()
-			log.Errorf("Get Changes request failed with Resp err: %d", r.StatusCode)
+			if r.StatusCode != http.StatusNotModified {
+				log.Errorf("Get changes request failed with Resp err: %d", r.StatusCode)
+			} else {
+				log.Info("Get changes request timed out with %d", http.StatusNotModified)
+				err = nil
+			}
 			return err
 		}
 
