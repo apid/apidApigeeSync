@@ -15,20 +15,20 @@ import (
 // runs a mock server standalone
 func main() {
 	// create new flag to avoid displaying all the Ginkgo flags
-	flag := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	bundleURI := *flag.String("bundleURI", "", "a URI to a valid deployment bundle (default '')")
+	bundleURI := f.String("bundleURI", "", "a URI to a valid deployment bundle (default '')")
 
-	reliable := *flag.Bool("reliable", true, "if false, server will often send 500 errors")
+	reliable := f.Bool("reliable", true, "if false, server will often send 500 errors")
 
-	numDevs := *flag.Int("numDevs", 2, "number of developers in snapshot")
-	addDevEach := *flag.Duration("addDevEach", 0*time.Second, "add a developer each duration (default 0s)")
-	upDevEach := *flag.Duration("upDevEach", 0*time.Second, "update a developer each duration (default 0s)")
+	numDevs := f.Int("numDevs", 2, "number of developers in snapshot")
+	addDevEach := f.Duration("addDevEach", 0*time.Second, "add a developer each duration (default 0s)")
+	upDevEach := f.Duration("upDevEach", 0*time.Second, "update a developer each duration (default 0s)")
 
-	numDeps := *flag.Int("numDeps", 2, "number of deployments in snapshot")
-	upDepEach := *flag.Duration("upDepEach", 0*time.Second, "update (replace) a deployment each duration (default 0s)")
+	numDeps := f.Int("numDeps", 2, "number of deployments in snapshot")
+	upDepEach := f.Duration("upDepEach", 0*time.Second, "update (replace) a deployment each duration (default 0s)")
 
-	flag.Parse(os.Args[1:])
+	f.Parse(os.Args[1:])
 
 	apid.Initialize(factory.DefaultServicesFactory())
 
@@ -42,19 +42,19 @@ func main() {
 	router := apid.API().Router()
 
 	params := apidApigeeSync.MockParms{
-		ReliableAPI:            reliable,
+		ReliableAPI:            *reliable,
 		ClusterID:              "cluster",
 		TokenKey:               "key",
 		TokenSecret:            "secret",
 		Scope:                  "scope",
 		Organization:           "org",
 		Environment:            "test",
-		NumDevelopers:          numDevs,
-		AddDeveloperEvery:      addDevEach,
-		UpdateDeveloperEvery:   upDevEach,
-		NumDeployments:         numDeps,
-		ReplaceDeploymentEvery: upDepEach,
-		BundleURI:              bundleURI,
+		NumDevelopers:          *numDevs,
+		AddDeveloperEvery:      *addDevEach,
+		UpdateDeveloperEvery:   *upDevEach,
+		NumDeployments:         *numDeps,
+		ReplaceDeploymentEvery: *upDepEach,
+		BundleURI:              *bundleURI,
 	}
 
 	log.Printf("Params: %#v\n", params)
