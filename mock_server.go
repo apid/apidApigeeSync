@@ -234,6 +234,7 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 
 	err := req.ParseForm()
 	Expect(err).NotTo(HaveOccurred())
+
 	Expect(req.Form.Get("grant_type")).To(Equal("client_credentials"))
 	Expect(req.Header.Get("status")).To(Equal("ONLINE"))
 	Expect(req.Header.Get("apid_cluster_Id")).To(Equal(m.params.ClusterID))
@@ -246,9 +247,6 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	plInfo := []byte(req.Header.Get("plugin_details"))
 	err = json.Unmarshal(plInfo, &plugInfo)
 	Expect(err).NotTo(HaveOccurred())
-
-	Expect(plugInfo[0].Name).To(Equal("apidApigeeSync"))
-	Expect(plugInfo[0].SchemaVersion).NotTo(BeEmpty())
 
 	m.oauthToken = generateUUID()
 	res := oauthTokenResp{
