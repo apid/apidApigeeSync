@@ -174,7 +174,6 @@ func pollChangeAgent() error {
 		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
 			changeFinished = false
-			events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 			events.Emit(ApigeeSyncEventSelector, &resp)
 			/*
 			 * The plugins should have finished what they are doing.
@@ -480,7 +479,6 @@ func downloadSnapshot() {
 		}
 
 		log.Info("Emitting Snapshot to plugins")
-		events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
 		events.Emit(ApigeeSyncEventSelector, &resp)
 
 		break

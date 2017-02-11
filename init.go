@@ -82,6 +82,9 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	 */
 	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
 
+	// This callback function will get called after each data event delivery.
+	events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
+
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
 		configSnapServerBaseURI, configChangeServerBaseURI} {
