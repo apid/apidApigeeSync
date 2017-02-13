@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/30x/apid"
 	"sync"
+
+	"github.com/30x/apid"
 )
 
 var (
@@ -16,12 +17,12 @@ var (
 
 type dataApidCluster struct {
 	ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
-	Updated, Created                                                        string
+	Updated, Created                                        string
 }
 
 type dataDataScope struct {
 	ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
-	Updated, Created                                                     string
+	Updated, Created                                     string
 }
 
 /*
@@ -221,11 +222,11 @@ func updateLastSequence(lastSequence string) error {
 
 	_, err = stmt.Exec(lastSequence)
 	if err != nil {
-		log.Errorf("UPDATE DATA_SCOPE Failed: %v", err)
+		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
 		return err
 	}
 
-	log.Infof("UPDATE DATA_SCOPE Success: %s", lastSequence)
+	log.Infof("UPDATE APID_CLUSTER Success: %s", lastSequence)
 
 	return nil
 }
