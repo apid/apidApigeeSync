@@ -10,7 +10,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/30x/apid"
+	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
 

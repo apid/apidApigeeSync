@@ -7,8 +7,8 @@ import (
 
 	"time"
 
-	"github.com/30x/apid"
-	"github.com/30x/apid/factory"
+	"github.com/30x/apid-core"
+	"github.com/30x/apid-core/factory"
 	"github.com/30x/apidApigeeSync"
 )
 

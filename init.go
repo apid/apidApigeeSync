@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/30x/apid"
+	"github.com/30x/apid-core"
 )
 
 const (
