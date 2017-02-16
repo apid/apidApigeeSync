@@ -240,6 +240,14 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	Expect(req.Header.Get("apid_cluster_Id")).To(Equal(m.params.ClusterID))
 	Expect(req.Header.Get("display_name")).ToNot(BeEmpty())
 
+	if req.Header.Get("apid_instance_id") == "" {
+		Expect(req.Header.Get("created_at_apid")).ToNot(BeEmpty())
+		Expect(req.Header.Get("updated_at_apid")).To(BeEmpty())
+	} else {
+		Expect(req.Header.Get("created_at_apid")).To(BeEmpty())
+		Expect(req.Header.Get("updated_at_apid")).ToNot(BeEmpty())
+	}
+
 	Expect(req.Form.Get("client_id")).To(Equal(m.params.TokenKey))
 	Expect(req.Form.Get("client_secret")).To(Equal(m.params.TokenSecret))
 

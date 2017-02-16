@@ -255,8 +255,13 @@ func getBearerToken() {
 		req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 		req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 		req.Header.Set("status", "ONLINE")
-		req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
 		req.Header.Set("plugin_details", apidPluginDetails)
+
+		if apidInfo.InstanceID == "" {
+			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
+		} else {
+			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
+		}
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
