@@ -34,6 +34,7 @@ var (
 	events            apid.EventsService
 	apidInfo          apidInstanceInfo
 	apidPluginDetails string
+	newInstanceID     bool
 )
 
 type apidInstanceInfo struct {

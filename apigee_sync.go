@@ -289,6 +289,11 @@ func getBearerToken() {
 		}
 		token = oauthResp.AccessToken
 
+		if newInstanceID {
+			newInstanceID = false
+			updateApidInstanceInfo()
+		}
+
 		/*
 		 * This stores the bearer token for any other plugin to
 		 * consume.

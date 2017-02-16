@@ -251,6 +251,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		} else {
 			// first start - no row, generate a UUID and store it
 			err = nil
+			newInstanceID = true
 			info.InstanceID = generateUUID()
 
 			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
