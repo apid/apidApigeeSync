@@ -148,6 +148,10 @@ var _ = BeforeSuite(func(done Done) {
 var _ = BeforeEach(func() {
 	apid.Events().Close()
 
+	config.Set(configProxyServerBaseURI, testServer.URL)
+	config.Set(configSnapServerBaseURI, testServer.URL)
+	config.Set(configChangeServerBaseURI, testServer.URL)
+
 	token = ""
 	downloadDataSnapshot = false
 	downloadBootSnapshot = false
