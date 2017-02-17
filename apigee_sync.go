@@ -257,7 +257,7 @@ func getBearerToken() {
 		req.Header.Set("status", "ONLINE")
 		req.Header.Set("plugin_details", apidPluginDetails)
 
-		if apidInfo.InstanceID == "" {
+		if newInstanceID {
 			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
 		} else {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
