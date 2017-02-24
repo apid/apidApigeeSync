@@ -10,15 +10,12 @@ module.exports.init = function(config, logger, stats) {
       record.apiproxy_revision = res.proxy.revision;
     }
 
-    if(config.mask) {
-      var maskString = config.mask.mask_string;
-      var fieldsToMask = config.mask.fields_to_mask;
-      fieldsToMask.forEach((f)=> {
-        //Only attempt to mask if the property exists.
-        if(record[f]) {
-          record[f] = maskString;
-        }
-      });
+    if(config.mask_request_url) {
+      record.request_url = config.mask_request_url;  
+    }
+
+    if(config.mask_request_path) {
+      record.request_path = config.mask_request_path;
     }
     
     cb(null, record);
