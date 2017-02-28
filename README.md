@@ -11,6 +11,7 @@ changes events onto the apid Event service. It also coordinates DB initializatio
 | apigeesync_proxy_server_base | string. url. required.   |
 | apigeesync_consumer_key      | string. required.        |
 | apigeesync_consumer_secret   | string. required.        |
+| apigeesync_instance_name     | string. optional. Display Name for UI        |
 
 This plugin also populates a configuration item for dependant plugins that may need it:
 
