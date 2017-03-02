@@ -52,41 +52,31 @@ func postPluginDataDelivery(e apid.Event) {
 }
 
 /*
- * Helper function that sleeps for N seconds if comm with change agent
- * fails. The retry interval gradually is incremented each time it fails
- * till it reaches the Polling Int time, and after which it constantly
- * retries at the polling time interval
+ * Polls change agent for changes. In event of errors, uses a doubling
+ * backoff from 200ms up to a max delay of the configPollInterval value.
  */
 func updatePeriodicChanges() {
 
-	times := 1
-	pollInterval := config.GetInt(configPollInterval)
+	var backOffFunc func()
+	pollInterval := config.GetDuration(configPollInterval)
 	for {
-		startTime := time.Second
 		err := pollChangeAgent()
 		if err != nil {
 			log.Debugf("Error connecting to changeserver: %v", err)
-		}
-		endTime := time.Second
-		// Gradually increase retry interval, and max at some level
-		if endTime-startTime <= 1 {
-			if times < pollInterval {
-				times++
-			} else {
-				times = pollInterval
+			if backOffFunc == nil {
+				log.Error("creating backoff")
+				backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
 			}
-			log.Debugf("Connecting to changeserver...")
-			time.Sleep(time.Duration(times) * 200 * time.Millisecond)
+			backOffFunc()
 		} else {
-			// Reset sleep interval
-			times = 1
+			log.Error("resetting backoff")
+			backOffFunc = nil
 		}
-
 	}
 }
 
 /*
- * Long polls every 45 seconds the change agent. Parses the response from
+ * Long polls the change agent with a 45 second block. Parses the response from
  * change agent and raises an event.
  */
 func pollChangeAgent() error {
@@ -209,12 +199,12 @@ func pollChangeAgent() error {
 // simple doubling back-off
 func createBackOff(retryIn, maxBackOff time.Duration) func() {
 	return func() {
-		log.Debugf("backoff called. will retry in %s.", retryIn)
-		time.Sleep(retryIn)
-		retryIn = retryIn * time.Duration(2)
 		if retryIn > maxBackOff {
 			retryIn = maxBackOff
 		}
+		log.Debugf("backoff called. will retry in %s.", retryIn)
+		time.Sleep(retryIn)
+		retryIn = retryIn * time.Duration(2)
 	}
 }
 
