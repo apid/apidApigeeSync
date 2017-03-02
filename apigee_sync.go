@@ -269,14 +269,16 @@ func getBearerToken() {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			log.Errorf("Oauth Request Failed with Resp Code: %v", resp.StatusCode)
-			continue
-		}
+
 		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
 			continue
 		}
 
@@ -464,6 +466,11 @@ func downloadSnapshot() {
 			continue
 		}
 
+		if r.StatusCode != 200 {
+			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
+			continue
+		}
+
 		// Decode the Snapshot server response
 		var resp common.Snapshot
 		err = json.NewDecoder(r.Body).Decode(&resp)
@@ -481,11 +488,6 @@ func downloadSnapshot() {
 				log.Errorf("JSON Response Data not parsable: %v", err)
 				continue
 			}
-		}
-
-		if r.StatusCode != 200 {
-			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
-			continue
 		}
 
 		log.Info("Emitting Snapshot to plugins")
