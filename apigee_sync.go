@@ -131,7 +131,7 @@ func pollChangeAgent() error {
 		log.Debugf("Fetching changes: %s", uri)
 
 		/* If error, break the loop, and retry after interval */
-		client := &http.Client{}
+		client := &http.Client{Timeout: time.Minute} // must be greater than block value
 		req, err := http.NewRequest("GET", uri, nil)
 		addHeaders(req)
 		r, err := client.Do(req)
@@ -144,11 +144,13 @@ func pollChangeAgent() error {
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
 				token = ""
+
 				log.Errorf("Token expired? Unauthorized request.")
 			}
 			r.Body.Close()
 			if r.StatusCode != http.StatusNotModified {
-				log.Errorf("Get changes request failed with Resp err: %d", r.StatusCode)
+				err = errors.New("force backoff")
+				log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 			} else {
 				log.Infof("Get changes request timed out with %d", http.StatusNotModified)
 			}
@@ -255,7 +257,7 @@ func getBearerToken() {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}
 
-		client := &http.Client{}
+		client := &http.Client{Timeout: time.Minute}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
@@ -423,6 +425,7 @@ func downloadSnapshot() {
 
 	client := &http.Client{
 		CheckRedirect: Redirect,
+		Timeout:       time.Minute,
 	}
 
 	retryIn := 5 * time.Millisecond
