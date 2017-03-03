@@ -678,6 +678,10 @@ func (m *MockServer) concatTableRowMaps(maps ...tableRowMap) []common.Table {
 // create []common.Table from array of tableRowMaps
 func (m *MockServer) concatChangeLists(changeLists ...common.ChangeList) common.ChangeList {
 	result := common.ChangeList{}
+	if len(changeLists) > 0 {
+		result.FirstSequence = changeLists[0].FirstSequence
+		result.LastSequence = changeLists[len(changeLists)-1].LastSequence
+	}
 	for _, cl := range changeLists {
 		for _, c := range cl.Changes {
 			result.Changes = append(result.Changes, c)
