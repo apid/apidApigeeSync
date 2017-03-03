@@ -60,16 +60,18 @@ func updatePeriodicChanges() {
 	var backOffFunc func()
 	pollInterval := config.GetDuration(configPollInterval)
 	for {
+		start := time.Now().Second()
 		err := pollChangeAgent()
+		end := time.Now().Second()
 		if err != nil {
 			log.Debugf("Error connecting to changeserver: %v", err)
+		}
+		if end-start <= 1 {
 			if backOffFunc == nil {
-				log.Error("creating backoff")
 				backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
 			}
 			backOffFunc()
 		} else {
-			log.Error("resetting backoff")
 			backOffFunc = nil
 		}
 	}
