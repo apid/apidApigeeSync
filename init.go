@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/30x/apid-core"
 	"time"
+
+	"github.com/30x/apid-core"
 )
 
 const (
@@ -23,8 +24,7 @@ const (
 
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
-	// This will not be needed once we have plugin
-	// handling tokens.
+	// This will not be needed once we have plugin handling tokens.
 	bearerToken = "apigeesync_bearer_token"
 )
 
@@ -52,7 +52,7 @@ func init() {
 }
 
 func initDefaults() {
-	config.SetDefault(configPollInterval, 120 * time.Second)
+	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "json")
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
@@ -82,10 +82,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	 * downloadSnapshots/changes etc have to begin to be processed only
 	 * after all the plugins are initialized
 	 */
-	events.ListenFunc(apid.SystemEventsSelector, postInitPlugins)
-
-	// This callback function will get called after each data event delivery.
-	events.ListenFunc(apid.EventDeliveredSelector, postPluginDataDelivery)
+	events.ListenOnceFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,

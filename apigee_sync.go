@@ -3,7 +3,6 @@ package apidApigeeSync
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,79 +13,63 @@ import (
 	"github.com/apigee-labs/transicator/common"
 )
 
-var token string
-var downloadDataSnapshot, downloadBootSnapshot, changeFinished bool
-var lastSequence string
+const (
+	httpTimeout       = time.Minute
+	pluginTimeout     = time.Minute
+	maxBackoffTimeout = time.Minute
+)
 
-func addHeaders(req *http.Request) {
-	req.Header.Add("Authorization", "Bearer "+token)
-	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
-	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
-	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
-}
-
-func postPluginDataDelivery(e apid.Event) {
-
-	if ede, ok := e.(apid.EventDeliveryEvent); ok {
-
-		if ev, ok := ede.Event.(*common.ChangeList); ok {
-			if lastSequence != ev.LastSequence {
-				lastSequence = ev.LastSequence
-				err := updateLastSequence(lastSequence)
-				if err != nil {
-					log.Panic("Unable to update Sequence in DB")
-				}
-			}
-			changeFinished = true
-
-		} else if _, ok := ede.Event.(*common.Snapshot); ok {
-			if downloadBootSnapshot == false {
-				downloadBootSnapshot = true
-				log.Debug("Updated bootstrap SnapshotInfo")
-			} else {
-				downloadDataSnapshot = true
-				log.Debug("Updated data SnapshotInfo")
-			}
-		}
-	}
-}
+var (
+	block        string = "45"
+	token        string
+	lastSequence string
+	polling      bool
+)
 
 /*
  * Polls change agent for changes. In event of errors, uses a doubling
  * backoff from 200ms up to a max delay of the configPollInterval value.
  */
-func updatePeriodicChanges() {
+func pollForChanges() {
+
+	// ensure there's just one polling thread
+	if polling {
+		return
+	}
+	polling = true
 
 	var backOffFunc func()
 	pollInterval := config.GetDuration(configPollInterval)
 	for {
-		start := time.Now().Second()
+		start := time.Now()
 		err := pollChangeAgent()
-		end := time.Now().Second()
+		end := time.Now()
 		if err != nil {
+			if _, ok := err.(apiError); ok {
+				downloadDataSnapshot()
+				continue
+			}
 			log.Debugf("Error connecting to changeserver: %v", err)
 		}
-		if end-start <= 1 {
-			if backOffFunc == nil {
-				backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
-			}
-			backOffFunc()
-		} else {
+		if end.After(start.Add(time.Second)) {
 			backOffFunc = nil
+			continue
 		}
+		if backOffFunc == nil {
+			backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
+		}
+		backOffFunc()
 	}
+
+	polling = false
 }
 
 /*
  * Long polls the change agent with a 45 second block. Parses the response from
- * change agent and raises an event.
+ * change agent and raises an event. Called by pollForChanges().
  */
 func pollChangeAgent() error {
 
-	if downloadDataSnapshot != true {
-		log.Debug("Waiting for snapshot download to complete")
-		return errors.New("Snapshot download in progress...")
-	}
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
 	if err != nil {
 		log.Errorf("bad url value for config %s: %s", changesUri, err)
@@ -114,7 +97,7 @@ func pollChangeAgent() error {
 		if lastSequence != "" {
 			v.Add("since", lastSequence)
 		}
-		v.Add("block", "45")
+		v.Add("block", block)
 
 		/*
 		 * Include all the scopes associated with the config Id
@@ -131,7 +114,7 @@ func pollChangeAgent() error {
 		log.Debugf("Fetching changes: %s", uri)
 
 		/* If error, break the loop, and retry after interval */
-		client := &http.Client{Timeout: time.Minute} // must be greater than block value
+		client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 		req, err := http.NewRequest("GET", uri, nil)
 		addHeaders(req)
 		r, err := client.Do(req)
@@ -140,20 +123,29 @@ func pollChangeAgent() error {
 			return err
 		}
 
-		/* If the call is not Authorized, update flag */
 		if r.StatusCode != http.StatusOK {
-			if r.StatusCode == http.StatusUnauthorized {
+			log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
+			switch r.StatusCode {
+			case http.StatusUnauthorized:
 				token = ""
 
-				log.Errorf("Token expired? Unauthorized request.")
+			case http.StatusNotModified:
+				continue
+
+			case http.StatusBadRequest:
+				var apiErr apiError
+				err = json.NewDecoder(r.Body).Decode(&apiErr)
+				if err != nil {
+					log.Errorf("JSON Response Data not parsable: %v", err)
+					break
+				}
+				if apiErr.Code == "SNAPSHOT_TOO_OLD" {
+					log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
+					err = apiErr
+				}
 			}
+
 			r.Body.Close()
-			if r.StatusCode != http.StatusNotModified {
-				err = errors.New("force backoff")
-				log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
-			} else {
-				log.Infof("Get changes request timed out with %d", http.StatusNotModified)
-			}
 			return err
 		}
 
@@ -167,34 +159,26 @@ func pollChangeAgent() error {
 
 		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
-			changeFinished = false
-			events.Emit(ApigeeSyncEventSelector, &resp)
-			/*
-			 * The plugins should have finished what they are doing.
-			 * Wait till they are done.
-			 * If they take longer than expected - abort apid(?)
-			 * (Should there be a configurable Fudge factor?) FIXME
-			 */
-			for count := 0; count < 1000; count++ {
-				if changeFinished == false {
-					log.Debug("Waiting for plugins to complete...")
-					time.Sleep(time.Duration(count) * 100 * time.Millisecond)
-				} else {
-					break
-				}
-			}
-			if changeFinished == false {
-				log.Panic("Never got ack from plugins. Investigate.")
+			done := make(chan bool)
+			events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
+				done <- true
+			})
+
+			select {
+			case <-time.After(httpTimeout):
+				log.Panic("Timeout. Plugins failed to respond to changes.")
+			case <-done:
+				close(done)
 			}
 		} else {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
+		}
 
-			if lastSequence != resp.LastSequence {
-				lastSequence = resp.LastSequence
-				err := updateLastSequence(lastSequence)
-				if err != nil {
-					log.Panic("Unable to update Sequence in DB")
-				}
+		if lastSequence != resp.LastSequence {
+			lastSequence = resp.LastSequence
+			err := updateLastSequence(lastSequence)
+			if err != nil {
+				log.Panic("Unable to update Sequence in DB")
 			}
 		}
 	}
@@ -227,7 +211,7 @@ func getBearerToken() {
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
 	retryIn := 5 * time.Millisecond
-	maxBackOff := 1 * time.Minute
+	maxBackOff := maxBackoffTimeout
 	backOffFunc := createBackOff(retryIn, maxBackOff)
 	first := true
 
@@ -257,7 +241,7 @@ func getBearerToken() {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}
 
-		client := &http.Client{Timeout: time.Minute}
+		client := &http.Client{Timeout: httpTimeout}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
@@ -323,77 +307,76 @@ func Redirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-/*
- * Method downloads the snapshot in a two phased manner.
- * Phase 1: Use the apidConfigId as the bootstrap scope, and
- * get the apid_config and apid_config_scope from the snapshot
- * server.
- * Phase 2: Get all the scopes fetches from phase 1, and issue
- * the second call to the snapshot server to get all the data
- * associated with the scope(s).
- * Emit the data for the necessary plugins to process.
- * If there is already previous data in sqlite, don't fetch
- * again from snapshot server.
- */
+// pollForChanges should usually be true, tests use the flag
 func bootstrap() {
 
-	// Skip Downloading snapshot if there is already a snapshot available from previous run of APID
 	if apidInfo.LastSnapshot != "" {
-
-		log.Infof("Starting on downloaded snapshot: %s", apidInfo.LastSnapshot)
-
-		// ensure DB version will be accessible on behalf of dependant plugins
-		_, err := data.DBVersion(apidInfo.LastSnapshot)
-		if err != nil {
-			log.Panicf("Database inaccessible: %v", err)
-		}
-
-		// allow plugins (including this one) to start immediately on existing database
-		snap := &common.Snapshot{
-			SnapshotInfo: apidInfo.LastSnapshot,
-		}
-		events.EmitWithCallback(ApigeeSyncEventSelector, snap, func(event apid.Event) {
-			downloadBootSnapshot = true
-			downloadDataSnapshot = true
-
-			go updatePeriodicChanges()
-		})
-
+		startOnLocalSnapshot(apidInfo.LastSnapshot)
 		return
 	}
 
-	/* Phase 1 */
-	downloadSnapshot()
-
-	/*
-	 * Give some time for all the plugins to process the Downloaded
-	 * Snapshot
-	 */
-	for count := 0; count < 60; count++ {
-		if !downloadBootSnapshot {
-			log.Debug("Waiting for bootscope snapshot download...")
-			time.Sleep(time.Duration(count) * 100 * time.Millisecond)
-		} else {
-			break
-		}
-	}
-
-	/* Phase 2 */
-	if downloadBootSnapshot && downloadDataSnapshot {
-		log.Debug("Proceeding with existing Sqlite data")
-	} else if downloadBootSnapshot == true {
-		log.Debug("Proceed to download Snapshot for data scopes")
-		downloadSnapshot()
-	} else {
-		log.Panic("Snapshot for bootscope failed")
-	}
-
-	go updatePeriodicChanges()
+	downloadBootSnapshot()
+	downloadDataSnapshot()
+	go pollForChanges()
 }
 
-func downloadSnapshot() {
+// retrieve boot information: apid_config and apid_config_scope
+func downloadBootSnapshot() {
+	log.Debug("download Snapshot for boot data")
 
-	log.Debugf("downloadSnapshot")
+	scopes := []string{apidInfo.ClusterID}
+	downloadSnapshot(scopes)
+	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
+}
+
+// use the scope IDs from the boot snapshot to get all the data associated with the scopes
+func downloadDataSnapshot() {
+	log.Debug("download Snapshot for data scopes")
+
+	var scopes = findScopesForId(apidInfo.ClusterID)
+	scopes = append(scopes, apidInfo.ClusterID)
+	resp := downloadSnapshot(scopes)
+
+	done := make(chan bool)
+	log.Info("Emitting Snapshot to plugins")
+	events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
+		done <- true
+	})
+
+	select {
+	case <-time.After(pluginTimeout):
+		log.Panic("Timeout. Plugins failed to respond to snapshot.")
+	case <-done:
+		close(done)
+	}
+}
+
+// Skip Downloading snapshot if there is already a snapshot available from previous run
+func startOnLocalSnapshot(snapshot string) {
+	log.Infof("Starting on local snapshot: %s", snapshot)
+
+	// ensure DB version will be accessible on behalf of dependant plugins
+	_, err := data.DBVersion(snapshot)
+	if err != nil {
+		log.Panicf("Database inaccessible: %v", err)
+	}
+
+	// allow plugins (including this one) to start immediately on existing database
+	// Note: this MUST have no tables as that is used as an indicator
+	snap := &common.Snapshot{
+		SnapshotInfo: apidInfo.LastSnapshot,
+	}
+	events.EmitWithCallback(ApigeeSyncEventSelector, snap, func(event apid.Event) {
+		go pollForChanges()
+	})
+
+	log.Infof("Started on local snapshot: %s", snapshot)
+}
+
+// will keep retrying with backoff until success
+func downloadSnapshot(scopes []string) common.Snapshot {
+
+	log.Debug("downloadSnapshot")
 
 	snapshotUri, err := url.Parse(config.GetString(configSnapServerBaseURI))
 	if err != nil {
@@ -403,14 +386,6 @@ func downloadSnapshot() {
 	// getBearerToken loops until good
 	getBearerToken()
 	// todo: this could expire... ensure it's called again as needed
-
-	var scopes []string
-	if downloadBootSnapshot {
-		scopes = findScopesForId(apidInfo.ClusterID)
-	}
-
-	// always include boot cluster
-	scopes = append(scopes, apidInfo.ClusterID)
 
 	/* Frame and send the snapshot request */
 	snapshotUri.Path = path.Join(snapshotUri.Path, "snapshots")
@@ -425,11 +400,11 @@ func downloadSnapshot() {
 
 	client := &http.Client{
 		CheckRedirect: Redirect,
-		Timeout:       time.Minute,
+		Timeout:       httpTimeout,
 	}
 
 	retryIn := 5 * time.Millisecond
-	maxBackOff := 1 * time.Minute
+	maxBackOff := maxBackoffTimeout
 	backOffFunc := createBackOff(retryIn, maxBackOff)
 	first := true
 
@@ -462,32 +437,36 @@ func downloadSnapshot() {
 		}
 
 		if r.StatusCode != 200 {
-			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
+			log.Errorf("Snapshot server conn failed with resp code %d", r.StatusCode)
+			r.Body.Close()
 			continue
 		}
 
 		// Decode the Snapshot server response
 		var resp common.Snapshot
 		err = json.NewDecoder(r.Body).Decode(&resp)
-		r.Body.Close()
 		if err != nil {
-			if downloadBootSnapshot {
-				/*
-				 * If the data set is empty, allow it to proceed, as change server
-				 * will feed data. Since Bootstrapping has passed, it has the
-				 * Bootstrap config id to function.
-				 */
-				downloadDataSnapshot = true
-				return
-			} else {
-				log.Errorf("JSON Response Data not parsable: %v", err)
-				continue
-			}
+			log.Errorf("JSON Response Data not parsable: %v", err)
+			r.Body.Close()
+			continue
 		}
 
-		log.Info("Emitting Snapshot to plugins")
-		events.Emit(ApigeeSyncEventSelector, &resp)
-
-		break
+		r.Body.Close()
+		return resp
 	}
+}
+
+func addHeaders(req *http.Request) {
+	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
+	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
+	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
+}
+
+type apiError struct {
+	Code string `json:"code"`
+}
+
+func (a apiError) Error() string {
+	return a.Code
 }

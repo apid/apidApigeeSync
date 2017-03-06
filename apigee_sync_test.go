@@ -26,4 +26,17 @@ var _ = Describe("listener", func() {
 
 		bootstrap()
 	})
+
+	It("should process a new snapshot when change server requires it", func(done Done) {
+		oldSnap := apidInfo.LastSnapshot
+		apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
+			defer GinkgoRecover()
+
+			if s, ok := event.(*common.Snapshot); ok {
+				Expect(s.SnapshotInfo).NotTo(Equal(oldSnap))
+				close(done)
+			}
+		})
+		testMock.forceNewSnapshot()
+	})
 })
