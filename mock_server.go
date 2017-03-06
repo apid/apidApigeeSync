@@ -75,6 +75,11 @@ type MockServer struct {
 	deployIDMutex   sync.RWMutex
 	minDeploymentID *int64
 	maxDeploymentID *int64
+	newSnap         *int32
+}
+
+func (m *MockServer) forceNewSnapshot() {
+	atomic.SwapInt32(m.newSnap, 1)
 }
 
 func (m *MockServer) lastSequenceID() string {
@@ -115,6 +120,7 @@ func (m *MockServer) init() {
 	m.minDeploymentID = new(int64)
 	*m.minDeploymentID = 1
 	m.maxDeploymentID = new(int64)
+	m.newSnap = new(int32)
 
 	go m.developerGenerator()
 	go m.developerUpdater()
@@ -288,7 +294,7 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	body, err := json.Marshal(snapshot)
 	Expect(err).NotTo(HaveOccurred())
 
-	log.Info("sending snapshot")
+	log.Infof("sending snapshot: %s", m.snapshotID)
 	if len(body) < 10000 {
 		log.Debugf("snapshot: %#v", string(body))
 	}
@@ -300,14 +306,27 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
 	m.registerFailHandler(w)
 
+	val := atomic.SwapInt32(m.newSnap, 0)
+	if val > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		apiErr := apiError{
+			Code: "SNAPSHOT_TOO_OLD",
+		}
+		bytes, err := json.Marshal(apiErr)
+		Expect(err).NotTo(HaveOccurred())
+		w.Write(bytes)
+		return
+	}
+
 	q := req.URL.Query()
+
 	scopes := q["scope"]
-	block, err := strconv.Atoi(req.URL.Query().Get("block"))
+	block, err := strconv.Atoi(q.Get("block"))
 	Expect(err).NotTo(HaveOccurred())
-	since := req.URL.Query().Get("since")
+	since := q.Get("since")
 
 	Expect(req.Header.Get("apid_cluster_Id")).To(Equal(m.params.ClusterID))
-	Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
+	//Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
 	//Expect(scopes).To(ContainElement(m.params.Scope))

@@ -19,6 +19,7 @@ var (
 	tmpDir     string
 	testServer *httptest.Server
 	testRouter apid.Router
+	testMock   *MockServer
 )
 
 var _ = BeforeSuite(func(done Done) {
@@ -45,6 +46,7 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configConsumerKey, "XXXXXXX")
 	config.Set(configConsumerSecret, "YYYYYYY")
 
+	block = "0"
 	log = apid.Log()
 
 	// set up mock server
@@ -57,7 +59,7 @@ var _ = BeforeSuite(func(done Done) {
 		Organization: "att",
 		Environment:  "prod",
 	}
-	Mock(mockParms, testRouter)
+	testMock = Mock(mockParms, testRouter)
 
 	// This is actually the first test :)
 	// Tests that entire bootstrap and set of sync operations work
@@ -150,9 +152,6 @@ var _ = BeforeEach(func() {
 	apid.Events().Close()
 
 	token = ""
-	downloadDataSnapshot = false
-	downloadBootSnapshot = false
-	changeFinished = false
 	lastSequence = ""
 
 	_, err := getDB().Exec("DELETE FROM APID_CLUSTER")
