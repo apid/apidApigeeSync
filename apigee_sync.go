@@ -9,6 +9,8 @@ import (
 	"path"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
@@ -23,7 +25,7 @@ var (
 	block        string = "45"
 	token        string
 	lastSequence string
-	polling      bool
+	polling      uint32
 )
 
 /*
@@ -32,11 +34,9 @@ var (
  */
 func pollForChanges() {
 
-	// ensure there's just one polling thread
-	if polling {
+	if atomic.SwapUint32(&polling, 1) == 1 {
 		return
 	}
-	polling = true
 
 	var backOffFunc func()
 	pollInterval := config.GetDuration(configPollInterval)
@@ -61,7 +61,7 @@ func pollForChanges() {
 		backOffFunc()
 	}
 
-	polling = false
+	atomic.SwapUint32(&polling, 0)
 }
 
 /*
@@ -130,6 +130,7 @@ func pollChangeAgent() error {
 				token = ""
 
 			case http.StatusNotModified:
+				r.Body.Close()
 				continue
 
 			case http.StatusBadRequest:
@@ -168,7 +169,6 @@ func pollChangeAgent() error {
 			case <-time.After(httpTimeout):
 				log.Panic("Timeout. Plugins failed to respond to changes.")
 			case <-done:
-				close(done)
 			}
 		} else {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
@@ -176,7 +176,7 @@ func pollChangeAgent() error {
 
 		if lastSequence != resp.LastSequence {
 			lastSequence = resp.LastSequence
-			err := updateLastSequence(lastSequence)
+			err := updateLastSequence(resp.LastSequence)
 			if err != nil {
 				log.Panic("Unable to update Sequence in DB")
 			}
@@ -347,7 +347,6 @@ func downloadDataSnapshot() {
 	case <-time.After(pluginTimeout):
 		log.Panic("Timeout. Plugins failed to respond to snapshot.")
 	case <-done:
-		close(done)
 	}
 }
 
