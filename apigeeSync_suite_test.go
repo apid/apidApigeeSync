@@ -38,6 +38,7 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configSnapServerBaseURI, testServer.URL)
 	config.Set(configChangeServerBaseURI, testServer.URL)
 	config.Set(configSnapshotProtocol, "json")
+	config.Set(configPollInterval, 10*time.Millisecond)
 
 	config.Set(configName, "testhost")
 	config.Set(configApidClusterId, "bootstrap")
@@ -48,7 +49,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	// set up mock server
 	mockParms := MockParms{
-		ReliableAPI:  true,
+		ReliableAPI:  false,
 		ClusterID:    config.GetString(configApidClusterId),
 		TokenKey:     config.GetString(configConsumerKey),
 		TokenSecret:  config.GetString(configConsumerSecret),

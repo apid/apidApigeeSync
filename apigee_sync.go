@@ -52,41 +52,33 @@ func postPluginDataDelivery(e apid.Event) {
 }
 
 /*
- * Helper function that sleeps for N seconds if comm with change agent
- * fails. The retry interval gradually is incremented each time it fails
- * till it reaches the Polling Int time, and after which it constantly
- * retries at the polling time interval
+ * Polls change agent for changes. In event of errors, uses a doubling
+ * backoff from 200ms up to a max delay of the configPollInterval value.
  */
 func updatePeriodicChanges() {
 
-	times := 1
-	pollInterval := config.GetInt(configPollInterval)
+	var backOffFunc func()
+	pollInterval := config.GetDuration(configPollInterval)
 	for {
-		startTime := time.Second
+		start := time.Now().Second()
 		err := pollChangeAgent()
+		end := time.Now().Second()
 		if err != nil {
 			log.Debugf("Error connecting to changeserver: %v", err)
 		}
-		endTime := time.Second
-		// Gradually increase retry interval, and max at some level
-		if endTime-startTime <= 1 {
-			if times < pollInterval {
-				times++
-			} else {
-				times = pollInterval
+		if end-start <= 1 {
+			if backOffFunc == nil {
+				backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
 			}
-			log.Debugf("Connecting to changeserver...")
-			time.Sleep(time.Duration(times) * 200 * time.Millisecond)
+			backOffFunc()
 		} else {
-			// Reset sleep interval
-			times = 1
+			backOffFunc = nil
 		}
-
 	}
 }
 
 /*
- * Long polls every 45 seconds the change agent. Parses the response from
+ * Long polls the change agent with a 45 second block. Parses the response from
  * change agent and raises an event.
  */
 func pollChangeAgent() error {
@@ -139,7 +131,7 @@ func pollChangeAgent() error {
 		log.Debugf("Fetching changes: %s", uri)
 
 		/* If error, break the loop, and retry after interval */
-		client := &http.Client{}
+		client := &http.Client{Timeout: time.Minute} // must be greater than block value
 		req, err := http.NewRequest("GET", uri, nil)
 		addHeaders(req)
 		r, err := client.Do(req)
@@ -152,11 +144,13 @@ func pollChangeAgent() error {
 		if r.StatusCode != http.StatusOK {
 			if r.StatusCode == http.StatusUnauthorized {
 				token = ""
+
 				log.Errorf("Token expired? Unauthorized request.")
 			}
 			r.Body.Close()
 			if r.StatusCode != http.StatusNotModified {
-				log.Errorf("Get changes request failed with Resp err: %d", r.StatusCode)
+				err = errors.New("force backoff")
+				log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 			} else {
 				log.Infof("Get changes request timed out with %d", http.StatusNotModified)
 			}
@@ -209,12 +203,12 @@ func pollChangeAgent() error {
 // simple doubling back-off
 func createBackOff(retryIn, maxBackOff time.Duration) func() {
 	return func() {
-		log.Debugf("backoff called. will retry in %s.", retryIn)
-		time.Sleep(retryIn)
-		retryIn = retryIn * time.Duration(2)
 		if retryIn > maxBackOff {
 			retryIn = maxBackOff
 		}
+		log.Debugf("backoff called. will retry in %s.", retryIn)
+		time.Sleep(retryIn)
+		retryIn = retryIn * time.Duration(2)
 	}
 }
 
@@ -263,20 +257,22 @@ func getBearerToken() {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}
 
-		client := &http.Client{}
+		client := &http.Client{Timeout: time.Minute}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
 			continue
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			log.Errorf("Oauth Request Failed with Resp Code: %v", resp.StatusCode)
-			continue
-		}
+
 		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
+			continue
+		}
+
+		if resp.StatusCode != 200 {
+			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
 			continue
 		}
 
@@ -429,6 +425,7 @@ func downloadSnapshot() {
 
 	client := &http.Client{
 		CheckRedirect: Redirect,
+		Timeout:       time.Minute,
 	}
 
 	retryIn := 5 * time.Millisecond
@@ -464,6 +461,11 @@ func downloadSnapshot() {
 			continue
 		}
 
+		if r.StatusCode != 200 {
+			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
+			continue
+		}
+
 		// Decode the Snapshot server response
 		var resp common.Snapshot
 		err = json.NewDecoder(r.Body).Decode(&resp)
@@ -481,11 +483,6 @@ func downloadSnapshot() {
 				log.Errorf("JSON Response Data not parsable: %v", err)
 				continue
 			}
-		}
-
-		if r.StatusCode != 200 {
-			log.Errorf("Snapshot server conn failed. HTTP Resp code %d", r.StatusCode)
-			continue
 		}
 
 		log.Info("Emitting Snapshot to plugins")

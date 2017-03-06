@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/30x/apid-core"
+	"time"
 )
 
 const (
@@ -51,7 +52,7 @@ func init() {
 }
 
 func initDefaults() {
-	config.SetDefault(configPollInterval, 120)
+	config.SetDefault(configPollInterval, 120 * time.Second)
 	config.SetDefault(configSnapshotProtocol, "json")
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
