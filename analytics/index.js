@@ -10,8 +10,8 @@ module.exports.init = function(config, logger, stats) {
       record.apiproxy_revision = res.proxy.revision;
     }
 
-    if(config.mask_request_url) {
-      record.request_url = config.mask_request_url;  
+    if(config.mask_request_uri) {
+      record.request_uri = config.mask_request_uri;  
     }
 
     if(config.mask_request_path) {
