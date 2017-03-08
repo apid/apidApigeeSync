@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"net"
+
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
@@ -495,7 +497,10 @@ func (m *MockServer) createDeployment() tableRowMap {
 
 	deploymentID := m.nextDeploymentID()
 	bundleID := generateUUID()
-	port := apid.Config().GetString("api_port")
+
+	listen := apid.Config().GetString("api_listen")
+	_, port, err := net.SplitHostPort(listen)
+	Expect(err).NotTo(HaveOccurred())
 
 	urlString := m.params.BundleURI
 	if urlString == "" {

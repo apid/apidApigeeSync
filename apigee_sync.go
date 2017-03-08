@@ -325,8 +325,9 @@ func downloadBootSnapshot() {
 	log.Debug("download Snapshot for boot data")
 
 	scopes := []string{apidInfo.ClusterID}
-	downloadSnapshot(scopes)
+	snapshot := downloadSnapshot(scopes)
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
+	processSnapshot(&snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes

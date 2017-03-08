@@ -30,6 +30,9 @@ func main() {
 
 	f.Parse(os.Args[1:])
 
+	// set listener binding before apid.Initialize()
+	os.Setenv("APID_API_LISTEN", ":9001")
+
 	apid.Initialize(factory.DefaultServicesFactory())
 
 	log := apid.Log()
@@ -37,8 +40,6 @@ func main() {
 	apidApigeeSync.SetLogger(log)
 
 	config := apid.Config()
-	config.SetDefault("api_port", "9001")
-
 	router := apid.API().Router()
 
 	params := apidApigeeSync.MockParms{
@@ -62,9 +63,9 @@ func main() {
 	apidApigeeSync.Mock(params, router)
 
 	// print the base url to the console
-	port := config.GetString("api_port")
+	listener := config.GetString("api_listen")
 	log.Print()
-	log.Printf("API is at: http://localhost:%s", port)
+	log.Printf("API is bound to: %s", listener)
 	log.Print()
 
 	// start client API listener
