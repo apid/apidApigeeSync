@@ -78,8 +78,6 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	data = services.Data()
 	events = services.Events()
 
-	tokenManager = createTokenManager()
-
 	/* This callback function will get called, once all the plugins are
 	 * initialized (not just this plugin). This is needed because,
 	 * downloadSnapshots/changes etc have to begin to be processed only
@@ -119,6 +117,8 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
+
+	tokenManager = createTokenManager()
 
 	log.Debug("end init")
 

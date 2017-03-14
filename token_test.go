@@ -91,7 +91,6 @@ var _ = Describe("token", func() {
 				defer GinkgoRecover()
 
 				count++
-
 				if count > 1 {
 					if start.Add(500).After(time.Now()) {
 						Fail("didn't refresh within expected interval")
@@ -109,6 +108,7 @@ var _ = Describe("token", func() {
 			}))
 			defer ts.Close()
 
+			tokenManager.getToken()
 			tokenManager.close()
 			oldBase := config.Get(configProxyServerBaseURI)
 			config.Set(configProxyServerBaseURI, ts.URL)
@@ -122,6 +122,52 @@ var _ = Describe("token", func() {
 			}()
 
 			tm = createTokenManager()
+			<-finished
+			close(done)
+		})
+
+		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
+
+			finished := make(chan bool)
+			var tm *tokenMan
+			count := 0
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+
+				count++
+				if count == 1 {
+					Expect(newInstanceID).To(BeTrue())
+					Expect(r.Header.Get("created_at_apid")).NotTo(BeEmpty())
+					Expect(r.Header.Get("updated_at_apid")).To(BeEmpty())
+				} else {
+					Expect(newInstanceID).To(BeFalse())
+					Expect(r.Header.Get("created_at_apid")).To(BeEmpty())
+					Expect(r.Header.Get("updated_at_apid")).NotTo(BeEmpty())
+					finished <- true
+				}
+				res := oauthToken{
+					AccessToken: string(count),
+					ExpiresIn:   2000,
+				}
+				body, err := json.Marshal(res)
+				Expect(err).NotTo(HaveOccurred())
+				w.Write(body)
+			}))
+			defer ts.Close()
+
+			tokenManager.getToken()
+			tokenManager.close()
+			oldBase := config.Get(configProxyServerBaseURI)
+			config.Set(configProxyServerBaseURI, ts.URL)
+			defer func() {
+				tm.close()
+				config.Set(configProxyServerBaseURI, oldBase)
+				tokenManager = createTokenManager()
+			}()
+
+			newInstanceID = true
+			tm = createTokenManager()
+			tm.invalidateToken()
 			<-finished
 			close(done)
 		})

@@ -151,7 +151,7 @@ func (t *tokenMan) retrieveNewToken() {
 		var token oauthToken
 		err = json.Unmarshal(body, &token)
 		if err != nil {
-			log.Error("unable to unmarshal JSON response %s: %v", string(body), err)
+			log.Errorf("unable to unmarshal JSON response '%s': %v", string(body), err)
 			continue
 		}
 
@@ -163,6 +163,11 @@ func (t *tokenMan) retrieveNewToken() {
 		}
 
 		log.Debugf("Got new token: %#v", token)
+
+		if newInstanceID {
+			newInstanceID = false
+			updateApidInstanceInfo()
+		}
 
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
