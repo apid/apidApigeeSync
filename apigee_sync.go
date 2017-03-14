@@ -1,15 +1,15 @@
 package apidApigeeSync
 
 import (
-	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"time"
 
 	"sync/atomic"
+
+	"io/ioutil"
 
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
@@ -23,7 +23,6 @@ const (
 
 var (
 	block        string = "45"
-	token        string
 	lastSequence string
 	polling      uint32
 )
@@ -84,10 +83,6 @@ func pollChangeAgent() error {
 	lastSequence = getLastSequence()
 	for {
 		log.Debug("polling...")
-		if token == "" {
-			// invalid token, loop until we get one
-			getBearerToken()
-		}
 
 		/* Find the scopes associated with the config id */
 		scopes := findScopesForId(apidInfo.ClusterID)
@@ -117,6 +112,7 @@ func pollChangeAgent() error {
 		client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 		req, err := http.NewRequest("GET", uri, nil)
 		addHeaders(req)
+
 		r, err := client.Do(req)
 		if err != nil {
 			log.Errorf("change agent comm error: %s", err)
@@ -127,7 +123,7 @@ func pollChangeAgent() error {
 			log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 			switch r.StatusCode {
 			case http.StatusUnauthorized:
-				token = ""
+				tokenManager.invalidateToken()
 
 			case http.StatusNotModified:
 				r.Body.Close()
@@ -135,9 +131,15 @@ func pollChangeAgent() error {
 
 			case http.StatusBadRequest:
 				var apiErr apiError
-				err = json.NewDecoder(r.Body).Decode(&apiErr)
+				var b []byte
+				b, err = ioutil.ReadAll(r.Body)
 				if err != nil {
-					log.Errorf("JSON Response Data not parsable: %v", err)
+					log.Errorf("Unable to read response body: %v", err)
+					break
+				}
+				err = json.Unmarshal(b, &apiErr)
+				if err != nil {
+					log.Errorf("JSON Response Data not parsable: %s", string(b))
 					break
 				}
 				if apiErr.Code == "SNAPSHOT_TOO_OLD" {
@@ -196,113 +198,8 @@ func createBackOff(retryIn, maxBackOff time.Duration) func() {
 	}
 }
 
-/*
- * This function will (for now) use the Access Key/Secret Key/ApidConfig Id
- * to get the bearer token, and the scopes (as comma separated scope)
- */
-func getBearerToken() {
-
-	log.Info("Getting a Bearer token...")
-	uriString := config.GetString(configProxyServerBaseURI)
-	uri, err := url.Parse(uriString)
-	if err != nil {
-		log.Panicf("unable to parse uri config '%s' value: '%s': %v", configProxyServerBaseURI, uriString, err)
-	}
-	uri.Path = path.Join(uri.Path, "/accesstoken")
-
-	retryIn := 5 * time.Millisecond
-	maxBackOff := maxBackoffTimeout
-	backOffFunc := createBackOff(retryIn, maxBackOff)
-	first := true
-
-	for {
-		if first {
-			first = false
-		} else {
-			backOffFunc()
-		}
-
-		token = ""
-		form := url.Values{}
-		form.Set("grant_type", "client_credentials")
-		form.Add("client_id", config.GetString(configConsumerKey))
-		form.Add("client_secret", config.GetString(configConsumerSecret))
-		req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
-		req.Header.Set("display_name", apidInfo.InstanceName)
-		req.Header.Set("apid_instance_id", apidInfo.InstanceID)
-		req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
-		req.Header.Set("status", "ONLINE")
-		req.Header.Set("plugin_details", apidPluginDetails)
-
-		if newInstanceID {
-			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
-		} else {
-			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
-		}
-
-		client := &http.Client{Timeout: httpTimeout}
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
-			continue
-		}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
-			continue
-		}
-
-		if resp.StatusCode != 200 {
-			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
-			continue
-		}
-
-		var oauthResp oauthTokenResp
-		log.Debugf("Response: %s ", body)
-		err = json.Unmarshal(body, &oauthResp)
-		if err != nil {
-			log.Error("unable to unmarshal JSON response %s: %v", string(body), err)
-			continue
-		}
-		token = oauthResp.AccessToken
-
-		if newInstanceID {
-			newInstanceID = false
-			updateApidInstanceInfo()
-		}
-
-		/*
-		 * This stores the bearer token for any other plugin to
-		 * consume.
-		 */
-		config.Set(bearerToken, token)
-
-		log.Debug("Got a new Bearer token.")
-
-		return
-	}
-}
-
-type oauthTokenResp struct {
-	IssuedAt       int64    `json:"issuedAt"`
-	AppName        string   `json:"applicationName"`
-	Scope          string   `json:"scope"`
-	Status         string   `json:"status"`
-	ApiProdList    []string `json:"apiProductList"`
-	ExpiresIn      int64    `json:"expiresIn"`
-	DeveloperEmail string   `json:"developerEmail"`
-	TokenType      string   `json:"tokenType"`
-	ClientId       string   `json:"clientId"`
-	AccessToken    string   `json:"accessToken"`
-	TokenExpIn     int64    `json:"refreshTokenExpiresIn"`
-	RefreshCount   int64    `json:"refreshCount"`
-}
-
 func Redirect(req *http.Request, via []*http.Request) error {
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+tokenManager.getBearerToken())
 	req.Header.Add("org", apidInfo.ClusterID) // todo: this is strange.. is it needed?
 	return nil
 }
@@ -383,10 +280,6 @@ func downloadSnapshot(scopes []string) common.Snapshot {
 		log.Panicf("bad url value for config %s: %s", snapshotUri, err)
 	}
 
-	// getBearerToken loops until good
-	getBearerToken()
-	// todo: this could expire... ensure it's called again as needed
-
 	/* Frame and send the snapshot request */
 	snapshotUri.Path = path.Join(snapshotUri.Path, "snapshots")
 
@@ -457,7 +350,7 @@ func downloadSnapshot(scopes []string) common.Snapshot {
 }
 
 func addHeaders(req *http.Request) {
-	req.Header.Add("Authorization", "Bearer "+token)
+	req.Header.Add("Authorization", "Bearer "+tokenManager.getBearerToken())
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
