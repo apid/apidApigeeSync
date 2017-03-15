@@ -38,6 +38,8 @@ Relations:
   product => * app_credential
 */
 
+const oauthExpiresIn = 2 * 60 * 1000 // 2 minutes
+
 type MockParms struct {
 	ReliableAPI            bool
 	ClusterID              string
@@ -212,9 +214,9 @@ func (m *MockServer) createDeveloperWithProductAndApp() tableRowMap {
 
 func (m *MockServer) registerRoutes(router apid.Router) {
 
-	router.HandleFunc("/accesstoken", m.unreliable(m.sendToken)).Methods("POST")
-	router.HandleFunc("/snapshots", m.unreliable(m.auth(m.sendSnapshot))).Methods("GET")
-	router.HandleFunc("/changes", m.unreliable(m.auth(m.sendChanges))).Methods("GET")
+	router.HandleFunc("/accesstoken", m.unreliable(m.gomega(m.sendToken))).Methods("POST")
+	router.HandleFunc("/snapshots", m.unreliable(m.gomega(m.auth(m.sendSnapshot)))).Methods("GET")
+	router.HandleFunc("/changes", m.unreliable(m.gomega(m.auth(m.sendChanges)))).Methods("GET")
 	router.HandleFunc("/bundles/{id}", m.sendDeploymentBundle).Methods("GET")
 	router.HandleFunc("/analytics", m.sendAnalyticsURL).Methods("GET")
 	router.HandleFunc("/analytics", m.putAnalyticsData).Methods("PUT")
@@ -236,7 +238,6 @@ func (m *MockServer) sendDeploymentBundle(w http.ResponseWriter, req *http.Reque
 
 func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
-	m.registerFailHandler(w)
 
 	Expect(req.Header.Get("Content-Type")).To(Equal("application/x-www-form-urlencoded; param=value"))
 
@@ -263,8 +264,9 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	Expect(err).NotTo(HaveOccurred())
 
 	m.oauthToken = generateUUID()
-	res := oauthTokenResp{
+	res := oauthToken{
 		AccessToken: m.oauthToken,
+		ExpiresIn:   oauthExpiresIn,
 	}
 	body, err := json.Marshal(res)
 	Expect(err).NotTo(HaveOccurred())
@@ -273,7 +275,6 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 
 func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
-	m.registerFailHandler(w)
 
 	q := req.URL.Query()
 	scopes := q["scope"]
@@ -306,7 +307,6 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 
 func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
-	m.registerFailHandler(w)
 
 	val := atomic.SwapInt32(m.newSnap, 0)
 	if val > 0 {
@@ -435,13 +435,28 @@ func (m *MockServer) sendChange(w http.ResponseWriter, timeout time.Duration) {
 	}
 }
 
+// enables GoMega handling
+func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		errors := InterceptGomegaFailures(func() {
+			target(w, req)
+		})
+		if len(errors) > 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("assertion errors:\n%v", errors)))
+		}
+	}
+}
+
 // enforces handler auth
 func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		auth := req.Header.Get("Authorization")
 
-		if auth != fmt.Sprintf("Bearer %s", m.oauthToken) {
+		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
+		if auth != expectedAuth {
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
 		} else {
 			target(w, req)
 		}
@@ -463,14 +478,6 @@ func (m *MockServer) unreliable(target http.HandlerFunc) http.HandlerFunc {
 			target(w, req)
 		}
 	}
-}
-
-func (m *MockServer) registerFailHandler(w http.ResponseWriter) {
-	RegisterFailHandler(func(message string, callerSkip ...int) {
-		w.WriteHeader(400)
-		w.Write([]byte(message))
-		panic(message)
-	})
 }
 
 func (m *MockServer) newRow(keyAndVals map[string]string) (row common.Row) {

@@ -25,7 +25,7 @@ const (
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
-	bearerToken = "apigeesync_bearer_token"
+	configBearerToken = "apigeesync_bearer_token"
 )
 
 var (
@@ -36,6 +36,7 @@ var (
 	apidInfo          apidInstanceInfo
 	apidPluginDetails string
 	newInstanceID     bool
+	tokenManager      *tokenMan
 )
 
 type apidInstanceInfo struct {
@@ -116,6 +117,8 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
+
+	tokenManager = createTokenManager()
 
 	log.Debug("end init")
 

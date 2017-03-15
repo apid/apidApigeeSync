@@ -1,6 +1,7 @@
 package apidApigeeSync
 
 import (
+	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -12,7 +13,6 @@ import (
 
 	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/factory"
-	"github.com/apigee-labs/transicator/common"
 )
 
 var (
@@ -151,7 +151,6 @@ var _ = BeforeSuite(func(done Done) {
 var _ = BeforeEach(func() {
 	apid.Events().Close()
 
-	token = ""
 	lastSequence = ""
 
 	_, err := getDB().Exec("DELETE FROM APID_CLUSTER")
