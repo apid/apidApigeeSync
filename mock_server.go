@@ -442,6 +442,7 @@ func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
 			target(w, req)
 		})
 		if len(errors) > 0 {
+			log.Errorf("assertion errors for %s:\nheaders:%v\n%v", req.URL, req.Header, errors)
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf("assertion errors:\n%v", errors)))
 		}

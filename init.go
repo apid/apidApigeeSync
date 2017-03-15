@@ -118,8 +118,6 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
 
-	tokenManager = createTokenManager()
-
 	log.Debug("end init")
 
 	return pluginData, nil
@@ -155,6 +153,8 @@ func postInitPlugins(event apid.Event) {
 		apidPluginDetails = string(pgInfo[:])
 
 		log.Debug("start post plugin init")
+
+		tokenManager = createTokenManager()
 
 		go bootstrap()
 
