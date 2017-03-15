@@ -254,7 +254,8 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			newInstanceID = true
 			info.InstanceID = generateUUID()
 
-			db.Exec("INSERT INTO APID (instance_id) VALUES (?)", info.InstanceID)
+			db.Exec("INSERT INTO APID (instance_id, last_snapshot_info) VALUES (?,?)",
+				info.InstanceID, "")
 		}
 	}
 	return
