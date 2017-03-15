@@ -155,7 +155,7 @@ func (t *tokenMan) retrieveNewToken() {
 			continue
 		}
 
-		if token.ExpiresIn >= 0 {
+		if token.ExpiresIn > 0 {
 			token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Millisecond)
 		} else {
 			// no expiration, arbitrarily expire about a year from now
