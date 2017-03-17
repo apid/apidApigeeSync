@@ -11,12 +11,22 @@ var _ = Describe("listener", func() {
 
 	It("should bootstrap from local DB if present", func(done Done) {
 
+		expectedTables := make(map[string] bool)
+		expectedTables["kms.company"] = true
+		expectedTables["edgex.apid_cluster"] = true
+		expectedTables["edgex.data_scope"] = true
+
+
 		Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
 		apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 			defer GinkgoRecover()
 
 			if s, ok := event.(*common.Snapshot); ok {
+
+				//verify that the knownTables array has been properly populated from existing DB
+				Expect(mapIsSubset(knownTables, expectedTables)).To(BeTrue())
+
 				Expect(s.SnapshotInfo).Should(Equal(apidInfo.LastSnapshot))
 				Expect(s.Tables).To(BeNil())
 

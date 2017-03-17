@@ -25,6 +25,7 @@ var (
 	block        string = "45"
 	lastSequence string
 	polling      uint32
+	knownTables = make(map[string]bool)
 )
 
 /*
@@ -44,7 +45,7 @@ func pollForChanges() {
 		err := pollChangeAgent()
 		end := time.Now()
 		if err != nil {
-			if _, ok := err.(apiError); ok {
+			if _, ok := err.(changeServerError); ok {
 				downloadDataSnapshot()
 				continue
 			}
@@ -130,7 +131,7 @@ func pollChangeAgent() error {
 				continue
 
 			case http.StatusBadRequest:
-				var apiErr apiError
+				var apiErr changeServerError
 				var b []byte
 				b, err = ioutil.ReadAll(r.Body)
 				if err != nil {
@@ -160,6 +161,13 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		if changesRequireDDLSync(resp) {
+			log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
+			return changeServerError{
+				Code: "DDL changes detected; must get new snapshot",
+			}
+		}
+
 		/* If valid data present, Emit to plugins */
 		if len(resp.Changes) > 0 {
 			done := make(chan bool)
@@ -184,6 +192,12 @@ func pollChangeAgent() error {
 			}
 		}
 	}
+}
+
+
+func changesRequireDDLSync(changes common.ChangeList) bool {
+
+	return !mapIsSubset(knownTables, extractTablesFromChangelist(changes))
 }
 
 // simple doubling back-off
@@ -235,6 +249,14 @@ func downloadDataSnapshot() {
 	scopes = append(scopes, apidInfo.ClusterID)
 	resp := downloadSnapshot(scopes)
 
+	knownTables = extractTablesFromSnapshot(resp)
+
+	db, err := data.DBVersion(resp.SnapshotInfo)
+	if err != nil {
+		log.Panicf("Database inaccessible: %v", err)
+	}
+	persistKnownTablesToDB(knownTables, db)
+
 	done := make(chan bool)
 	log.Info("Emitting Snapshot to plugins")
 	events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
@@ -248,20 +270,91 @@ func downloadDataSnapshot() {
 	}
 }
 
+func extractTablesFromSnapshot(snapshot common.Snapshot) (tables map[string]bool) {
+
+	tables = make(map[string]bool)
+
+	log.Debug("Extracting table names from snapshot")
+	if snapshot.Tables == nil {
+		//if this panic ever fires, it's a bug
+		log.Panicf("Attempt to extract known tables from snapshot without tables failed")
+	}
+
+	for _, table := range snapshot.Tables {
+		tables[table.Name] = true
+	}
+
+	return tables
+}
+
+func extractTablesFromChangelist(changes common.ChangeList) (tables map[string] bool) {
+
+	tables = make(map[string]bool)
+
+	for _, change := range changes.Changes {
+		tables[change.Table] = true
+	}
+
+	return tables
+}
+
+func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
+
+	tables = make(map[string]bool)
+
+	log.Debug("Extracting table names from existing DB")
+	rows, err := db.Query("SELECT name FROM _known_tables;")
+
+	if err != nil {
+		log.Panicf("Error reading current set of tables: %v", err)
+	}
+
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			log.Panicf("Error reading current set of tables: %v", err)
+		}
+		log.Debugf("Table %s found in existing db", table)
+
+		tables[table] = true
+	}
+	return tables
+}
+
+func persistKnownTablesToDB(tables map[string]bool, db apid.DB) {
+	log.Debugf("Inserting table names found in snapshot into db")
+
+	_, err := db.Exec(`CREATE TABLE _known_tables (name text, PRIMARY KEY(name));`)
+	if err != nil {
+		log.Panicf("Could not create _known_tables table: %s", err)
+	}
+
+	for name := range tables {
+		log.Debugf("Inserting %s into _known_tables", name)
+		_, err := db.Exec(`INSERT INTO _known_tables VALUES(?);`, name)
+		if err != nil {
+			log.Panicf("Error encountered inserting into known tables ", err)
+		}
+
+	}
+}
+
 // Skip Downloading snapshot if there is already a snapshot available from previous run
 func startOnLocalSnapshot(snapshot string) {
 	log.Infof("Starting on local snapshot: %s", snapshot)
 
 	// ensure DB version will be accessible on behalf of dependant plugins
-	_, err := data.DBVersion(snapshot)
+	db, err := data.DBVersion(snapshot)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
 
+	knownTables = extractTablesFromDB(db)
+
 	// allow plugins (including this one) to start immediately on existing database
 	// Note: this MUST have no tables as that is used as an indicator
 	snap := &common.Snapshot{
-		SnapshotInfo: apidInfo.LastSnapshot,
+		SnapshotInfo: snapshot,
 	}
 	events.EmitWithCallback(ApigeeSyncEventSelector, snap, func(event apid.Event) {
 		go pollForChanges()
@@ -356,10 +449,28 @@ func addHeaders(req *http.Request) {
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 }
 
-type apiError struct {
+type changeServerError struct {
 	Code string `json:"code"`
 }
 
-func (a apiError) Error() string {
+func (a changeServerError) Error() string {
 	return a.Code
+}
+
+/*
+ * Determine is map b is a subset of map a
+ */
+func mapIsSubset(a map[string]bool, b map[string]bool) bool {
+	
+	if b == nil {
+		return true;
+	}
+
+	for k := range b {
+		if !a[k] {
+			return false
+		}
+	}
+
+	return true
 }

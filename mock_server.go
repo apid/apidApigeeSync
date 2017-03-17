@@ -311,7 +311,7 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	val := atomic.SwapInt32(m.newSnap, 0)
 	if val > 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		apiErr := apiError{
+		apiErr := changeServerError{
 			Code: "SNAPSHOT_TOO_OLD",
 		}
 		bytes, err := json.Marshal(apiErr)
