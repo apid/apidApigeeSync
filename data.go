@@ -165,8 +165,8 @@ func deleteDataScope(ds dataDataScope, txn *sql.Tx) error {
 }
 
 /*
- * For the given apidConfigId, this function will retrieve all the scopes
- * associated with it
+ * For the given apidConfigId, this function will retrieve all the distinch scopes
+ * associated with it. Distinct, because scope is already a collection of the tenants.
  */
 func findScopesForId(configId string) (scopes []string) {
 
@@ -175,7 +175,7 @@ func findScopesForId(configId string) (scopes []string) {
 	var scope string
 	db := getDB()
 
-	rows, err := db.Query("select scope from DATA_SCOPE where apid_cluster_id = $1", configId)
+	rows, err := db.Query("select DISTINCT scope from DATA_SCOPE where apid_cluster_id = $1", configId)
 	if err != nil {
 		log.Errorf("Failed to query DATA_SCOPE: %v", err)
 		return
