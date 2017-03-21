@@ -16,7 +16,6 @@ var _ = Describe("listener", func() {
 		expectedTables["edgex.apid_cluster"] = true
 		expectedTables["edgex.data_scope"] = true
 
-
 		Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
 		apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
@@ -35,6 +34,27 @@ var _ = Describe("listener", func() {
 		})
 
 		bootstrap()
+	})
+
+	It("should correctly identify non-proper subsets with respect to maps", func() {
+
+		//test b proper subset of a
+		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"b": true})).To(BeTrue())
+
+		//test a == b
+		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"a": true, "b": true})).To(BeTrue())
+
+		//test b superset of a
+		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"a": true, "b": true, "c": true})).To(BeFalse())
+
+		//test b not subset of a
+		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"c": true})).To(BeFalse())
+
+		//test b empty
+		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{})).To(BeTrue())
+
+		//test a empty
+		Expect(mapIsSubset(map[string]bool{}, map[string]bool{"b": true})).To(BeFalse())
 	})
 
 	// todo: disabled for now -

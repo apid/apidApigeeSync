@@ -304,6 +304,7 @@ func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 
 	log.Debug("Extracting table names from existing DB")
 	rows, err := db.Query("SELECT name FROM _known_tables;")
+	defer rows.Close()
 
 	if err != nil {
 		log.Panicf("Error reading current set of tables: %v", err)
@@ -324,17 +325,29 @@ func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 func persistKnownTablesToDB(tables map[string]bool, db apid.DB) {
 	log.Debugf("Inserting table names found in snapshot into db")
 
-	_, err := db.Exec(`CREATE TABLE _known_tables (name text, PRIMARY KEY(name));`)
+	tx, err := db.Begin()
+	if err != nil {
+		log.Panicf("Error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("CREATE TABLE _known_tables (name text, PRIMARY KEY(name));")
 	if err != nil {
 		log.Panicf("Could not create _known_tables table: %s", err)
 	}
 
 	for name := range tables {
 		log.Debugf("Inserting %s into _known_tables", name)
-		_, err := db.Exec(`INSERT INTO _known_tables VALUES(?);`, name)
+		_, err := tx.Exec("INSERT INTO _known_tables VALUES(?);", name)
 		if err != nil {
 			log.Panicf("Error encountered inserting into known tables ", err)
 		}
+
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Panicf("Error committing transaction: %v", err)
 
 	}
 }
@@ -461,9 +474,10 @@ func (a changeServerError) Error() string {
  * Determine is map b is a subset of map a
  */
 func mapIsSubset(a map[string]bool, b map[string]bool) bool {
-	
-	if b == nil {
-		return true;
+
+	//nil maps should not be passed in.  Making the distinction between nil map and empty map
+	if a == nil || b == nil {
+		return false;
 	}
 
 	for k := range b {
