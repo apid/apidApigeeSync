@@ -75,9 +75,41 @@ var _ = Describe("listener", func() {
 							{
 								"id":              &common.ColumnVal{Value: "i"},
 								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope":           &common.ColumnVal{Value: "s"},
+								"scope":           &common.ColumnVal{Value: "s1"},
 								"org":             &common.ColumnVal{Value: "o"},
-								"env":             &common.ColumnVal{Value: "e"},
+								"env":             &common.ColumnVal{Value: "e1"},
+								"created":         &common.ColumnVal{Value: "c"},
+								"created_by":      &common.ColumnVal{Value: "c"},
+								"updated":         &common.ColumnVal{Value: "u"},
+								"updated_by":      &common.ColumnVal{Value: "u"},
+							},
+						},
+					},
+					{
+						Name: LISTENER_TABLE_DATA_SCOPE,
+						Rows: []common.Row{
+							{
+								"id":              &common.ColumnVal{Value: "j"},
+								"apid_cluster_id": &common.ColumnVal{Value: "a"},
+								"scope":           &common.ColumnVal{Value: "s1"},
+								"org":             &common.ColumnVal{Value: "o"},
+								"env":             &common.ColumnVal{Value: "e2"},
+								"created":         &common.ColumnVal{Value: "c"},
+								"created_by":      &common.ColumnVal{Value: "c"},
+								"updated":         &common.ColumnVal{Value: "u"},
+								"updated_by":      &common.ColumnVal{Value: "u"},
+							},
+						},
+					},
+					{
+						Name: LISTENER_TABLE_DATA_SCOPE,
+						Rows: []common.Row{
+							{
+								"id":              &common.ColumnVal{Value: "k"},
+								"apid_cluster_id": &common.ColumnVal{Value: "a"},
+								"scope":           &common.ColumnVal{Value: "s2"},
+								"org":             &common.ColumnVal{Value: "o"},
+								"env":             &common.ColumnVal{Value: "e3"},
 								"created":         &common.ColumnVal{Value: "c"},
 								"created_by":      &common.ColumnVal{Value: "c"},
 								"updated":         &common.ColumnVal{Value: "u"},
@@ -145,17 +177,29 @@ var _ = Describe("listener", func() {
 				dds = append(dds, d)
 			}
 
-			Expect(len(dds)).To(Equal(1))
+			Expect(len(dds)).To(Equal(3))
 			ds := dds[0]
 
 			Expect(ds.ID).To(Equal("i"))
 			Expect(ds.Org).To(Equal("o"))
-			Expect(ds.Env).To(Equal("e"))
-			Expect(ds.Scope).To(Equal("s"))
+			Expect(ds.Env).To(Equal("e1"))
+			Expect(ds.Scope).To(Equal("s1"))
 			Expect(ds.Created).To(Equal("c"))
 			Expect(ds.CreatedBy).To(Equal("c"))
 			Expect(ds.Updated).To(Equal("u"))
 			Expect(ds.UpdatedBy).To(Equal("u"))
+
+			ds = dds[1]
+			Expect(ds.Env).To(Equal("e2"))
+			Expect(ds.Scope).To(Equal("s1"))
+			ds = dds[2]
+			Expect(ds.Env).To(Equal("e3"))
+			Expect(ds.Scope).To(Equal("s2"))
+
+			scopes := findScopesForId("a")
+			Expect(len(scopes)).To(Equal(2))
+			Expect(scopes[0]).To(Equal("s1"))
+			Expect(scopes[1]).To(Equal("s2"))
 
 			//restore the last snapshot
 			apidInfo.LastSnapshot = saveLastSnapshot
@@ -169,7 +213,6 @@ var _ = Describe("listener", func() {
 			It("insert event should panic", func() {
 				//save the last snapshot, so we can restore it at the end of this context
 				saveLastSnapshot = apidInfo.LastSnapshot
-
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -210,7 +253,6 @@ var _ = Describe("listener", func() {
 				//save the last snapshot, so we can restore it at the end of this context
 				saveLastSnapshot = apidInfo.LastSnapshot
 
-
 				event := common.ChangeList{
 					LastSequence: "test",
 					Changes: []common.Change{
@@ -220,7 +262,22 @@ var _ = Describe("listener", func() {
 							NewRow: common.Row{
 								"id":              &common.ColumnVal{Value: "i"},
 								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope":           &common.ColumnVal{Value: "s"},
+								"scope":           &common.ColumnVal{Value: "s1"},
+								"org":             &common.ColumnVal{Value: "o"},
+								"env":             &common.ColumnVal{Value: "e"},
+								"created":         &common.ColumnVal{Value: "c"},
+								"created_by":      &common.ColumnVal{Value: "c"},
+								"updated":         &common.ColumnVal{Value: "u"},
+								"updated_by":      &common.ColumnVal{Value: "u"},
+							},
+						},
+						{
+							Operation: common.Insert,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
+							NewRow: common.Row{
+								"id":              &common.ColumnVal{Value: "j"},
+								"apid_cluster_id": &common.ColumnVal{Value: "a"},
+								"scope":           &common.ColumnVal{Value: "s2"},
 								"org":             &common.ColumnVal{Value: "o"},
 								"env":             &common.ColumnVal{Value: "e"},
 								"created":         &common.ColumnVal{Value: "c"},
@@ -252,17 +309,25 @@ var _ = Describe("listener", func() {
 					dds = append(dds, d)
 				}
 
-				Expect(len(dds)).To(Equal(1))
+				Expect(len(dds)).To(Equal(2))
 				ds := dds[0]
 
 				Expect(ds.ID).To(Equal("i"))
 				Expect(ds.Org).To(Equal("o"))
 				Expect(ds.Env).To(Equal("e"))
-				Expect(ds.Scope).To(Equal("s"))
+				Expect(ds.Scope).To(Equal("s1"))
 				Expect(ds.Created).To(Equal("c"))
 				Expect(ds.CreatedBy).To(Equal("c"))
 				Expect(ds.Updated).To(Equal("u"))
 				Expect(ds.UpdatedBy).To(Equal("u"))
+
+				ds = dds[1]
+				Expect(ds.Scope).To(Equal("s2"))
+
+				scopes := findScopesForId("a")
+				Expect(len(scopes)).To(Equal(2))
+				Expect(scopes[0]).To(Equal("s1"))
+				Expect(scopes[1]).To(Equal("s2"))
 			})
 
 			It("delete event should delete", func() {
@@ -325,8 +390,6 @@ var _ = Describe("listener", func() {
 				//restore the last snapshot
 				apidInfo.LastSnapshot = saveLastSnapshot
 			})
-
-
 
 		})
 
