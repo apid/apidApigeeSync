@@ -156,7 +156,9 @@ func postInitPlugins(event apid.Event) {
 
 		tokenManager = createTokenManager()
 
-		go bootstrap()
+		//TODO listen for arbitrary commands, can use this to quit polling
+		quitPolling := make(chan bool)
+		go bootstrap(quitPolling)
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

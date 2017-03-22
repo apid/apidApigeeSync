@@ -7,8 +7,6 @@ import (
 	"path"
 	"time"
 
-	"sync/atomic"
-
 	"io/ioutil"
 
 	"github.com/30x/apid-core"
@@ -27,7 +25,6 @@ const (
 var (
 	block        string = "45"
 	lastSequence string
-	polling      uint32
 	knownTables = make(map[string]bool)
 )
 
@@ -35,43 +32,40 @@ var (
  * Polls change agent for changes. In event of errors, uses a doubling
  * backoff from 200ms up to a max delay of the configPollInterval value.
  */
-func pollForChanges() {
+func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleError func(error)) {
 
-	if atomic.SwapUint32(&polling, 1) == 1 {
-		return
-	}
+	backoff := NewExponentialBackoff(200*time.Millisecond, config.GetDuration(configPollInterval), 2)
+	retry := time.After(0 * time.Millisecond)
 
-	var backOffFunc func()
-	pollInterval := config.GetDuration(configPollInterval)
 	for {
-		start := time.Now()
-		err := pollChangeAgent()
-		end := time.Now()
-		if err != nil {
-			if _, ok := err.(changeServerError); ok {
-				downloadDataSnapshot()
-				continue
+		select {
+		case <-quit:
+			return
+		case <-retry:
+			start := time.Now()
+			err := toExecute(quit)
+			if _, ok := err.(quitSignalError); ok {
+				return
 			}
-			log.Debugf("Error connecting to changeserver: %v", err)
-		}
-		if end.After(start.Add(time.Second)) {
-			backOffFunc = nil
-			continue
-		}
-		if backOffFunc == nil {
-			backOffFunc = createBackOff(200*time.Millisecond, pollInterval)
-		}
-		backOffFunc()
-	}
 
-	atomic.SwapUint32(&polling, 0)
+			end := time.Now()
+			handleError(err)
+
+			if end.After(start.Add(time.Second)) {
+				backoff.Reset()
+				retry = time.After(0 * time.Millisecond)
+			} else {
+				retry = time.After(backoff.Duration())
+			}
+		}
+	}
 }
 
 /*
  * Long polls the change agent with a 45 second block. Parses the response from
- * change agent and raises an event. Called by pollForChanges().
+ * change agent and raises an event. Called by pollWithRetry().
  */
-func pollChangeAgent() error {
+func pollChangeAgent(quit chan bool) error {
 
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
 	if err != nil {
@@ -85,116 +79,130 @@ func pollChangeAgent() error {
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
 	lastSequence = getLastSequence()
+
 	for {
-		log.Debug("polling...")
-
-		/* Find the scopes associated with the config id */
-		scopes := findScopesForId(apidInfo.ClusterID)
-		v := url.Values{}
-
-		/* Sequence added to the query if available */
-		if lastSequence != "" {
-			v.Add("since", lastSequence)
-		}
-		v.Add("block", block)
-
-		/*
-		 * Include all the scopes associated with the config Id
-		 * The Config Id is included as well, as it acts as the
-		 * Bootstrap scope
-		 */
-		for _, scope := range scopes {
-			v.Add("scope", scope)
-		}
-		v.Add("scope", apidInfo.ClusterID)
-		v.Add("snapshot", apidInfo.LastSnapshot)
-		changesUri.RawQuery = v.Encode()
-		uri := changesUri.String()
-		log.Debugf("Fetching changes: %s", uri)
-
-		/* If error, break the loop, and retry after interval */
-		client := &http.Client{Timeout: httpTimeout} // must be greater than block value
-		req, err := http.NewRequest("GET", uri, nil)
-		addHeaders(req)
-
-		r, err := client.Do(req)
-		if err != nil {
-			log.Errorf("change agent comm error: %s", err)
-			return err
-		}
-
-		if r.StatusCode != http.StatusOK {
-			log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
-			switch r.StatusCode {
-			case http.StatusUnauthorized:
-				tokenManager.invalidateToken()
-
-			case http.StatusNotModified:
-				r.Body.Close()
-				continue
-
-			case http.StatusBadRequest:
-				var apiErr changeServerError
-				var b []byte
-				b, err = ioutil.ReadAll(r.Body)
-				if err != nil {
-					log.Errorf("Unable to read response body: %v", err)
-					break
-				}
-				err = json.Unmarshal(b, &apiErr)
-				if err != nil {
-					log.Errorf("JSON Response Data not parsable: %s", string(b))
-					break
-				}
-				if apiErr.Code == "SNAPSHOT_TOO_OLD" {
-					log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
-					err = apiErr
-				}
-			}
-
-			r.Body.Close()
-			return err
-		}
-
-		var resp common.ChangeList
-		err = json.NewDecoder(r.Body).Decode(&resp)
-		r.Body.Close()
-		if err != nil {
-			log.Errorf("JSON Response Data not parsable: %v", err)
-			return err
-		}
-
-		if changesRequireDDLSync(resp) {
-			log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
-			return changeServerError{
-				Code: "DDL changes detected; must get new snapshot",
-			}
-		}
-
-		/* If valid data present, Emit to plugins */
-		if len(resp.Changes) > 0 {
-			done := make(chan bool)
-			events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
-				done <- true
-			})
-
-			select {
-			case <-time.After(httpTimeout):
-				log.Panic("Timeout. Plugins failed to respond to changes.")
-			case <-done:
-			}
-		} else {
-			log.Debugf("No Changes detected for Scopes: %s", scopes)
-		}
-
-		if lastSequence != resp.LastSequence {
-			lastSequence = resp.LastSequence
-			err := updateLastSequence(resp.LastSequence)
+		select {
+		case <-quit:
+			return quitSignalError{}
+		default:
+			err := getChanges(changesUri)
 			if err != nil {
-				log.Panic("Unable to update Sequence in DB")
+				return err
 			}
 		}
 	}
+}
+
+func getChanges(changesUri *url.URL) error {
+	log.Debug("polling...")
+
+	/* Find the scopes associated with the config id */
+	scopes := findScopesForId(apidInfo.ClusterID)
+	v := url.Values{}
+
+	/* Sequence added to the query if available */
+	if lastSequence != "" {
+		v.Add("since", lastSequence)
+	}
+	v.Add("block", block)
+
+	/*
+ 	* Include all the scopes associated with the config Id
+ 	* The Config Id is included as well, as it acts as the
+ 	* Bootstrap scope
+ 	*/
+	for _, scope := range scopes {
+		v.Add("scope", scope)
+	}
+	v.Add("scope", apidInfo.ClusterID)
+	v.Add("snapshot", apidInfo.LastSnapshot)
+	changesUri.RawQuery = v.Encode()
+	uri := changesUri.String()
+	log.Debugf("Fetching changes: %s", uri)
+
+	/* If error, break the loop, and retry after interval */
+	client := &http.Client{Timeout: httpTimeout} // must be greater than block value
+	req, err := http.NewRequest("GET", uri, nil)
+	addHeaders(req)
+
+	r, err := client.Do(req)
+	if err != nil {
+		log.Errorf("change agent comm error: %s", err)
+		return err
+	}
+
+	if r.StatusCode != http.StatusOK {
+		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
+		switch r.StatusCode {
+		case http.StatusUnauthorized:
+			tokenManager.invalidateToken()
+
+		case http.StatusNotModified:
+			r.Body.Close()
+			return nil
+
+		case http.StatusBadRequest:
+			var apiErr changeServerError
+			var b []byte
+			b, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Errorf("Unable to read response body: %v", err)
+				break
+			}
+			err = json.Unmarshal(b, &apiErr)
+			if err != nil {
+				log.Errorf("JSON Response Data not parsable: %s", string(b))
+				break
+			}
+			if apiErr.Code == "SNAPSHOT_TOO_OLD" {
+				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
+				err = apiErr
+			}
+		}
+
+		r.Body.Close()
+		return err
+	}
+
+	var resp common.ChangeList
+	err = json.NewDecoder(r.Body).Decode(&resp)
+	r.Body.Close()
+	if err != nil {
+		log.Errorf("JSON Response Data not parsable: %v", err)
+		return err
+	}
+
+	if changesRequireDDLSync(resp) {
+		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
+		return changeServerError{
+			Code: "DDL changes detected; must get new snapshot",
+		}
+	}
+
+	/* If valid data present, Emit to plugins */
+	if len(resp.Changes) > 0 {
+		done := make(chan bool)
+		events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
+			done <- true
+		})
+
+		select {
+		case <-time.After(httpTimeout):
+			log.Panic("Timeout. Plugins failed to respond to changes.")
+		case <-done:
+		}
+	} else {
+		log.Debugf("No Changes detected for Scopes: %s", scopes)
+	}
+
+	if lastSequence != resp.LastSequence {
+		lastSequence = resp.LastSequence
+		err := updateLastSequence(resp.LastSequence)
+		if err != nil {
+			log.Panic("Unable to update Sequence in DB")
+		}
+	}
+	return nil
 }
 
 
@@ -221,17 +229,19 @@ func Redirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// pollForChanges should usually be true, tests use the flag
-func bootstrap() {
+// pollWithBackoff should usually be true, tests use the flag
+func bootstrap(quitPolling chan bool) {
 
 	if apidInfo.LastSnapshot != "" {
-		startOnLocalSnapshot(apidInfo.LastSnapshot)
+		startOnLocalSnapshot(apidInfo.LastSnapshot, quitPolling)
 		return
 	}
 
 	downloadBootSnapshot()
 	downloadDataSnapshot()
-	go pollForChanges()
+
+	go pollWithBackoff(quitPolling, pollChangeAgent, handleChangeServerError)
+
 }
 
 // retrieve boot information: apid_config and apid_config_scope
@@ -356,7 +366,7 @@ func persistKnownTablesToDB(tables map[string]bool, db apid.DB) {
 }
 
 // Skip Downloading snapshot if there is already a snapshot available from previous run
-func startOnLocalSnapshot(snapshot string) {
+func startOnLocalSnapshot(snapshot string, quitPolling chan bool) {
 	log.Infof("Starting on local snapshot: %s", snapshot)
 
 	// ensure DB version will be accessible on behalf of dependant plugins
@@ -373,7 +383,7 @@ func startOnLocalSnapshot(snapshot string) {
 		SnapshotInfo: snapshot,
 	}
 	events.EmitWithCallback(ApigeeSyncEventSelector, snap, func(event apid.Event) {
-		go pollForChanges()
+		go pollWithBackoff(quitPolling, pollChangeAgent, handleChangeServerError)
 	})
 
 	log.Infof("Started on local snapshot: %s", snapshot)
@@ -494,8 +504,24 @@ func addHeaders(req *http.Request) {
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 }
 
+func handleChangeServerError(err error) {
+	if err != nil {
+		if _, ok := err.(changeServerError); ok {
+			downloadDataSnapshot()
+		}
+		log.Debugf("Error connecting to changeserver: %v", err)
+	}
+}
+
 type changeServerError struct {
 	Code string `json:"code"`
+}
+
+type quitSignalError struct {
+}
+
+func (a quitSignalError) Error() string {
+	return "Signal to quit encountered"
 }
 
 func (a changeServerError) Error() string {
@@ -503,7 +529,7 @@ func (a changeServerError) Error() string {
 }
 
 /*
- * Determine is map b is a subset of map a
+ * Determine if map b is a subset of map a
  */
 func mapIsSubset(a map[string]bool, b map[string]bool) bool {
 

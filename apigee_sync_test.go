@@ -33,7 +33,7 @@ var _ = Describe("listener", func() {
 			}
 		})
 
-		bootstrap()
+		bootstrap(make(chan bool))
 	})
 
 	It("should correctly identify non-proper subsets with respect to maps", func() {
