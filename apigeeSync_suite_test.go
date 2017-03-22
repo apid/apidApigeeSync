@@ -126,7 +126,7 @@ var _ = BeforeSuite(func(done Done) {
 
 			// ensure that snapshot switched DB versions
 			Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
-			expectedDB, err := data.DBVersion(lastSnapshot.SnapshotInfo)
+			expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getDB() == expectedDB).Should(BeTrue())
 
@@ -180,7 +180,7 @@ var _ = BeforeEach(func() {
 	_, err = getDB().Exec("DELETE FROM DATA_SCOPE")
 	Expect(err).NotTo(HaveOccurred())
 
-	db, err := data.DB()
+	db, err := dataService.DB()
 	Expect(err).NotTo(HaveOccurred())
 	_, err = db.Exec("DELETE FROM APID")
 	Expect(err).NotTo(HaveOccurred())

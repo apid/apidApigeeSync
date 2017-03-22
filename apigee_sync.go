@@ -13,6 +13,9 @@ import (
 
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
+	"io"
+	"github.com/30x/apid-core/data"
+	"os"
 )
 
 const (
@@ -251,7 +254,7 @@ func downloadDataSnapshot() {
 
 	knownTables = extractTablesFromSnapshot(resp)
 
-	db, err := data.DBVersion(resp.SnapshotInfo)
+	db, err := dataService.DBVersion(resp.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
@@ -357,7 +360,7 @@ func startOnLocalSnapshot(snapshot string) {
 	log.Infof("Starting on local snapshot: %s", snapshot)
 
 	// ensure DB version will be accessible on behalf of dependant plugins
-	db, err := data.DBVersion(snapshot)
+	db, err := dataService.DBVersion(snapshot)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
@@ -421,11 +424,15 @@ func downloadSnapshot(scopes []string) common.Snapshot {
 		}
 		addHeaders(req)
 
+		var processSnapshotResponse func(*http.Response, *common.Snapshot)(error)
+
 		// Set the transport protocol type based on conf file input
 		if config.GetString(configSnapshotProtocol) == "json" {
 			req.Header.Set("Accept", "application/json")
-		} else {
-			req.Header.Set("Accept", "application/proto")
+			processSnapshotResponse = processSnapshotServerJsonResponse
+		} else if config.GetString(configSnapshotProtocol) == "sqlite"{
+			req.Header.Set("Accept", "application/transicator+sqlite")
+			processSnapshotResponse = processSnapshotServerFileResponse
 		}
 
 		// Issue the request to the snapshot server
@@ -436,23 +443,48 @@ func downloadSnapshot(scopes []string) common.Snapshot {
 		}
 
 		if r.StatusCode != 200 {
-			log.Errorf("Snapshot server conn failed with resp code %d", r.StatusCode)
+			log.Errorf("Snapshot server conn failed with snapshot code %d", r.StatusCode)
 			r.Body.Close()
 			continue
 		}
 
 		// Decode the Snapshot server response
-		var resp common.Snapshot
-		err = json.NewDecoder(r.Body).Decode(&resp)
+		var snapshot common.Snapshot
+		err = processSnapshotResponse(r, &snapshot)
 		if err != nil {
-			log.Errorf("JSON Response Data not parsable: %v", err)
+			log.Errorf("Response Data not parsable: %v", err)
 			r.Body.Close()
 			continue
 		}
 
 		r.Body.Close()
-		return resp
+		return snapshot
 	}
+}
+
+func processSnapshotServerJsonResponse(r *http.Response, snapshot *common.Snapshot) error {
+	return json.NewDecoder(r.Body).Decode(snapshot)
+}
+
+func processSnapshotServerFileResponse(r *http.Response, snapshot *common.Snapshot) error {
+	dbId := r.Header.Get("transicator-snapshoot-txid")
+	out, err := os.Create(data.DBPath(dbId))
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	//stream respose to DB
+	_, err = io.Copy(out, r.Body)
+
+	if err != nil {
+		return err
+	}
+
+	snapshot.SnapshotInfo = dbId
+	//TODO get timestamp from transicator.  Not currently in response
+
+	return nil
 }
 
 func addHeaders(req *http.Request) {

@@ -28,7 +28,7 @@ var _ = Describe("listener", func() {
 
 			Expect(apidInfo.LastSnapshot).To(Equal(event.SnapshotInfo))
 
-			expectedDB, err := data.DBVersion(event.SnapshotInfo)
+			expectedDB, err := dataService.DBVersion(event.SnapshotInfo)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(getDB() == expectedDB).Should(BeTrue())
