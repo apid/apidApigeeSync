@@ -21,11 +21,37 @@ const (
 	maxBackoffTimeout = time.Minute
 )
 
+/*
+ * structs for DatascopeCache
+ */
+
+const (
+	readCache int = iota
+	updateCache
+	removeCache
+	clearAndInit
+)
+
+type cacheOperationRequest struct {
+	Operation int
+	Scope     *dataDataScope
+	version   string
+}
+
+// maintain an in-mem cache of datascope
+type DatascopeCache struct {
+	requestChan  chan *cacheOperationRequest
+	readDoneChan chan []string
+	scopeMap     map[string]*dataDataScope
+	version      string
+}
+
 var (
 	block        string = "45"
 	lastSequence string
 	polling      uint32
 	knownTables  = make(map[string]bool)
+	scopeCache   *DatascopeCache
 )
 
 /*
@@ -265,15 +291,30 @@ func downloadBootSnapshot() {
 
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := downloadSnapshot(scopes)
+	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
+	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
+	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
+	for _, table := range snapshot.Tables {
+		if table.Name == LISTENER_TABLE_DATA_SCOPE {
+			for _, row := range table.Rows {
+				ds := makeDataScopeFromRow(row)
+				// cache scopes for this cluster
+				if ds.ClusterID == apidInfo.ClusterID {
+					scopeCache.updateCache(&ds)
+				}
+			}
+		}
+	}
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
-	processSnapshot(&snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
 func downloadDataSnapshot() {
 	log.Debug("download Snapshot for data scopes")
 
-	var scopes = findScopesForId(apidInfo.ClusterID)
+	//var scopes = findScopesForId(apidInfo.ClusterID)
+	scopes := scopeCache.readAllScope()
+
 	scopes = append(scopes, apidInfo.ClusterID)
 	resp := downloadSnapshot(scopes)
 
@@ -391,6 +432,7 @@ func startOnLocalSnapshot(snapshot string) {
 	}
 
 	knownTables = extractTablesFromDB(db)
+	scopeCache.clearAndInitCache(snapshot)
 
 	// allow plugins (including this one) to start immediately on existing database
 	// Note: this MUST have no tables as that is used as an indicator
@@ -489,6 +531,58 @@ func addHeaders(req *http.Request) {
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
+}
+
+func (cache *DatascopeCache) datascopeCacheManager() {
+	for request := range cache.requestChan {
+		switch request.Operation {
+		case readCache:
+			log.Debug("datascopeCacheManager: readCache")
+			scopes := make([]string, 0, len(cache.scopeMap))
+			for _, ds := range cache.scopeMap {
+				scopes = append(scopes, ds.Scope)
+			}
+			cache.readDoneChan <- scopes
+		case updateCache:
+			log.Debug("datascopeCacheManager: updateCache")
+			cache.scopeMap[request.Scope.ID] = request.Scope
+		case removeCache:
+			log.Debug("datascopeCacheManager: removeCache")
+			delete(cache.scopeMap, request.Scope.ID)
+		case clearAndInit:
+			log.Debug("datascopeCacheManager: clearAndInit")
+			if cache.version != request.version {
+				cache.scopeMap = make(map[string]*dataDataScope)
+				cache.version = request.version
+			}
+		}
+	}
+
+	//chan closed
+	cache.scopeMap = nil
+	close(cache.requestChan)
+}
+
+func (cache *DatascopeCache) readAllScope() []string {
+	cache.requestChan <- &cacheOperationRequest{readCache, nil, ""}
+	scopes := <-cache.readDoneChan
+	return scopes
+}
+
+func (cache *DatascopeCache) removeCache(scope *dataDataScope) {
+	cache.requestChan <- &cacheOperationRequest{removeCache, scope, ""}
+}
+
+func (cache *DatascopeCache) updateCache(scope *dataDataScope) {
+	cache.requestChan <- &cacheOperationRequest{updateCache, scope, ""}
+}
+
+func (cache *DatascopeCache) clearAndInitCache(version string) {
+	cache.requestChan <- &cacheOperationRequest{clearAndInit, nil, version}
+}
+
+func (cache *DatascopeCache) closeCache() {
+	close(cache.requestChan)
 }
 
 type changeServerError struct {

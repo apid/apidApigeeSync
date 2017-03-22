@@ -78,6 +78,10 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	data = services.Data()
 	events = services.Events()
 
+	scopeCache = &DatascopeCache{requestChan: make(chan *cacheOperationRequest), readDoneChan: make(chan []string)}
+
+	go scopeCache.datascopeCacheManager()
+
 	/* This callback function will get called, once all the plugins are
 	 * initialized (not just this plugin). This is needed because,
 	 * downloadSnapshots/changes etc have to begin to be processed only
