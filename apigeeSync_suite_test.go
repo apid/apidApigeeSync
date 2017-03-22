@@ -64,10 +64,32 @@ var _ = BeforeSuite(func(done Done) {
 	// This is actually the first test :)
 	// Tests that entire bootstrap and set of sync operations work
 	var lastSnapshot *common.Snapshot
+
+	expectedSnapshotTables := make(map[string] bool)
+	expectedSnapshotTables["kms.company"] = true
+	expectedSnapshotTables["edgex.apid_cluster"] = true
+	expectedSnapshotTables["edgex.data_scope"] = true
+
 	apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 		defer GinkgoRecover()
 
 		if s, ok := event.(*common.Snapshot); ok {
+
+			//verify that during downloadDataSnapshot, knownTables was correctly populated
+			Expect(mapIsSubset(knownTables, expectedSnapshotTables)).To(BeTrue())
+
+			/* After this, we will mock changes for tables not present in the initial snapshot
+ 			* until that is changed in the mock server, we have to spoof the known tables
+			*/
+
+			//add apid_cluster and data_scope since those would present if this were a real scenario
+			knownTables["kms.app_credential"] = true
+			knownTables["kms.app_credential_apiproduct_mapper"] = true
+			knownTables["kms.developer"] = true
+			knownTables["kms.company_developer"] = true
+			knownTables["kms.api_product"] = true
+			knownTables["kms.app"] = true
+
 
 			lastSnapshot = s
 
