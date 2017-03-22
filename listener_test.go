@@ -10,10 +10,14 @@ import (
 var _ = Describe("listener", func() {
 
 	handler := handler{}
+	var saveLastSnapshot string
 
 	Context("ApigeeSync snapshot event", func() {
 
 		It("should set DB to appropriate version", func() {
+
+			//save the last snapshot, so we can restore it at the end of this context
+			saveLastSnapshot = apidInfo.LastSnapshot
 
 			event := common.Snapshot{
 				SnapshotInfo: "test_snapshot",
@@ -196,6 +200,9 @@ var _ = Describe("listener", func() {
 			Expect(len(scopes)).To(Equal(2))
 			Expect(scopes[0]).To(Equal("s1"))
 			Expect(scopes[1]).To(Equal("s2"))
+
+			//restore the last snapshot
+			apidInfo.LastSnapshot = saveLastSnapshot
 		})
 	})
 
@@ -204,6 +211,8 @@ var _ = Describe("listener", func() {
 		Context(LISTENER_TABLE_APID_CLUSTER, func() {
 
 			It("insert event should panic", func() {
+				//save the last snapshot, so we can restore it at the end of this context
+				saveLastSnapshot = apidInfo.LastSnapshot
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -231,6 +240,8 @@ var _ = Describe("listener", func() {
 				}
 
 				Expect(func() { handler.Handle(&event) }).To(Panic())
+				//restore the last snapshot
+				apidInfo.LastSnapshot = saveLastSnapshot
 			})
 
 			PIt("delete event should kill all the things!")
@@ -239,6 +250,9 @@ var _ = Describe("listener", func() {
 		Context(LISTENER_TABLE_DATA_SCOPE, func() {
 
 			It("insert event should add", func() {
+				//save the last snapshot, so we can restore it at the end of this context
+				saveLastSnapshot = apidInfo.LastSnapshot
+
 				event := common.ChangeList{
 					LastSequence: "test",
 					Changes: []common.Change{
@@ -373,6 +387,8 @@ var _ = Describe("listener", func() {
 				}
 
 				Expect(func() { handler.Handle(&event) }).To(Panic())
+				//restore the last snapshot
+				apidInfo.LastSnapshot = saveLastSnapshot
 			})
 
 		})
