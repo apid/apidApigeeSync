@@ -123,15 +123,15 @@ func processChangeList(changes *common.ChangeList) {
 				err = insertDataScope(ds, tx)
 
 				// cache scopes for this cluster
-				if ds.ClusterID == apidInfo.ClusterID {
+				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
 					scopeCache.updateCache(&ds)
 				}
 			case common.Delete:
 				ds := makeDataScopeFromRow(change.OldRow)
-				deleteDataScope(ds, tx)
+				err = deleteDataScope(ds, tx)
 
 				// cache scopes for this cluster
-				if ds.ClusterID == apidInfo.ClusterID {
+				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
 					scopeCache.removeCache(&ds)
 				}
 			default:
