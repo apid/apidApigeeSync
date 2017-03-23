@@ -237,7 +237,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 
 	// always use default database for this
 	var db apid.DB
-	db, err = data.DB()
+	db, err = dataService.DB()
 	if err != nil {
 		return
 	}
@@ -264,7 +264,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 func updateApidInstanceInfo() error {
 
 	// always use default database for this
-	db, err := data.DB()
+	db, err := dataService.DB()
 	if err != nil {
 		return err
 	}

@@ -15,7 +15,6 @@ var _ = Describe("listener", func() {
 	Context("ApigeeSync snapshot event", func() {
 
 		It("should set DB to appropriate version", func() {
-
 			//save the last snapshot, so we can restore it at the end of this context
 			saveLastSnapshot = apidInfo.LastSnapshot
 
@@ -28,7 +27,7 @@ var _ = Describe("listener", func() {
 
 			Expect(apidInfo.LastSnapshot).To(Equal(event.SnapshotInfo))
 
-			expectedDB, err := data.DBVersion(event.SnapshotInfo)
+			expectedDB, err := dataService.DBVersion(event.SnapshotInfo)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(getDB() == expectedDB).Should(BeTrue())

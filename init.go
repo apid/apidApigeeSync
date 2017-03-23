@@ -31,7 +31,7 @@ const (
 var (
 	log               apid.LogService
 	config            apid.ConfigService
-	data              apid.DataService
+	dataService       apid.DataService
 	events            apid.EventsService
 	apidInfo          apidInstanceInfo
 	apidPluginDetails string
@@ -75,7 +75,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	config = services.Config()
 	initDefaults()
 
-	data = services.Data()
+	dataService = services.Data()
 	events = services.Events()
 
 	/* This callback function will get called, once all the plugins are
@@ -98,7 +98,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	}
 
 	// set up default database
-	db, err := data.DB()
+	db, err := dataService.DB()
 	if err != nil {
 		return pluginData, fmt.Errorf("Unable to access DB: %v", err)
 	}
@@ -156,7 +156,11 @@ func postInitPlugins(event apid.Event) {
 
 		tokenManager = createTokenManager()
 
-		go bootstrap()
+		//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
+		//also useful for testing
+		quitPollingSnapshotServer := make(chan bool)
+		quitPollingChangeServer := make(chan bool)
+		go bootstrap(quitPollingSnapshotServer, quitPollingChangeServer)
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

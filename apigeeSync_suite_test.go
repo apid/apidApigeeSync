@@ -65,10 +65,11 @@ var _ = BeforeSuite(func(done Done) {
 	// Tests that entire bootstrap and set of sync operations work
 	var lastSnapshot *common.Snapshot
 
-	expectedSnapshotTables := make(map[string] bool)
-	expectedSnapshotTables["kms.company"] = true
-	expectedSnapshotTables["edgex.apid_cluster"] = true
-	expectedSnapshotTables["edgex.data_scope"] = true
+	expectedSnapshotTables := common.ChangeList{
+		Changes: []common.Change{common.Change{Table: "kms.company"},
+					 common.Change{Table: "edgex.apid_cluster"},
+					 common.Change{Table: "edgex.data_scope"}},
+	}
 
 	apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 		defer GinkgoRecover()
@@ -76,10 +77,12 @@ var _ = BeforeSuite(func(done Done) {
 		if s, ok := event.(*common.Snapshot); ok {
 
 			//verify that during downloadDataSnapshot, knownTables was correctly populated
-			Expect(mapIsSubset(knownTables, expectedSnapshotTables)).To(BeTrue())
+			Expect(changesRequireDDLSync(expectedSnapshotTables)).To(BeFalse())
 
 			/* After this, we will mock changes for tables not present in the initial snapshot
- 			* until that is changed in the mock server, we have to spoof the known tables
+ 			* until that is changed in the mock server, we have to spoof the known tables,
+ 			* since they ar expected during the processing of the change event below
+ 			*
 			*/
 
 			//add apid_cluster and data_scope since those would present if this were a real scenario
@@ -126,7 +129,7 @@ var _ = BeforeSuite(func(done Done) {
 
 			// ensure that snapshot switched DB versions
 			Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
-			expectedDB, err := data.DBVersion(lastSnapshot.SnapshotInfo)
+			expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getDB() == expectedDB).Should(BeTrue())
 
@@ -180,7 +183,7 @@ var _ = BeforeEach(func() {
 	_, err = getDB().Exec("DELETE FROM DATA_SCOPE")
 	Expect(err).NotTo(HaveOccurred())
 
-	db, err := data.DB()
+	db, err := dataService.DB()
 	Expect(err).NotTo(HaveOccurred())
 	_, err = db.Exec("DELETE FROM APID")
 	Expect(err).NotTo(HaveOccurred())

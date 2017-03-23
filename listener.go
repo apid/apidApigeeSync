@@ -29,15 +29,38 @@ func (h *handler) Handle(e apid.Event) {
 }
 
 func processSnapshot(snapshot *common.Snapshot) {
-
 	log.Debugf("Snapshot received. Switching to DB version: %s", snapshot.SnapshotInfo)
 
-	db, err := data.DBVersion(snapshot.SnapshotInfo)
+	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Unable to access database: %v", err)
 	}
 
-	err = initDB(db)
+	if config.GetString(configSnapshotProtocol) == "json" {
+		processJsonSnapshot(snapshot, db)
+	} else if config.GetString(configSnapshotProtocol) == "sqlite"{
+		processSqliteSnapshot(snapshot, db)
+	}
+
+	//update apid instance info
+	apidInfo.LastSnapshot = snapshot.SnapshotInfo
+	err = updateApidInstanceInfo()
+	if err != nil {
+		log.Panicf("Unable to update instance info: %v", err)
+	}
+
+	setDB(db)
+	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
+
+}
+
+func processSqliteSnapshot(snapshot *common.Snapshot, db apid.DB) {
+	//nothing to do as of now, here as a placeholder
+}
+
+func processJsonSnapshot(snapshot *common.Snapshot, db apid.DB) {
+
+	err := initDB(db)
 	if err != nil {
 		log.Panicf("Unable to initialize database: %v", err)
 	}
@@ -78,15 +101,6 @@ func processSnapshot(snapshot *common.Snapshot) {
 	if err != nil {
 		log.Panicf("Error committing Snapshot change: %v", err)
 	}
-
-	apidInfo.LastSnapshot = snapshot.SnapshotInfo
-	err = updateApidInstanceInfo()
-	if err != nil {
-		log.Panicf("Unable to update instance info: %v", err)
-	}
-
-	setDB(db)
-	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
 }
 
 func processChangeList(changes *common.ChangeList) {
