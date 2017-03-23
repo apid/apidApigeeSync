@@ -1,7 +1,6 @@
 package apidApigeeSync
 
 import (
-	"github.com/30x/apid-core"
 	"time"
 	"net/url"
 	"path"
@@ -18,7 +17,7 @@ var block        string = "45"
 
 /*
  * Long polls the change agent with a 45 second block. Parses the response from
- * change agent and raises an event. Called by pollWithRetry().
+ * change agent and raises an event. Called by pollWithBackoff().
  */
 func pollChangeAgent(quit chan bool) error {
 
@@ -82,6 +81,7 @@ func getChanges(changesUri *url.URL) error {
 	addHeaders(req)
 
 	r, err := client.Do(req)
+	defer r.Body.Close()
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
 		return err
@@ -94,7 +94,6 @@ func getChanges(changesUri *url.URL) error {
 			tokenManager.invalidateToken()
 
 		case http.StatusNotModified:
-			r.Body.Close()
 			return nil
 
 		case http.StatusBadRequest:
@@ -116,13 +115,11 @@ func getChanges(changesUri *url.URL) error {
 			}
 		}
 
-		r.Body.Close()
 		return err
 	}
 
 	var resp common.ChangeList
 	err = json.NewDecoder(r.Body).Decode(&resp)
-	r.Body.Close()
 	if err != nil {
 		log.Errorf("JSON Response Data not parsable: %v", err)
 		return err
@@ -136,15 +133,10 @@ func getChanges(changesUri *url.URL) error {
 
 	/* If valid data present, Emit to plugins */
 	if len(resp.Changes) > 0 {
-		done := make(chan bool)
-		events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
-			done <- true
-		})
-
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
-		case <-done:
+		case <-events.Emit(ApigeeSyncEventSelector, &resp):
 		}
 	} else {
 		log.Debugf("No Changes detected for Scopes: %s", scopes)
@@ -162,19 +154,7 @@ func getChanges(changesUri *url.URL) error {
 
 
 func changesRequireDDLSync(changes common.ChangeList) bool {
-
-	return !mapIsSubset(knownTables, extractTablesFromChangelist(changes))
-}
-
-func extractTablesFromChangelist(changes common.ChangeList) (tables map[string] bool) {
-
-	tables = make(map[string]bool)
-
-	for _, change := range changes.Changes {
-		tables[change.Table] = true
-	}
-
-	return tables
+	return changesHaveNewTables(knownTables, changes.Changes)
 }
 
 func handleChangeServerError(err error) {
@@ -188,20 +168,20 @@ func handleChangeServerError(err error) {
 }
 
 /*
- * Determine if map b is a subset of map a
+ * Determine if any tables in changes are not present in known tables
  */
-func mapIsSubset(a map[string]bool, b map[string]bool) bool {
+func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
-	if a == nil || b == nil {
-		return false;
+	if a == nil || changes == nil{
+		return true;
 	}
 
-	for k := range b {
-		if !a[k] {
-			return false
+	for _, change := range changes {
+		if !a[change.Table] {
+			return true
 		}
 	}
 
-	return true
+	return false
 }

@@ -10,10 +10,11 @@ import (
 var _ = Describe("listener", func() {
 
 	It("should bootstrap from local DB if present", func(done Done) {
-		expectedTables := make(map[string] bool)
-		expectedTables["kms.company"] = true
-		expectedTables["edgex.apid_cluster"] = true
-		expectedTables["edgex.data_scope"] = true
+		expectedTables := common.ChangeList{
+			Changes: []common.Change{common.Change{Table: "kms.company"},
+				common.Change{Table: "edgex.apid_cluster"},
+				common.Change{Table: "edgex.data_scope"}},
+		}
 
 		Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
@@ -23,7 +24,7 @@ var _ = Describe("listener", func() {
 			if s, ok := event.(*common.Snapshot); ok {
 
 				//verify that the knownTables array has been properly populated from existing DB
-				Expect(mapIsSubset(knownTables, expectedTables)).To(BeTrue())
+				Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
 
 				Expect(s.SnapshotInfo).Should(Equal(apidInfo.LastSnapshot))
 				Expect(s.Tables).To(BeNil())
@@ -38,22 +39,42 @@ var _ = Describe("listener", func() {
 	It("should correctly identify non-proper subsets with respect to maps", func() {
 
 		//test b proper subset of a
-		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"b": true})).To(BeTrue())
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			[]common.Change{common.Change{Table: "b"}},
+		)).To(BeFalse())
 
 		//test a == b
-		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"a": true, "b": true})).To(BeTrue())
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			[]common.Change{common.Change{Table: "a"}, common.Change{Table: "b"}},
+		)).To(BeFalse())
 
 		//test b superset of a
-		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"a": true, "b": true, "c": true})).To(BeFalse())
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			[]common.Change{common.Change{Table: "a"}, common.Change{Table: "b"}, common.Change{Table: "c"}},
+		)).To(BeTrue())
 
 		//test b not subset of a
-		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{"c": true})).To(BeFalse())
-
-		//test b empty
-		Expect(mapIsSubset(map[string]bool{"a": true, "b": true}, map[string]bool{})).To(BeTrue())
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			[]common.Change{common.Change{Table: "c"}},
+		)).To(BeTrue())
 
 		//test a empty
-		Expect(mapIsSubset(map[string]bool{}, map[string]bool{"b": true})).To(BeFalse())
+		Expect(changesHaveNewTables(map[string]bool{},
+			[]common.Change{common.Change{Table: "a"}},
+		)).To(BeTrue())
+
+		//test b empty
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			[]common.Change{},
+		)).To(BeFalse())
+
+		//test b nil
+		Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeTrue())
+
+		//test a nil
+		Expect(changesHaveNewTables(nil,
+			[]common.Change{common.Change{Table: "a"}},
+		)).To(BeTrue())
 	})
 
 	// todo: disabled for now -

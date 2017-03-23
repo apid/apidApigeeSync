@@ -42,16 +42,12 @@ func downloadDataSnapshot(quitPolling chan bool) {
 	}
 	persistKnownTablesToDB(knownTables, db)
 
-	done := make(chan bool)
 	log.Info("Emitting Snapshot to plugins")
-	events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
-		done <- true
-	})
 
 	select {
 	case <-time.After(pluginTimeout):
 		log.Panic("Timeout. Plugins failed to respond to snapshot.")
-	case <-done:
+	case <-events.Emit(ApigeeSyncEventSelector, snapshot):
 	}
 }
 
