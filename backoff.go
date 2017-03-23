@@ -1,10 +1,14 @@
 package apidApigeeSync
 
 import (
-"math"
-"math/rand"
-"time"
+	"math"
+	"math/rand"
+	"time"
 )
+
+const defaultInitial time.Duration  = 200 * time.Millisecond
+const defaultMax time.Duration      = 10 * time.Second
+const defaultFactor float64         = 2
 
 type Backoff struct {
 	attempt         int
@@ -22,14 +26,14 @@ func NewExponentialBackoff(initial, max time.Duration, factor float64) *Backoff 
 	backoff := &ExponentialBackoff{}
 
 	if initial <= 0 {
-		initial = 200 * time.Millisecond
+		initial = defaultInitial
 	}
 	if max <= 0 {
-		max = 10 * time.Second
+		max = defaultMax
 	}
 
 	if factor <= 0 {
-		factor = 2
+		factor = defaultFactor
 	}
 
 	backoff.initial = initial
@@ -54,6 +58,7 @@ func (b *ExponentialBackoff) exponentialBackoffStrategy() time.Duration {
 	attempt := float64(b.Backoff.attempt)
 	duration := initial * math.Pow(b.factor, attempt)
 
+	//introduce some jitter
 	duration = (rand.Float64()*(duration-initial) + initial)
 
 	if duration > math.MaxInt64 {

@@ -10,7 +10,6 @@ import (
 var _ = Describe("listener", func() {
 
 	It("should bootstrap from local DB if present", func(done Done) {
-
 		expectedTables := make(map[string] bool)
 		expectedTables["kms.company"] = true
 		expectedTables["edgex.apid_cluster"] = true
@@ -33,7 +32,7 @@ var _ = Describe("listener", func() {
 			}
 		})
 
-		bootstrap(make(chan bool))
+		bootstrap(make(chan bool), make(chan bool))
 	})
 
 	It("should correctly identify non-proper subsets with respect to maps", func() {

@@ -156,9 +156,11 @@ func postInitPlugins(event apid.Event) {
 
 		tokenManager = createTokenManager()
 
-		//TODO listen for arbitrary commands, can use this to quit polling
-		quitPolling := make(chan bool)
-		go bootstrap(quitPolling)
+		//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
+		//also useful for testing
+		quitPollingSnapshotServer := make(chan bool)
+		quitPollingChangeServer := make(chan bool)
+		go bootstrap(quitPollingSnapshotServer, quitPollingChangeServer)
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

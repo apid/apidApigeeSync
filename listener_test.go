@@ -15,7 +15,6 @@ var _ = Describe("listener", func() {
 	Context("ApigeeSync snapshot event", func() {
 
 		It("should set DB to appropriate version", func() {
-
 			//save the last snapshot, so we can restore it at the end of this context
 			saveLastSnapshot = apidInfo.LastSnapshot
 

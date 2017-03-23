@@ -99,18 +99,11 @@ func (t *tokenMan) retrieveNewToken() {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	retryIn := 5 * time.Millisecond
-	maxBackOff := maxBackoffTimeout
-	backOffFunc := createBackOff(retryIn, maxBackOff)
-	first := true
+	pollWithBackoff(nil, t.getRetrieveNewTokenClosure(uri), func(err error) {log.Errorf("Error getting new token : ", err)})
+}
 
-	for {
-		if first {
-			first = false
-		} else {
-			backOffFunc()
-		}
-
+func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
+	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
 		form.Add("client_id", config.GetString(configConsumerKey))
@@ -133,26 +126,26 @@ func (t *tokenMan) retrieveNewToken() {
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
-			continue
+			return err
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
-			continue
+			return err
 		}
 
 		if resp.StatusCode != 200 {
 			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
-			continue
+			return err
 		}
 
 		var token oauthToken
 		err = json.Unmarshal(body, &token)
 		if err != nil {
 			log.Errorf("unable to unmarshal JSON response '%s': %v", string(body), err)
-			continue
+			return err
 		}
 
 		if token.ExpiresIn > 0 {
@@ -166,12 +159,17 @@ func (t *tokenMan) retrieveNewToken() {
 
 		if newInstanceID {
 			newInstanceID = false
-			updateApidInstanceInfo()
+			err = updateApidInstanceInfo()
+			if err != nil {
+				log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
+				return err
+
+			}
 		}
 
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
-		return
+		return nil
 	}
 }
 
