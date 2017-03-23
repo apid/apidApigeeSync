@@ -25,7 +25,7 @@ var (
 	block        string = "45"
 	lastSequence string
 	polling      uint32
-	knownTables = make(map[string]bool)
+	knownTables  = make(map[string]bool)
 )
 
 /*
@@ -194,7 +194,6 @@ func pollChangeAgent() error {
 	}
 }
 
-
 func changesRequireDDLSync(changes common.ChangeList) bool {
 
 	return !mapIsSubset(knownTables, extractTablesFromChangelist(changes))
@@ -287,7 +286,7 @@ func extractTablesFromSnapshot(snapshot common.Snapshot) (tables map[string]bool
 	return tables
 }
 
-func extractTablesFromChangelist(changes common.ChangeList) (tables map[string] bool) {
+func extractTablesFromChangelist(changes common.ChangeList) (tables map[string]bool) {
 
 	tables = make(map[string]bool)
 
@@ -436,7 +435,8 @@ func downloadSnapshot(scopes []string) common.Snapshot {
 		}
 
 		if r.StatusCode != 200 {
-			log.Errorf("Snapshot server conn failed with resp code %d", r.StatusCode)
+			body, _ := ioutil.ReadAll(r.Body)
+			log.Errorf("Snapshot server conn failed with resp code %d, body: %s", r.StatusCode, string(body))
 			r.Body.Close()
 			continue
 		}
@@ -477,7 +477,7 @@ func mapIsSubset(a map[string]bool, b map[string]bool) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
 	if a == nil || b == nil {
-		return false;
+		return false
 	}
 
 	for k := range b {
