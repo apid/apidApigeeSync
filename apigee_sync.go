@@ -184,14 +184,45 @@ func pollChangeAgent() error {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
 		}
 
-		if lastSequence != resp.LastSequence {
-			lastSequence = resp.LastSequence
-			err := updateLastSequence(resp.LastSequence)
-			if err != nil {
-				log.Panic("Unable to update Sequence in DB")
+		/*
+		 * If the lastSequence is already newer or the same than what we got via
+		 * resp.LastSequence, Ignore it.
+		 */
+		if lastSequence != "" {
+			if getChangeStatus(lastSequence, resp.LastSequence) == 1 {
+				updateSequence(resp.LastSequence)
+			} else {
+				log.Debugf("Ignore change, already have newer data")
 			}
+		} else {
+			updateSequence(resp.LastSequence)
 		}
 	}
+}
+
+/*
+ * seqCurr.Compare() will return 1, if its newer than seqPrev,
+ * else will return 0, if same, or -1 if older.
+ */
+func getChangeStatus(lastSeq string, currSeq string) int {
+	seqPrev, err := common.ParseSequence(lastSeq)
+	if err != nil {
+		log.Panic("Unable to parse previous sequence string")
+	}
+	seqCurr, err := common.ParseSequence(currSeq)
+	if err != nil {
+		log.Panic("Unable to parse current sequence string")
+	}
+	return seqCurr.Compare(seqPrev)
+}
+
+func updateSequence(seq string) {
+	lastSequence = seq
+	err := updateLastSequence(seq)
+	if err != nil {
+		log.Panic("Unable to update Sequence in DB")
+	}
+
 }
 
 func changesRequireDDLSync(changes common.ChangeList) bool {
