@@ -161,6 +161,16 @@ func pollChangeAgent() error {
 			return err
 		}
 
+		/*
+		 * If the lastSequence is already newer or the same than what we got via
+		 * resp.LastSequence, Ignore it.
+		 */
+		if lastSequence != "" &&
+			getChangeStatus(lastSequence, resp.LastSequence) != 1 {
+			log.Errorf("Ignore change, already have newer changes")
+			continue
+		}
+
 		if changesRequireDDLSync(resp) {
 			log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
 			return changeServerError{
@@ -184,19 +194,7 @@ func pollChangeAgent() error {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
 		}
 
-		/*
-		 * If the lastSequence is already newer or the same than what we got via
-		 * resp.LastSequence, Ignore it.
-		 */
-		if lastSequence != "" {
-			if getChangeStatus(lastSequence, resp.LastSequence) == 1 {
-				updateSequence(resp.LastSequence)
-			} else {
-				log.Debugf("Ignore change, already have newer data")
-			}
-		} else {
-			updateSequence(resp.LastSequence)
-		}
+		updateSequence(resp.LastSequence)
 	}
 }
 
