@@ -11,7 +11,7 @@ var _ = Describe("listener", func() {
 
 	It("should bootstrap from local DB if present", func(done Done) {
 
-		expectedTables := make(map[string] bool)
+		expectedTables := make(map[string]bool)
 		expectedTables["kms.company"] = true
 		expectedTables["edgex.apid_cluster"] = true
 		expectedTables["edgex.data_scope"] = true
@@ -71,4 +71,14 @@ var _ = Describe("listener", func() {
 		})
 		testMock.forceNewSnapshot()
 	})
+
+	It("Verify the Sequence Number Logic works as expected", func() {
+		Expect(getChangeStatus("1.1.1", "1.1.2")).To(Equal(1))
+		Expect(getChangeStatus("1.1.1", "1.2.1")).To(Equal(1))
+		Expect(getChangeStatus("1.2.1", "1.2.1")).To(Equal(0))
+		Expect(getChangeStatus("1.2.1", "1.2.2")).To(Equal(1))
+		Expect(getChangeStatus("2.2.1", "1.2.2")).To(Equal(-1))
+		Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
+	})
+
 })
