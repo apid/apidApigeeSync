@@ -17,6 +17,8 @@ var _ = Describe("token", func() {
 	Context("oauthToken", func() {
 
 		It("should calculate valid token", func() {
+			log.Info("Starting token tests...")
+
 			t := &oauthToken{
 				AccessToken: "x",
 				ExpiresIn:   120000,
@@ -28,6 +30,7 @@ var _ = Describe("token", func() {
 		})
 
 		It("should calculate expired token", func() {
+
 			t := &oauthToken{
 				AccessToken: "x",
 				ExpiresIn:   0,
@@ -39,6 +42,7 @@ var _ = Describe("token", func() {
 		})
 
 		It("should calculate token needing refresh", func() {
+
 			t := &oauthToken{
 				AccessToken: "x",
 				ExpiresIn:   59000,
@@ -60,6 +64,8 @@ var _ = Describe("token", func() {
 	Context("tokenMan", func() {
 
 		It("should get a valid token", func() {
+			tokenManager := createTokenManager()
+
 			token := tokenManager.getToken()
 
 			Expect(token.AccessToken).ToNot(BeEmpty())
@@ -71,6 +77,8 @@ var _ = Describe("token", func() {
 		})
 
 		It("should refresh when forced to", func() {
+			tokenManager := createTokenManager()
+
 			token := tokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
 
@@ -82,6 +90,7 @@ var _ = Describe("token", func() {
 		})
 
 		It("should refresh in refresh interval", func(done Done) {
+			tokenManager := createTokenManager()
 
 			finished := make(chan bool)
 			var tm *tokenMan
@@ -127,6 +136,7 @@ var _ = Describe("token", func() {
 		})
 
 		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
+			tokenManager := createTokenManager()
 
 			finished := make(chan bool)
 			var tm *tokenMan

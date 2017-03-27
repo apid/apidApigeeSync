@@ -55,6 +55,7 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	for {
 		select {
 		case <-quit:
+			log.Info("Quit signal recieved.  Returning")
 			return
 		case <-retry:
 			start := time.Now()

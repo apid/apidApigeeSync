@@ -74,6 +74,8 @@ func (t *tokenMan) getToken() *oauthToken {
 	getTokenLock.Lock()
 	defer getTokenLock.Unlock()
 
+
+
 	if t.token.isValid() {
 		log.Debugf("returning existing token: %v", t.token)
 		return t.token
@@ -138,7 +140,7 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 
 		if resp.StatusCode != 200 {
 			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
-			return err
+			return expected200Error{}
 		}
 
 		var token oauthToken
@@ -169,6 +171,7 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
+
 		return nil
 	}
 }

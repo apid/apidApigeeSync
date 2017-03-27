@@ -37,6 +37,7 @@ func pollChangeAgent(quit chan bool) error {
 	for {
 		select {
 		case <-quit:
+			log.Info("Recevied quit signal to stop polling change server")
 			return quitSignalError{}
 		default:
 			err := getChanges(changesUri)
@@ -81,17 +82,18 @@ func getChanges(changesUri *url.URL) error {
 	addHeaders(req)
 
 	r, err := client.Do(req)
-	defer r.Body.Close()
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
 		return err
 	}
+	defer r.Body.Close()
 
 	if r.StatusCode != http.StatusOK {
 		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 		switch r.StatusCode {
 		case http.StatusUnauthorized:
 			tokenManager.invalidateToken()
+			return nil
 
 		case http.StatusNotModified:
 			return nil
@@ -113,9 +115,9 @@ func getChanges(changesUri *url.URL) error {
 				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
 				err = apiErr
 			}
+			return nil
 		}
-
-		return err
+		return nil
 	}
 
 	var resp common.ChangeList
@@ -174,11 +176,12 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
 	if a == nil || changes == nil{
-		return true;
+		return true
 	}
 
 	for _, change := range changes {
 		if !a[change.Table] {
+			log.Infof("Unable to find %s table in current known tables", change.Table)
 			return true
 		}
 	}
