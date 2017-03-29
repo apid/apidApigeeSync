@@ -145,7 +145,7 @@ var _ = Describe("listener", func() {
 				Expect(s.SnapshotInfo).Should(Equal(apidInfo.LastSnapshot))
 				Expect(s.Tables).To(BeNil())
 
-				//sleep so that logging output from CS poller stops before test closes
+				tokenManager.close()
 				//sleep to ensure tokenManager has closed.  t.close() is non blocking
 				time.Sleep(500 * time.Millisecond)
 				close(done)
