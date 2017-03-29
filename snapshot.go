@@ -165,7 +165,7 @@ func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, u
 			req.Header.Set("Accept", "application/transicator+sqlite")
 			processSnapshotResponse = processSnapshotServerFileResponse
 		}
-
+		
 		// Issue the request to the snapshot server
 		r, err := client.Do(req)
 		if err != nil {

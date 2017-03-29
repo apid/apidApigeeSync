@@ -74,8 +74,6 @@ func (t *tokenMan) getToken() *oauthToken {
 	getTokenLock.Lock()
 	defer getTokenLock.Unlock()
 
-
-
 	if t.token.isValid() {
 		log.Debugf("returning existing token: %v", t.token)
 		return t.token
@@ -88,6 +86,7 @@ func (t *tokenMan) getToken() *oauthToken {
 func (t *tokenMan) close() {
 	log.Debug("close token manager")
 	close(t.doRefresh)
+
 }
 
 // don't call externally. will block until success.

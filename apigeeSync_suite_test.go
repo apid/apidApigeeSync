@@ -67,11 +67,13 @@ var _ = BeforeEach(func(done Done) {
 	testMock = Mock(mockParms, testRouter)
 
 	_initPlugin(apid.AllServices())
+	tokenManager = nil
 	close(done)
 })
 
 var _ = AfterEach(func() {
 	apid.Events().Close()
+
 	lastSequence = ""
 
 	if (wipeDBAferTest) {

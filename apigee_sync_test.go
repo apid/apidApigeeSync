@@ -108,8 +108,9 @@ var _ = Describe("listener", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(seq).To(Equal(cl.LastSequence))
 
-					//sleep so that logging output from CS poller stops before test closes
-					time.Sleep(100 * time.Millisecond)
+					tokenManager.close()
+					//sleep to ensure tokenManager has closed.  t.close() is non blocking
+					time.Sleep(500 * time.Millisecond)
 					close(done)
 				})
 			}
@@ -145,7 +146,8 @@ var _ = Describe("listener", func() {
 				Expect(s.Tables).To(BeNil())
 
 				//sleep so that logging output from CS poller stops before test closes
-				time.Sleep(100 * time.Millisecond)
+				//sleep to ensure tokenManager has closed.  t.close() is non blocking
+				time.Sleep(500 * time.Millisecond)
 				close(done)
 			}
 		})
