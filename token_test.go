@@ -129,11 +129,10 @@ var _ = Describe("token", func() {
 
 			oldFloat := refreshFloatTime
 			refreshFloatTime = 950 * time.Millisecond
-			defer func() {
-				refreshFloatTime = oldFloat
-			}()
 
 			<-finished
+			refreshFloatTime = oldFloat
+
 			tokenManager.close()
 			//sleep to ensure tokenManager has closed.  t.close() is non blocking
 			time.Sleep(500 * time.Millisecond)
