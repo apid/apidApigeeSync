@@ -227,7 +227,7 @@ func processSnapshotServerJsonResponse(r *http.Response, snapshot *common.Snapsh
 }
 
 func processSnapshotServerFileResponse(r *http.Response, snapshot *common.Snapshot) error {
-	dbId := r.Header.Get("transicator-snapshoot-txid")
+	dbId := r.Header.Get("Transicator-Snapshot-TXID")
 	out, err := os.Create(data.DBPath(dbId))
 	if err != nil {
 		return err
