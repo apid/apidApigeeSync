@@ -77,8 +77,8 @@ var _ = Describe("token", func() {
 			Expect(bToken).To(Equal(token.AccessToken))
 			tokenManager.close()
 			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(500 * time.Millisecond)
-		})
+			time.Sleep(1500 * time.Millisecond)
+		}, 2)
 
 		It("should refresh when forced to", func() {
 
@@ -94,8 +94,8 @@ var _ = Describe("token", func() {
 			Expect(token.AccessToken).ToNot(Equal(token2.AccessToken))
 			tokenManager.close()
 			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(500 * time.Millisecond)
-		})
+			time.Sleep(1500 * time.Millisecond)
+		}, 2)
 
 		It("should refresh in refresh interval", func(done Done) {
 
@@ -127,19 +127,15 @@ var _ = Describe("token", func() {
 
 			tokenManager.getToken()
 
-			oldFloat := refreshFloatTime
-			refreshFloatTime = 950 * time.Millisecond
-
 			<-finished
-			refreshFloatTime = oldFloat
 
 			tokenManager.close()
 			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(1500 * time.Millisecond)
 			ts.Close()
 
 			close(done)
-		})
+		}, 2)
 
 		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
 			finished := make(chan bool, 1)
@@ -178,9 +174,9 @@ var _ = Describe("token", func() {
 			<-finished
 			tokenManager.close()
 			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(1500 * time.Millisecond)
 			ts.Close()
 			close(done)
-		})
+		}, 2)
 	})
 })

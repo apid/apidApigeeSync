@@ -110,7 +110,7 @@ var _ = Describe("listener", func() {
 
 					tokenManager.close()
 					//sleep to ensure tokenManager has closed.  t.close() is non blocking
-					time.Sleep(500 * time.Millisecond)
+					time.Sleep(1500 * time.Millisecond)
 					close(done)
 				})
 			}
@@ -147,7 +147,7 @@ var _ = Describe("listener", func() {
 
 				tokenManager.close()
 				//sleep to ensure tokenManager has closed.  t.close() is non blocking
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1500 * time.Millisecond)
 				close(done)
 			}
 		})
