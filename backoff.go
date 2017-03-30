@@ -70,6 +70,7 @@ func (b *ExponentialBackoff) exponentialBackoffStrategy() time.Duration {
 		return b.max
 	}
 
+	log.Debugf("Backing off for %d ms", int64(dur/time.Millisecond))
 	return dur
 }
 
