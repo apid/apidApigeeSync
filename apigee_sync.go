@@ -291,6 +291,11 @@ func downloadBootSnapshot() {
 
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := downloadSnapshot(scopes)
+	storeBootSnapshot(snapshot)
+}
+
+func storeBootSnapshot(snapshot common.Snapshot) {
+	log.Debug("storeBootSnapshot", snapshot.SnapshotInfo)
 	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
 	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
 	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
@@ -316,11 +321,15 @@ func downloadDataSnapshot() {
 	scopes := scopeCache.readAllScope()
 
 	scopes = append(scopes, apidInfo.ClusterID)
-	resp := downloadSnapshot(scopes)
+	snapshot := downloadSnapshot(scopes)
+	storeDataSnapshot(snapshot)
+}
 
-	knownTables = extractTablesFromSnapshot(resp)
+func storeDataSnapshot(snapshot common.Snapshot) {
+	log.Debug("storeDataSnapshot", snapshot.SnapshotInfo)
+	knownTables = extractTablesFromSnapshot(snapshot)
 
-	db, err := data.DBVersion(resp.SnapshotInfo)
+	db, err := data.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
@@ -328,7 +337,7 @@ func downloadDataSnapshot() {
 
 	done := make(chan bool)
 	log.Info("Emitting Snapshot to plugins")
-	events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
+	events.EmitWithCallback(ApigeeSyncEventSelector, &snapshot, func(event apid.Event) {
 		done <- true
 	})
 
@@ -337,7 +346,10 @@ func downloadDataSnapshot() {
 		log.Panic("Timeout. Plugins failed to respond to snapshot.")
 	case <-done:
 	}
+
 }
+
+
 
 func extractTablesFromSnapshot(snapshot common.Snapshot) (tables map[string]bool) {
 

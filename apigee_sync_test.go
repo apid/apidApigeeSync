@@ -80,5 +80,14 @@ var _ = Describe("listener", func() {
 		Expect(getChangeStatus("2.2.1", "1.2.2")).To(Equal(-1))
 		Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
 	})
+	/*
+	 * XAPID-869
+	 */
+	It("Should be able to handle duplicate snapshot during bootstrap", func() {
+		scopes := []string{apidInfo.ClusterID}
+		snapshot := downloadSnapshot(scopes)
+		storeBootSnapshot(snapshot)
+		storeDataSnapshot(snapshot)
+	})
 
 })
