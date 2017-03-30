@@ -90,6 +90,8 @@ var _ = Describe("datascope cache", func() {
 		}
 		retrievedScopes = testCache.readAllScope()
 		Expect(len(retrievedScopes)).To(Equal(0))
+
+		testCache.closeCache()
 	})
 
 })

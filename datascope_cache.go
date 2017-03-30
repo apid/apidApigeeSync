@@ -54,7 +54,7 @@ func (cache *DatascopeCache) datascopeCacheManager() {
 
 	//chan closed
 	cache.scopeMap = nil
-	close(cache.requestChan)
+	close(cache.readDoneChan)
 }
 
 /*
