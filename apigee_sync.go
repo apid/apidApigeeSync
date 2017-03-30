@@ -21,37 +21,11 @@ const (
 	maxBackoffTimeout = time.Minute
 )
 
-/*
- * structs for DatascopeCache
- */
-
-const (
-	readCache int = iota
-	updateCache
-	removeCache
-	clearAndInit
-)
-
-type cacheOperationRequest struct {
-	Operation int
-	Scope     *dataDataScope
-	version   string
-}
-
-// maintain an in-mem cache of datascope
-type DatascopeCache struct {
-	requestChan  chan *cacheOperationRequest
-	readDoneChan chan []string
-	scopeMap     map[string]*dataDataScope
-	version      string
-}
-
 var (
 	block        string = "45"
 	lastSequence string
 	polling      uint32
 	knownTables  = make(map[string]bool)
-	scopeCache   *DatascopeCache
 )
 
 /*
@@ -112,7 +86,7 @@ func pollChangeAgent() error {
 		log.Debug("polling...")
 
 		/* Find the scopes associated with the config id */
-		scopes := findScopesForId(apidInfo.ClusterID)
+		scopes := scopeCache.readAllScope()
 		v := url.Values{}
 
 		/* Sequence added to the query if available */
@@ -295,7 +269,6 @@ func downloadBootSnapshot() {
 }
 
 func storeBootSnapshot(snapshot common.Snapshot) {
-	log.Debug("storeBootSnapshot", snapshot.SnapshotInfo)
 	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
 	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
 	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
@@ -317,7 +290,6 @@ func storeBootSnapshot(snapshot common.Snapshot) {
 func downloadDataSnapshot() {
 	log.Debug("download Snapshot for data scopes")
 
-	//var scopes = findScopesForId(apidInfo.ClusterID)
 	scopes := scopeCache.readAllScope()
 
 	scopes = append(scopes, apidInfo.ClusterID)
@@ -326,7 +298,6 @@ func downloadDataSnapshot() {
 }
 
 func storeDataSnapshot(snapshot common.Snapshot) {
-	log.Debug("storeDataSnapshot", snapshot.SnapshotInfo)
 	knownTables = extractTablesFromSnapshot(snapshot)
 
 	db, err := data.DBVersion(snapshot.SnapshotInfo)
@@ -348,8 +319,6 @@ func storeDataSnapshot(snapshot common.Snapshot) {
 	}
 
 }
-
-
 
 func extractTablesFromSnapshot(snapshot common.Snapshot) (tables map[string]bool) {
 
@@ -543,58 +512,6 @@ func addHeaders(req *http.Request) {
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
-}
-
-func (cache *DatascopeCache) datascopeCacheManager() {
-	for request := range cache.requestChan {
-		switch request.Operation {
-		case readCache:
-			log.Debug("datascopeCacheManager: readCache")
-			scopes := make([]string, 0, len(cache.scopeMap))
-			for _, ds := range cache.scopeMap {
-				scopes = append(scopes, ds.Scope)
-			}
-			cache.readDoneChan <- scopes
-		case updateCache:
-			log.Debug("datascopeCacheManager: updateCache")
-			cache.scopeMap[request.Scope.ID] = request.Scope
-		case removeCache:
-			log.Debug("datascopeCacheManager: removeCache")
-			delete(cache.scopeMap, request.Scope.ID)
-		case clearAndInit:
-			log.Debug("datascopeCacheManager: clearAndInit")
-			if cache.version != request.version {
-				cache.scopeMap = make(map[string]*dataDataScope)
-				cache.version = request.version
-			}
-		}
-	}
-
-	//chan closed
-	cache.scopeMap = nil
-	close(cache.requestChan)
-}
-
-func (cache *DatascopeCache) readAllScope() []string {
-	cache.requestChan <- &cacheOperationRequest{readCache, nil, ""}
-	scopes := <-cache.readDoneChan
-	return scopes
-}
-
-func (cache *DatascopeCache) removeCache(scope *dataDataScope) {
-	cache.requestChan <- &cacheOperationRequest{removeCache, scope, ""}
-}
-
-func (cache *DatascopeCache) updateCache(scope *dataDataScope) {
-	cache.requestChan <- &cacheOperationRequest{updateCache, scope, ""}
-}
-
-func (cache *DatascopeCache) clearAndInitCache(version string) {
-	cache.requestChan <- &cacheOperationRequest{clearAndInit, nil, version}
-}
-
-func (cache *DatascopeCache) closeCache() {
-	close(cache.requestChan)
 }
 
 type changeServerError struct {

@@ -65,7 +65,7 @@ var _ = BeforeSuite(func(done Done) {
 	// Tests that entire bootstrap and set of sync operations work
 	var lastSnapshot *common.Snapshot
 
-	expectedSnapshotTables := make(map[string] bool)
+	expectedSnapshotTables := make(map[string]bool)
 	expectedSnapshotTables["kms.company"] = true
 	expectedSnapshotTables["edgex.apid_cluster"] = true
 	expectedSnapshotTables["edgex.data_scope"] = true
@@ -79,8 +79,8 @@ var _ = BeforeSuite(func(done Done) {
 			Expect(mapIsSubset(knownTables, expectedSnapshotTables)).To(BeTrue())
 
 			/* After this, we will mock changes for tables not present in the initial snapshot
- 			* until that is changed in the mock server, we have to spoof the known tables
-			*/
+			* until that is changed in the mock server, we have to spoof the known tables
+			 */
 
 			//add apid_cluster and data_scope since those would present if this were a real scenario
 			knownTables["kms.app_credential"] = true
@@ -89,7 +89,6 @@ var _ = BeforeSuite(func(done Done) {
 			knownTables["kms.company_developer"] = true
 			knownTables["kms.api_product"] = true
 			knownTables["kms.app"] = true
-
 
 			lastSnapshot = s
 
