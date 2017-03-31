@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 )
 
-var _ = Describe("listener", func() {
+var _ = Describe("Sync", func() {
 
-	Context("sync", func() {
+	Context("Sync", func() {
 
 		var initializeContext = func() {
 			testRouter = apid.API().Router()
@@ -47,8 +47,8 @@ var _ = Describe("listener", func() {
 
 		It("should succesfully bootstrap from clean slate", func(done Done) {
 			log.Info("Starting sync tests...")
-			initializeContext()
 
+			initializeContext()
 			// do not wipe DB after.  Lets use it
 			wipeDBAferTest = false
 			var lastSnapshot *common.Snapshot
@@ -105,7 +105,7 @@ var _ = Describe("listener", func() {
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
-					go func() { quitPollingChangeServer <- true }()
+					go func(){quitPollingChangeServer <- true}()
 					// ensure that snapshot switched DB versions
 					Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
 					expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
@@ -149,19 +149,16 @@ var _ = Describe("listener", func() {
 					})
 				}
 			})
-			apid.InitializePlugins()
+			pie := apid.PluginsInitializedEvent{
+				Description: "plugins initialized",
+			}
+			pie.Plugins = append(pie.Plugins, pluginData)
+			postInitPlugins(pie)
 		}, 3)
 
-		//this test has a dependency on the one above it.  Ideally we would write a test db to the disk instead
 		It("should bootstrap from local DB if present", func(done Done) {
 
-			/* postPluginInit event would have been emitted for the above test, clearing the list of registered plugins
-		 	* In general, any additional sync tests (or any tests causing postInitPlugins to fire)
-			 * will need to re-register the plugin
-		 	*/
 			initializeContext()
-			apid.RegisterPlugin(initPlugin)
-
 			expectedTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms.company"},
 							 common.Change{Table: "edgex.apid_cluster"},
@@ -173,7 +170,7 @@ var _ = Describe("listener", func() {
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 
 				if s, ok := event.(*common.Snapshot); ok {
-					go func() { quitPollingChangeServer <- true }()
+					go func(){quitPollingChangeServer <- true}()
 					//verify that the knownTables array has been properly populated from existing DB
 					Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
 
@@ -184,7 +181,11 @@ var _ = Describe("listener", func() {
 					close(done)
 				}
 			})
-			apid.InitializePlugins()
+			pie := apid.PluginsInitializedEvent{
+				Description: "plugins initialized",
+			}
+			pie.Plugins = append(pie.Plugins, pluginData)
+			postInitPlugins(pie)
 
 		}, 3)
 
