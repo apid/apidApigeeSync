@@ -113,7 +113,12 @@ var _ = Describe("listener", func() {
 				})
 			}
 		})
-		apid.InitializePlugins()
+		//apid.InitializePlugins()
+		pie := apid.PluginsInitializedEvent{
+			Description: "plugins initialized",
+		}
+		pie.Plugins = append(pie.Plugins, pluginData)
+		postInitPlugins(pie)
 	}, 3)
 
 	//this test has a dependency on the one above it.  Ideally we would write a test db to the disk instead
@@ -123,7 +128,7 @@ var _ = Describe("listener", func() {
 		 * In general, any additional sync tests (or any tests causing postInitPlugins to fire)
 		 * will need to re-register the plugin
 		 */
-		apid.RegisterPlugin(initPlugin)
+		//apid.RegisterPlugin(initPlugin)
 
 		expectedTables := common.ChangeList{
 			Changes: []common.Change{common.Change{Table: "kms.company"},
@@ -147,7 +152,12 @@ var _ = Describe("listener", func() {
 				close(done)
 			}
 		})
-		apid.InitializePlugins()
+		//apid.InitializePlugins()
+		pie := apid.PluginsInitializedEvent{
+			Description: "plugins initialized",
+		}
+		pie.Plugins = append(pie.Plugins, pluginData)
+		postInitPlugins(pie)
 
 	}, 3)
 
