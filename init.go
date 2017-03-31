@@ -197,7 +197,7 @@ func postInitPlugins(event apid.Event) {
 
 		tokenManager = createTokenManager()
 
-		go bootstrap(quitPollingSnapshotServer, quitPollingChangeServer)
+		go bootstrap()
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

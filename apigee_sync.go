@@ -21,7 +21,7 @@ var knownTables           = make(map[string]bool)
  *
  *  Then, poll for changes
  */
-func bootstrap(quitPollingSnapshotServer, quitPollingChangeServer chan bool) {
+func bootstrap() {
 
 	if apidInfo.LastSnapshot != "" {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
