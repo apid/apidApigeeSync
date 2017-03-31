@@ -81,4 +81,14 @@ var _ = Describe("listener", func() {
 		Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
 	})
 
+	/*
+	 * XAPID-869, there should not be any panic if received duplicate snapshots during bootstrap
+	 */
+	It("Should be able to handle duplicate snapshot during bootstrap", func() {
+		scopes := []string{apidInfo.ClusterID}
+		snapshot := downloadSnapshot(scopes)
+		storeBootSnapshot(snapshot)
+		storeDataSnapshot(snapshot)
+	})
+
 })

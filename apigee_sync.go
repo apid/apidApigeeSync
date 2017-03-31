@@ -86,7 +86,7 @@ func pollChangeAgent() error {
 		log.Debug("polling...")
 
 		/* Find the scopes associated with the config id */
-		scopes := findScopesForId(apidInfo.ClusterID)
+		scopes := scopeCache.readAllScope()
 		v := url.Values{}
 
 		/* Sequence added to the query if available */
@@ -265,21 +265,42 @@ func downloadBootSnapshot() {
 
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := downloadSnapshot(scopes)
+	storeBootSnapshot(snapshot)
+}
+
+func storeBootSnapshot(snapshot common.Snapshot) {
+	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
+	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
+	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
+	for _, table := range snapshot.Tables {
+		if table.Name == LISTENER_TABLE_DATA_SCOPE {
+			for _, row := range table.Rows {
+				ds := makeDataScopeFromRow(row)
+				// cache scopes for this cluster
+				if ds.ClusterID == apidInfo.ClusterID {
+					scopeCache.updateCache(&ds)
+				}
+			}
+		}
+	}
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
-	processSnapshot(&snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
 func downloadDataSnapshot() {
 	log.Debug("download Snapshot for data scopes")
 
-	var scopes = findScopesForId(apidInfo.ClusterID)
+	scopes := scopeCache.readAllScope()
+
 	scopes = append(scopes, apidInfo.ClusterID)
-	resp := downloadSnapshot(scopes)
+	snapshot := downloadSnapshot(scopes)
+	storeDataSnapshot(snapshot)
+}
 
-	knownTables = extractTablesFromSnapshot(resp)
+func storeDataSnapshot(snapshot common.Snapshot) {
+	knownTables = extractTablesFromSnapshot(snapshot)
 
-	db, err := data.DBVersion(resp.SnapshotInfo)
+	db, err := data.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
@@ -287,7 +308,7 @@ func downloadDataSnapshot() {
 
 	done := make(chan bool)
 	log.Info("Emitting Snapshot to plugins")
-	events.EmitWithCallback(ApigeeSyncEventSelector, &resp, func(event apid.Event) {
+	events.EmitWithCallback(ApigeeSyncEventSelector, &snapshot, func(event apid.Event) {
 		done <- true
 	})
 
@@ -296,6 +317,7 @@ func downloadDataSnapshot() {
 		log.Panic("Timeout. Plugins failed to respond to snapshot.")
 	case <-done:
 	}
+
 }
 
 func extractTablesFromSnapshot(snapshot common.Snapshot) (tables map[string]bool) {
@@ -391,6 +413,7 @@ func startOnLocalSnapshot(snapshot string) {
 	}
 
 	knownTables = extractTablesFromDB(db)
+	scopeCache.clearAndInitCache(snapshot)
 
 	// allow plugins (including this one) to start immediately on existing database
 	// Note: this MUST have no tables as that is used as an indicator
