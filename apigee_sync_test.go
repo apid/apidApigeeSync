@@ -164,13 +164,13 @@ var _ = Describe("Sync", func() {
 							 common.Change{Table: "edgex.apid_cluster"},
 							 common.Change{Table: "edgex.data_scope"}},
 			}
-
+			thisQuitPollingChangeServer := quitPollingChangeServer
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 
 				if s, ok := event.(*common.Snapshot); ok {
-					go func(){quitPollingChangeServer <- true}()
+					go func(){thisQuitPollingChangeServer <- true}()
 					//verify that the knownTables array has been properly populated from existing DB
 					Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
 
