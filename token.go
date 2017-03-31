@@ -13,7 +13,6 @@ import (
 
 var (
 	refreshFloatTime = time.Minute
-	getTokenLock     sync.Mutex
 )
 
 /*
@@ -26,6 +25,7 @@ Usage:
 */
 
 func createTokenManager() *tokenMan {
+
 	t := &tokenMan{}
 	t.doRefresh = make(chan bool, 1)
 	t.quitPollingForToken = make(chan bool, 1)
@@ -37,6 +37,7 @@ func createTokenManager() *tokenMan {
 }
 
 type tokenMan struct {
+	sync.Mutex
 	token     *oauthToken
 	doRefresh chan bool
 	quitPollingForToken chan bool
@@ -51,6 +52,9 @@ func (t *tokenMan) getBearerToken() string {
 func (t *tokenMan) maintainToken() {
 	go func() {
 		for {
+			t.Lock()
+			token := t.token
+			t.Unlock()
 			select {
 
 			case _, ok := <-t.doRefresh:
@@ -62,13 +66,9 @@ func (t *tokenMan) maintainToken() {
 				log.Debug("force token refresh")
 				t.retrieveNewToken()
 				t.tokenRefreshed <- true
-				continue
-			case <-time.After(t.token.refreshIn()):
+			case <-time.After(token.refreshIn()):
 				log.Debug("auto refresh token")
-				getTokenLock.Lock()
 				t.retrieveNewToken()
-				getTokenLock.Unlock()
-				continue
 
 			}
 		}
@@ -77,19 +77,19 @@ func (t *tokenMan) maintainToken() {
 
 func (t *tokenMan) invalidateToken() {
 	log.Debug("invalidating token")
-	getTokenLock.Lock()
+	t.Lock()
 	t.token = nil
+	t.Unlock()
 	t.doRefresh <- true
 	//ensure refresh signal has been received
 	<-t.tokenRefreshed
-	getTokenLock.Unlock()
 }
 
 // will block until valid
 //assumption is that if we can get the lock, then it's valid
 func (t *tokenMan) getToken() *oauthToken {
-	getTokenLock.Lock()
-	defer getTokenLock.Unlock()
+	t.Lock()
+	defer t.Unlock()
 	return t.token
 }
 
@@ -179,8 +179,9 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 
 			}
 		}
-
+		t.Lock()
 		t.token = &token
+		t.Unlock()
 		config.Set(configBearerToken, token.AccessToken)
 
 		return nil
