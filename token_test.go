@@ -65,7 +65,7 @@ var _ = Describe("token", func() {
 	Context("tokenMan", func() {
 
 		It("should get a valid token", func() {
-
+log.Info("\n\n\n\nHERE\n\n")
 			tokenManager = createTokenManager()
 			token := tokenManager.getToken()
 
@@ -76,14 +76,11 @@ var _ = Describe("token", func() {
 			bToken := tokenManager.getBearerToken()
 			Expect(bToken).To(Equal(token.AccessToken))
 			tokenManager.close()
-			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(1500 * time.Millisecond)
 		}, 2)
 
 		It("should refresh when forced to", func() {
 
 			tokenManager = createTokenManager()
-
 			token := tokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
 
@@ -93,8 +90,6 @@ var _ = Describe("token", func() {
 			Expect(token).ToNot(Equal(token2))
 			Expect(token.AccessToken).ToNot(Equal(token2.AccessToken))
 			tokenManager.close()
-			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(1500 * time.Millisecond)
 		}, 2)
 
 		It("should refresh in refresh interval", func(done Done) {
@@ -130,8 +125,6 @@ var _ = Describe("token", func() {
 			<-finished
 
 			tokenManager.close()
-			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(1500 * time.Millisecond)
 			ts.Close()
 
 			close(done)
@@ -173,8 +166,6 @@ var _ = Describe("token", func() {
 			tokenManager.getToken()
 			<-finished
 			tokenManager.close()
-			//sleep to ensure tokenManager has closed.  t.close() is non blocking
-			time.Sleep(1500 * time.Millisecond)
 			ts.Close()
 			close(done)
 		}, 2)

@@ -109,8 +109,6 @@ var _ = Describe("listener", func() {
 					Expect(seq).To(Equal(cl.LastSequence))
 
 					tokenManager.close()
-					//sleep to ensure tokenManager has closed.  t.close() is non blocking
-					time.Sleep(1500 * time.Millisecond)
 					close(done)
 				})
 			}
@@ -146,8 +144,6 @@ var _ = Describe("listener", func() {
 				Expect(s.Tables).To(BeNil())
 
 				tokenManager.close()
-				//sleep to ensure tokenManager has closed.  t.close() is non blocking
-				time.Sleep(1500 * time.Millisecond)
 				close(done)
 			}
 		})
