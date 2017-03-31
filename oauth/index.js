@@ -3,7 +3,7 @@
 var debug = require('debug')('plugin:oauth');
 var url = require('url');
 var jwt = require('jsonwebtoken');
-var request = require('request');
+var requestLib = require('request');
 var _ = require('lodash');
 
 const authHeaderRegex = /Bearer (.+)/;
@@ -15,14 +15,39 @@ const SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN = "/";
 module.exports.init = function (config, logger, stats) {
 
   var apiKeyCache = {};
+  var request = config.request ? requestLib.defaults(config.request) : requestLib;
 
   var middleware = function (req, res, next) {
 
     var authHeaderName = config['authorization-header'] ? config['authorization-header'] : 'authorization';
     var apiKeyHeaderName = config['api-key-header'] ? config['api-key-header'] : 'x-api-key';
     var keepAuthHeader = config['keep-authorization-header'] || false;
+    //support for enabling oauth or api key only
+    var oauth_only = config['allowOAuthOnly'] || false;
+    var apikey_only = config['allowAPIKeyOnly'] || false;
+    //
     var apiKey;
 
+    //support for enabling oauth or api key only
+    if (oauth_only) {
+      if (!req.headers['authorization']) {
+        debug('missing_authorization');
+        return sendError(req, res, next, logger, stats, 'missing_authorization', 'Missing Authorization header');
+      } else {
+        var header = authHeaderRegex.exec(req.headers['authorization']);
+        if (!header || header.length < 2) {
+          debug('Invalid Authorization Header');
+          return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
+        }
+      }
+    }
+    else if (apikey_only) {
+      if (req.headers[authHeaderName]) {
+        debug('Invalid Authorization Type');
+        return sendError(req, res, next, logger, stats, 'invalid_auth', 'Invalid Authorization type');        
+      }
+    }
+    //leaving rest of the code same to ensure backward compatibility
     if (!req.headers[authHeaderName]) {
       if (apiKey = req.headers[apiKeyHeaderName]) {
         exchangeApiKeyForToken(req, res, next, config, logger, stats, middleware, apiKey);

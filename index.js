@@ -11,5 +11,6 @@ module.exports = {
   'quota-memory':require('./quota-memory'),
   spikearrest:require('./spikearrest'),
   'transform-uppercase':require('./transform-uppercase'),
-  accesscontrol:require('./accesscontrol')
+  accesscontrol:require('./accesscontrol'),
+  eurekaclient:require('./eurekaclient')
 }
