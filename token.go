@@ -29,7 +29,6 @@ Usage:
 func createTokenManager() *tokenMan {
 	t := &tokenMan{}
 	t.doRefresh = make(chan bool, 1)
-	t.continueMaintenance = true
 	t.maintainToken()
 	return t
 }
@@ -62,7 +61,7 @@ func (t *tokenMan) maintainToken() {
 				log.Debug("auto refresh token")
 			}
 
-			if t.token.needsRefresh() && t.continueMaintenance{
+			if t.token.needsRefresh() {
 				getTokenLock.Lock()
 				t.retrieveNewToken()
 				getTokenLock.Unlock()
@@ -95,7 +94,6 @@ func (t *tokenMan) close() {
 	log.Debug("close token manager")
 	quitPollingForToken <- true
 	close(t.doRefresh)
-	t.continueMaintenance = false
 }
 
 // don't call externally. will block until success.
