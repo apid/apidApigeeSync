@@ -65,7 +65,18 @@ var _ = Describe("token", func() {
 	Context("tokenMan", func() {
 
 		It("should get a valid token", func() {
-log.Info("\n\n\n\nHERE\n\n")
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+
+				res := oauthToken{
+					AccessToken: "ABCD",
+					ExpiresIn:   1000,
+				}
+				body, err := json.Marshal(res)
+				Expect(err).NotTo(HaveOccurred())
+				w.Write(body)
+			}))
+			config.Set(configProxyServerBaseURI, ts.URL)
 			tokenManager = createTokenManager()
 			token := tokenManager.getToken()
 
@@ -76,9 +87,23 @@ log.Info("\n\n\n\nHERE\n\n")
 			bToken := tokenManager.getBearerToken()
 			Expect(bToken).To(Equal(token.AccessToken))
 			tokenManager.close()
-		}, 2)
+			ts.Close()
+		})
 
 		It("should refresh when forced to", func() {
+
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer GinkgoRecover()
+
+				res := oauthToken{
+					AccessToken: generateUUID(),
+					ExpiresIn:   1000,
+				}
+				body, err := json.Marshal(res)
+				Expect(err).NotTo(HaveOccurred())
+				w.Write(body)
+			}))
+			config.Set(configProxyServerBaseURI, ts.URL)
 
 			tokenManager = createTokenManager()
 			token := tokenManager.getToken()
@@ -90,7 +115,8 @@ log.Info("\n\n\n\nHERE\n\n")
 			Expect(token).ToNot(Equal(token2))
 			Expect(token.AccessToken).ToNot(Equal(token2.AccessToken))
 			tokenManager.close()
-		}, 2)
+			ts.Close()
+		})
 
 		It("should refresh in refresh interval", func(done Done) {
 
@@ -128,7 +154,7 @@ log.Info("\n\n\n\nHERE\n\n")
 			ts.Close()
 
 			close(done)
-		}, 2)
+		})
 
 		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
 			finished := make(chan bool, 1)
@@ -168,6 +194,6 @@ log.Info("\n\n\n\nHERE\n\n")
 			tokenManager.close()
 			ts.Close()
 			close(done)
-		}, 2)
+		})
 	})
 })
