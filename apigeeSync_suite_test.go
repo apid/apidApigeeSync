@@ -23,6 +23,8 @@ var (
 	wipeDBAferTest bool
 )
 
+const dummyConfigValue string = "placeholder"
+
 var _ = BeforeSuite(func(){
 	wipeDBAferTest = true
 })
@@ -37,12 +39,9 @@ var _ = BeforeEach(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 	config.Set("local_storage_path", tmpDir)
 
-	testRouter = apid.API().Router()
-	testServer = httptest.NewServer(testRouter)
-
-	config.Set(configProxyServerBaseURI, testServer.URL)
-	config.Set(configSnapServerBaseURI, testServer.URL)
-	config.Set(configChangeServerBaseURI, testServer.URL)
+	config.Set(configProxyServerBaseURI, dummyConfigValue)
+	config.Set(configSnapServerBaseURI, dummyConfigValue)
+	config.Set(configChangeServerBaseURI, dummyConfigValue)
 	config.Set(configSnapshotProtocol, "json")
 	config.Set(configPollInterval, 10*time.Millisecond)
 
@@ -54,20 +53,7 @@ var _ = BeforeEach(func(done Done) {
 	block = "0"
 	log = apid.Log()
 
-	// set up mock server
-	mockParms := MockParms{
-		ReliableAPI:  false,
-		ClusterID:    config.GetString(configApidClusterId),
-		TokenKey:     config.GetString(configConsumerKey),
-		TokenSecret:  config.GetString(configConsumerSecret),
-		Scope:        "ert452",
-		Organization: "att",
-		Environment:  "prod",
-	}
-	testMock = Mock(mockParms, testRouter)
-
 	_initPlugin(apid.AllServices())
-	tokenManager = nil
 	close(done)
 })
 

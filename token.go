@@ -14,7 +14,6 @@ import (
 var (
 	refreshFloatTime = time.Minute
 	getTokenLock     sync.Mutex
-	quitPollingForToken chan bool = make(chan bool)
 )
 
 /*
@@ -29,6 +28,10 @@ Usage:
 func createTokenManager() *tokenMan {
 	t := &tokenMan{}
 	t.doRefresh = make(chan bool, 1)
+	t.quitPollingForToken = make(chan bool, 1)
+	t.tokenRefreshed = make(chan bool)
+	t.closed = make(chan bool)
+	t.retrieveNewToken()
 	t.maintainToken()
 	return t
 }
@@ -36,7 +39,9 @@ func createTokenManager() *tokenMan {
 type tokenMan struct {
 	token     *oauthToken
 	doRefresh chan bool
-	continueMaintenance bool
+	quitPollingForToken chan bool
+	tokenRefreshed chan bool
+	closed chan bool
 }
 
 func (t *tokenMan) getBearerToken() string {
@@ -45,26 +50,26 @@ func (t *tokenMan) getBearerToken() string {
 
 func (t *tokenMan) maintainToken() {
 	go func() {
-		t.getToken()
 		for {
 			select {
-			case <- quitPollingForToken:
-				log.Info("Signal to quit maintenance of token recieved")
-				return
+
 			case _, ok := <-t.doRefresh:
 				if !ok {
 					log.Debug("closed tokenMan")
+					t.closed <- true
 					return
 				}
 				log.Debug("force token refresh")
+				t.retrieveNewToken()
+				t.tokenRefreshed <- true
+				continue
 			case <-time.After(t.token.refreshIn()):
 				log.Debug("auto refresh token")
-			}
-
-			if t.token.needsRefresh() {
 				getTokenLock.Lock()
 				t.retrieveNewToken()
 				getTokenLock.Unlock()
+				continue
+
 			}
 		}
 	}()
@@ -72,28 +77,28 @@ func (t *tokenMan) maintainToken() {
 
 func (t *tokenMan) invalidateToken() {
 	log.Debug("invalidating token")
+	getTokenLock.Lock()
 	t.token = nil
 	t.doRefresh <- true
+	//ensure refresh signal has been received
+	<-t.tokenRefreshed
+	getTokenLock.Unlock()
 }
 
 // will block until valid
+//assumption is that if we can get the lock, then it's valid
 func (t *tokenMan) getToken() *oauthToken {
 	getTokenLock.Lock()
 	defer getTokenLock.Unlock()
-
-	if t.token.isValid() {
-		log.Debugf("returning existing token: %v", t.token)
-		return t.token
-	}
-
-	t.retrieveNewToken()
 	return t.token
 }
 
 func (t *tokenMan) close() {
 	log.Debug("close token manager")
-	quitPollingForToken <- true
+	t.quitPollingForToken <- true
 	close(t.doRefresh)
+	//block until close signal has been received by maintenance routine
+	<-t.closed
 }
 
 // don't call externally. will block until success.
@@ -107,7 +112,7 @@ func (t *tokenMan) retrieveNewToken() {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	pollWithBackoff(quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) {log.Errorf("Error getting new token : ", err)})
+	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) {log.Errorf("Error getting new token : ", err)})
 }
 
 func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
