@@ -1,18 +1,17 @@
 package apidApigeeSync
 
 import (
-	"time"
-	"net/http"
 	"github.com/30x/apid-core"
+	"net/http"
+	"time"
 )
 
 const (
-	httpTimeout       = time.Minute
-	pluginTimeout     = time.Minute
+	httpTimeout   = time.Minute
+	pluginTimeout = time.Minute
 )
 
-var knownTables           = make(map[string]bool)
-
+var knownTables = make(map[string]bool)
 
 /*
  *  Start from existing snapshot if possible
@@ -21,7 +20,7 @@ var knownTables           = make(map[string]bool)
  *
  *  Then, poll for changes
  */
-func bootstrap(quitPollingSnapshotServer, quitPollingChangeServer chan bool) {
+func bootstrap() {
 
 	if apidInfo.LastSnapshot != "" {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)

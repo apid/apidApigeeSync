@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-const defaultInitial time.Duration  = 200 * time.Millisecond
-const defaultMax time.Duration      = 10 * time.Second
-const defaultFactor float64         = 2
+const defaultInitial time.Duration = 200 * time.Millisecond
+const defaultMax time.Duration = 10 * time.Second
+const defaultFactor float64 = 2
 
 type Backoff struct {
 	attempt         int
@@ -19,7 +19,6 @@ type Backoff struct {
 type ExponentialBackoff struct {
 	Backoff
 	factor float64
-
 }
 
 func NewExponentialBackoff(initial, max time.Duration, factor float64) *Backoff {
@@ -44,7 +43,6 @@ func NewExponentialBackoff(initial, max time.Duration, factor float64) *Backoff 
 
 	return &backoff.Backoff
 }
-
 
 func (b *Backoff) Duration() time.Duration {
 	d := b.backoffStrategy()

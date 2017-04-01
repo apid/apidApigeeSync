@@ -30,21 +30,20 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log               apid.LogService
-	config            apid.ConfigService
-	dataService       apid.DataService
-	events            apid.EventsService
-	apidInfo          apidInstanceInfo
-	newInstanceID     bool
-	tokenManager      *tokenMan
+	log                       apid.LogService
+	config                    apid.ConfigService
+	dataService               apid.DataService
+	events                    apid.EventsService
+	apidInfo                  apidInstanceInfo
+	newInstanceID             bool
+	tokenManager              *tokenMan
 	quitPollingSnapshotServer chan bool
-	quitPollingChangeServer chan bool
+	quitPollingChangeServer   chan bool
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
 	 */
 	apidPluginDetails string = `[{"name":"apidApigeeSync","schemaVer":"1.0"}]`
-
 )
 
 type apidInstanceInfo struct {
@@ -72,7 +71,7 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func initVariables(services apid.Services) (error) {
+func initVariables(services apid.Services) error {
 	dataService = services.Data()
 	events = services.Events()
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
@@ -104,10 +103,10 @@ func initVariables(services apid.Services) (error) {
 	return nil
 }
 
-func checkForRequiredValues() (error) {
+func checkForRequiredValues() error {
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
-				     configSnapServerBaseURI, configChangeServerBaseURI} {
+		configSnapServerBaseURI, configChangeServerBaseURI} {
 		if !config.IsSet(key) {
 			return fmt.Errorf("Missing required config value: %s", key)
 		}
@@ -125,7 +124,7 @@ func SetLogger(logger apid.LogService) {
 }
 
 /* Idempotent state initialization */
-func _initPlugin(services apid.Services) (error) {
+func _initPlugin(services apid.Services) error {
 	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
 
@@ -197,7 +196,7 @@ func postInitPlugins(event apid.Event) {
 
 		tokenManager = createTokenManager()
 
-		go bootstrap(quitPollingSnapshotServer, quitPollingChangeServer)
+		go bootstrap()
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")

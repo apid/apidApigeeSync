@@ -38,7 +38,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 
 	if config.GetString(configSnapshotProtocol) == "json" {
 		processJsonSnapshot(snapshot, db)
-	} else if config.GetString(configSnapshotProtocol) == "sqlite"{
+	} else if config.GetString(configSnapshotProtocol) == "sqlite" {
 		processSqliteSnapshot(snapshot, db)
 	}
 

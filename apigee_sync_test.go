@@ -5,8 +5,8 @@ import (
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"time"
 	"net/http/httptest"
+	"time"
 )
 
 var _ = Describe("Sync", func() {
@@ -55,8 +55,8 @@ var _ = Describe("Sync", func() {
 
 			expectedSnapshotTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms.company"},
-							 common.Change{Table: "edgex.apid_cluster"},
-							 common.Change{Table: "edgex.data_scope"}},
+					common.Change{Table: "edgex.apid_cluster"},
+					common.Change{Table: "edgex.data_scope"}},
 			}
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
@@ -105,7 +105,7 @@ var _ = Describe("Sync", func() {
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
-					go func(){quitPollingChangeServer <- true}()
+					go func() { quitPollingChangeServer <- true }()
 					// ensure that snapshot switched DB versions
 					Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
 					expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
@@ -161,16 +161,16 @@ var _ = Describe("Sync", func() {
 			initializeContext()
 			expectedTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms.company"},
-							 common.Change{Table: "edgex.apid_cluster"},
-							 common.Change{Table: "edgex.data_scope"}},
+					common.Change{Table: "edgex.apid_cluster"},
+					common.Change{Table: "edgex.data_scope"}},
 			}
-
+			thisQuitPollingChangeServer := quitPollingChangeServer
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 
 				if s, ok := event.(*common.Snapshot); ok {
-					go func(){quitPollingChangeServer <- true}()
+					go func() { thisQuitPollingChangeServer <- true }()
 					//verify that the knownTables array has been properly populated from existing DB
 					Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
 

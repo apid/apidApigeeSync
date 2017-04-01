@@ -1,18 +1,18 @@
 package apidApigeeSync
 
 import (
-	"github.com/30x/apid-core"
-	"net/http"
 	"encoding/json"
-	"os"
+	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/data"
 	"github.com/apigee-labs/transicator/common"
+	"net/http"
+	"os"
 
 	"io"
-	"time"
+	"io/ioutil"
 	"net/url"
 	"path"
-	"io/ioutil"
+	"time"
 )
 
 // retrieve boot information: apid_config and apid_config_scope
@@ -94,7 +94,7 @@ func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 }
 
 // Skip Downloading snapshot if there is already a snapshot available from previous run
-func startOnLocalSnapshot(snapshot string) *common.Snapshot{
+func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 	log.Infof("Starting on local snapshot: %s", snapshot)
 
 	// ensure DB version will be accessible on behalf of dependant plugins
@@ -146,7 +146,7 @@ func downloadSnapshot(scopes []string, snapshot *common.Snapshot, quitPolling ch
 
 }
 
-func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, uri string) func(chan bool) error{
+func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, uri string) func(chan bool) error {
 	return func(_ chan bool) error {
 		req, err := http.NewRequest("GET", uri, nil)
 		if err != nil {
@@ -155,7 +155,7 @@ func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, u
 		}
 		addHeaders(req)
 
-		var processSnapshotResponse func(*http.Response, *common.Snapshot) (error)
+		var processSnapshotResponse func(*http.Response, *common.Snapshot) error
 
 		// Set the transport protocol type based on conf file input
 		if config.GetString(configSnapshotProtocol) == "json" {
@@ -165,7 +165,7 @@ func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, u
 			req.Header.Set("Accept", "application/transicator+sqlite")
 			processSnapshotResponse = processSnapshotServerFileResponse
 		}
-		
+
 		// Issue the request to the snapshot server
 		r, err := client.Do(req)
 		if err != nil {

@@ -177,7 +177,7 @@ var _ = Describe("token", func() {
 				}
 				res := oauthToken{
 					AccessToken: string(count),
-				 	ExpiresIn:   200000,
+					ExpiresIn:   200000,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
