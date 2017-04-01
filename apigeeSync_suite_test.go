@@ -25,7 +25,7 @@ var (
 
 const dummyConfigValue string = "placeholder"
 
-var _ = BeforeSuite(func(){
+var _ = BeforeSuite(func() {
 	wipeDBAferTest = true
 })
 
@@ -62,7 +62,7 @@ var _ = AfterEach(func() {
 
 	lastSequence = ""
 
-	if (wipeDBAferTest) {
+	if wipeDBAferTest {
 		_, err := getDB().Exec("DELETE FROM APID_CLUSTER")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = getDB().Exec("DELETE FROM DATA_SCOPE")

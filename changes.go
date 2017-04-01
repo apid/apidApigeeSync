@@ -1,19 +1,18 @@
 package apidApigeeSync
 
 import (
-	"time"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"path"
-	"net/http"
-	"io/ioutil"
-	"encoding/json"
+	"time"
 
 	"github.com/apigee-labs/transicator/common"
-
 )
 
 var lastSequence string
-var block        string = "45"
+var block string = "45"
 
 /*
  * Long polls the change agent with a 45 second block. Parses the response from
@@ -64,10 +63,10 @@ func getChanges(changesUri *url.URL) error {
 	v.Add("block", block)
 
 	/*
- 	* Include all the scopes associated with the config Id
- 	* The Config Id is included as well, as it acts as the
- 	* Bootstrap scope
- 	*/
+	* Include all the scopes associated with the config Id
+	* The Config Id is included as well, as it acts as the
+	* Bootstrap scope
+	 */
 	for _, scope := range scopes {
 		v.Add("scope", scope)
 	}
@@ -154,7 +153,6 @@ func getChanges(changesUri *url.URL) error {
 	return nil
 }
 
-
 func changesRequireDDLSync(changes common.ChangeList) bool {
 	return changesHaveNewTables(knownTables, changes.Changes)
 }
@@ -175,7 +173,7 @@ func handleChangeServerError(err error) {
 func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
-	if a == nil || changes == nil{
+	if a == nil || changes == nil {
 		return true
 	}
 
