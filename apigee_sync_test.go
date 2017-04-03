@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"net/http/httptest"
-	"time"
+	//"time"
 )
 
 var _ = Describe("Sync", func() {
@@ -36,7 +36,6 @@ var _ = Describe("Sync", func() {
 
 		var restoreContext = func() {
 
-			tokenManager.close()
 			testServer.Close()
 
 			config.Set(configProxyServerBaseURI, dummyConfigValue)
@@ -47,7 +46,7 @@ var _ = Describe("Sync", func() {
 
 		It("should succesfully bootstrap from clean slate", func(done Done) {
 			log.Info("Starting sync tests...")
-
+			var closeDone <-chan bool
 			initializeContext()
 			// do not wipe DB after.  Lets use it
 			wipeDBAferTest = false
@@ -60,7 +59,6 @@ var _ = Describe("Sync", func() {
 			}
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
-
 				if s, ok := event.(*common.Snapshot); ok {
 
 					Expect(changesRequireDDLSync(expectedSnapshotTables)).To(BeFalse())
@@ -105,7 +103,7 @@ var _ = Describe("Sync", func() {
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
-					go func() { quitPollingChangeServer <- true }()
+					closeDone = changeManager.close()
 					// ensure that snapshot switched DB versions
 					Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
 					expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
@@ -131,22 +129,25 @@ var _ = Describe("Sync", func() {
 					Expect(tables).To(ContainElement("kms.api_product"))
 					Expect(tables).To(ContainElement("kms.app"))
 
-					events.ListenFunc(apid.EventDeliveredSelector, func(e apid.Event) {
+					go func() {
+						// when close done, all handlers for the first changeList have been executed
+						<-closeDone
 						defer GinkgoRecover()
-
 						// allow other handler to execute to insert last_sequence
-						time.Sleep(50 * time.Millisecond)
 						var seq string
-						err = getDB().
+						//for seq = ""; seq == ""; {
+						//	time.Sleep(50 * time.Millisecond)
+						err := getDB().
 							QueryRow("SELECT last_sequence FROM APID_CLUSTER LIMIT 1;").
 							Scan(&seq)
-
 						Expect(err).NotTo(HaveOccurred())
+						//}
 						Expect(seq).To(Equal(cl.LastSequence))
 
 						restoreContext()
 						close(done)
-					})
+					}()
+
 				}
 			})
 			pie := apid.PluginsInitializedEvent{
@@ -158,27 +159,35 @@ var _ = Describe("Sync", func() {
 
 		It("should bootstrap from local DB if present", func(done Done) {
 
+			var closeDone <-chan bool
+
 			initializeContext()
 			expectedTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms.company"},
 					common.Change{Table: "edgex.apid_cluster"},
 					common.Change{Table: "edgex.data_scope"}},
 			}
-			thisQuitPollingChangeServer := quitPollingChangeServer
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 
 				if s, ok := event.(*common.Snapshot); ok {
-					go func() { thisQuitPollingChangeServer <- true }()
-					//verify that the knownTables array has been properly populated from existing DB
-					Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
+					// In this test, the changeManager.pollChangeWithBackoff() has not been launched when changeManager closed
+					// This is because the changeManager.pollChangeWithBackoff() in bootstrap() happened after this handler
+					closeDone = changeManager.close()
+					go func() {
+						// when close done, all handlers for the first snapshot have been executed
+						<-closeDone
+						//verify that the knownTables array has been properly populated from existing DB
+						Expect(changesRequireDDLSync(expectedTables)).To(BeFalse())
 
-					Expect(s.SnapshotInfo).Should(Equal(apidInfo.LastSnapshot))
-					Expect(s.Tables).To(BeNil())
+						Expect(s.SnapshotInfo).Should(Equal(apidInfo.LastSnapshot))
+						Expect(s.Tables).To(BeNil())
 
-					restoreContext()
-					close(done)
+						restoreContext()
+						close(done)
+					}()
+
 				}
 			})
 			pie := apid.PluginsInitializedEvent{

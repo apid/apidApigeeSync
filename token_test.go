@@ -1,5 +1,8 @@
 package apidApigeeSync
 
+/*
+ * Unit test of token manager
+ */
 import (
 	"time"
 
@@ -77,16 +80,16 @@ var _ = Describe("token", func() {
 				w.Write(body)
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
-			tokenManager = createTokenManager()
-			token := tokenManager.getToken()
+			testedTokenManager := createTokenManager()
+			token := testedTokenManager.getToken()
 
 			Expect(token.AccessToken).ToNot(BeEmpty())
 			Expect(token.ExpiresIn > 0).To(BeTrue())
 			Expect(token.ExpiresAt).To(BeTemporally(">", time.Now()))
 
-			bToken := tokenManager.getBearerToken()
+			bToken := testedTokenManager.getBearerToken()
 			Expect(bToken).To(Equal(token.AccessToken))
-			tokenManager.close()
+			testedTokenManager.close()
 			ts.Close()
 		})
 
@@ -105,16 +108,16 @@ var _ = Describe("token", func() {
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
 
-			tokenManager = createTokenManager()
-			token := tokenManager.getToken()
+			testedTokenManager := createTokenManager()
+			token := testedTokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
 
-			tokenManager.invalidateToken()
+			testedTokenManager.invalidateToken()
 
-			token2 := tokenManager.getToken()
+			token2 := testedTokenManager.getToken()
 			Expect(token).ToNot(Equal(token2))
 			Expect(token.AccessToken).ToNot(Equal(token2.AccessToken))
-			tokenManager.close()
+			testedTokenManager.close()
 			ts.Close()
 		})
 
@@ -144,13 +147,13 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			tokenManager = createTokenManager()
+			testedTokenManager := createTokenManager()
 
-			tokenManager.getToken()
+			testedTokenManager.getToken()
 
 			<-finished
 
-			tokenManager.close()
+			testedTokenManager.close()
 			ts.Close()
 
 			close(done)
@@ -185,13 +188,13 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			tokenManager = createTokenManager()
+			testedTokenManager := createTokenManager()
 
-			tokenManager.getToken()
-			tokenManager.invalidateToken()
-			tokenManager.getToken()
+			testedTokenManager.getToken()
+			testedTokenManager.invalidateToken()
+			testedTokenManager.getToken()
 			<-finished
-			tokenManager.close()
+			testedTokenManager.close()
 			ts.Close()
 			close(done)
 		})

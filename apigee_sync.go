@@ -26,7 +26,7 @@ func bootstrap() {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
 
 		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
-			go pollWithBackoff(quitPollingChangeServer, pollChangeAgent, handleChangeServerError)
+			changeManager.pollChangeWithBackoff()
 		})
 
 		log.Infof("Started on local snapshot: %s", snapshot.SnapshotInfo)
@@ -36,7 +36,7 @@ func bootstrap() {
 	downloadBootSnapshot(nil)
 	downloadDataSnapshot(quitPollingSnapshotServer)
 
-	go pollWithBackoff(quitPollingChangeServer, pollChangeAgent, handleChangeServerError)
+	changeManager.pollChangeWithBackoff()
 
 }
 
