@@ -55,7 +55,7 @@ var _ = BeforeEach(func(done Done) {
 
 	_initPlugin(apid.AllServices())
 	close(done)
-})
+}, 3)
 
 var _ = AfterEach(func() {
 	apid.Events().Close()
