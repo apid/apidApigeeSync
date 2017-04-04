@@ -2,8 +2,8 @@ package apidApigeeSync
 
 import (
 	"math"
-	"time"
 	"math/rand"
+	"time"
 )
 
 const defaultInitial time.Duration = 200 * time.Millisecond
@@ -13,7 +13,7 @@ const defaultFactor float64 = 2
 type Backoff struct {
 	attempt         int
 	initial, max    time.Duration
-	jitter bool
+	jitter          bool
 	backoffStrategy func() time.Duration
 }
 

@@ -254,7 +254,6 @@ var _ = Describe("Sync", func() {
 			testMock.forceNewSnapshot()
 		})
 
-
 		It("Verify the Sequence Number Logic works as expected", func() {
 			Expect(getChangeStatus("1.1.1", "1.1.2")).To(Equal(1))
 			Expect(getChangeStatus("1.1.1", "1.2.1")).To(Equal(1))
@@ -271,14 +270,17 @@ var _ = Describe("Sync", func() {
 			initializeContext()
 
 			tokenManager = createTokenManager()
+			snapManager = createSnapShotManager()
 			events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}
-			downloadSnapshot(scopes, snapshot, nil)
-			storeBootSnapshot(snapshot)
-			storeDataSnapshot(snapshot)
+			snapManager.downloadSnapshot(scopes, snapshot)
+			snapManager.storeBootSnapshot(snapshot)
+			snapManager.storeDataSnapshot(snapshot)
 			restoreContext()
+			<-snapManager.close()
+			tokenManager.close()
 		}, 3)
 	})
 })

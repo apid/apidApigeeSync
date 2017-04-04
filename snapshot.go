@@ -67,7 +67,6 @@ func (s *snapShotManager) close() <-chan bool {
 func (s *snapShotManager) downloadBootSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadBootSnapshot: only 1 thread can download snapshot at the same time!")
-		return
 	}
 	defer atomic.StoreInt32(s.isDownloading, int32(0))
 
@@ -81,7 +80,7 @@ func (s *snapShotManager) downloadBootSnapshot() {
 
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := &common.Snapshot{}
-  
+
 	err := s.downloadSnapshot(scopes, snapshot)
 	if err != nil {
 		// this may happen during shutdown
@@ -98,10 +97,10 @@ func (s *snapShotManager) downloadBootSnapshot() {
 	}
 
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
-  storeBootSnapshot(snapshot)
+	s.storeBootSnapshot(snapshot)
 }
 
-func storeBootSnapshot(snapshot *common.Snapshot) {
+func (s *snapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
 	processSnapshot(snapshot)
 }
 
@@ -109,7 +108,6 @@ func storeBootSnapshot(snapshot *common.Snapshot) {
 func (s *snapShotManager) downloadDataSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadDataSnapshot: only 1 thread can download snapshot at the same time!")
-		return
 	}
 	defer atomic.StoreInt32(s.isDownloading, int32(0))
 
@@ -132,10 +130,10 @@ func (s *snapShotManager) downloadDataSnapshot() {
 		}
 		return
 	}
-	storeDataSnapshot(snapshot)
+	s.storeDataSnapshot(snapshot)
 }
 
-func storeDataSnapshot(snapshot *common.Snapshot) {
+func (s *snapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 	knownTables = extractTablesFromSnapshot(snapshot)
 
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
