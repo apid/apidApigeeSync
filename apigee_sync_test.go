@@ -19,7 +19,7 @@ var _ = Describe("Sync", func() {
 
 			// set up mock server
 			mockParms := MockParms{
-				ReliableAPI:  true,
+				ReliableAPI:  false,
 				ClusterID:    config.GetString(configApidClusterId),
 				TokenKey:     config.GetString(configConsumerKey),
 				TokenSecret:  config.GetString(configConsumerSecret),
