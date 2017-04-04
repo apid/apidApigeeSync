@@ -9,16 +9,93 @@ import (
 	"time"
 
 	"github.com/apigee-labs/transicator/common"
+	"sync/atomic"
 )
 
 var lastSequence string
 var block string = "45"
 
+type pollChangeManager struct {
+	// 0 for not closed, 1 for closed
+	isClosed *int32
+	// 0 for pollChangeWithBackoff() not launched, 1 for launched
+	isLaunched *int32
+	quitChan   chan bool
+}
+
+func createChangeManager() *pollChangeManager {
+	isClosedInt := int32(0)
+	isLaunchedInt := int32(0)
+	return &pollChangeManager{
+		isClosed:   &isClosedInt,
+		quitChan:   make(chan bool),
+		isLaunched: &isLaunchedInt,
+	}
+}
+
+/*
+ * thread-safe close of pollChangeManager
+ * It marks status as closed immediately, quits backoff polling agent, and closes tokenManager
+ * use <- close() for blocking close
+ */
+func (c *pollChangeManager) close() <-chan bool {
+	finishChan := make(chan bool, 1)
+	//has been closed
+	if atomic.SwapInt32(c.isClosed, 1) == int32(1) {
+		log.Error("pollChangeManager: close() called on a closed pollChangeManager!")
+		go func() {
+			finishChan <- false
+			log.Debug("change manager closed")
+		}()
+		return finishChan
+	}
+	// not launched
+	if atomic.LoadInt32(c.isLaunched) == int32(0) {
+		log.Error("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! close tokenManager!")
+		go func() {
+			tokenManager.close()
+			finishChan <- false
+			log.Debug("change manager closed")
+		}()
+		return finishChan
+	}
+	// launched
+	log.Debug("pollChangeManager: close pollChangeWithBackoff and token manager")
+	go func() {
+		c.quitChan <- true
+		tokenManager.close()
+		finishChan <- true
+		log.Debug("change manager closed")
+	}()
+	return finishChan
+}
+
+/*
+ * thread-safe pollChangeWithBackoff(), guaranteed: only one polling thread
+ */
+
+func (c *pollChangeManager) pollChangeWithBackoff() {
+	// closed
+	if atomic.LoadInt32(c.isClosed) == int32(1) {
+		log.Error("pollChangeManager: pollChangeWithBackoff() called after closed")
+		return
+	}
+	// has been launched before
+	if atomic.SwapInt32(c.isLaunched, 1) == int32(1) {
+		log.Error("pollChangeManager: pollChangeWithBackoff() has been launched before")
+		return
+	}
+
+	go pollWithBackoff(c.quitChan, c.pollChangeAgent, c.handleChangeServerError)
+	log.Debug("pollChangeManager: pollChangeWithBackoff() started pollWithBackoff")
+
+}
+
 /*
  * Long polls the change agent with a 45 second block. Parses the response from
  * change agent and raises an event. Called by pollWithBackoff().
  */
-func pollChangeAgent(quit chan bool) error {
+func (c *pollChangeManager) pollChangeAgent(dummyQuit chan bool) error {
 
 	changesUri, err := url.Parse(config.GetString(configChangeServerBaseURI))
 	if err != nil {
@@ -35,12 +112,16 @@ func pollChangeAgent(quit chan bool) error {
 
 	for {
 		select {
-		case <-quit:
-			log.Info("Recevied quit signal to stop polling change server")
+		case <-c.quitChan:
+			log.Info("pollChangeAgent; Recevied quit signal to stop polling change server, close token manager")
 			return quitSignalError{}
 		default:
-			err := getChanges(changesUri)
+			err := c.getChanges(changesUri)
 			if err != nil {
+				if _, ok := err.(quitSignalError); ok {
+					log.Debug("pollChangeAgent: consuming the quit signal")
+					<-c.quitChan
+				}
 				return err
 			}
 		}
@@ -49,7 +130,11 @@ func pollChangeAgent(quit chan bool) error {
 
 //TODO refactor this method more, split it up
 /* Make a single request to the changeserver to get a changelist */
-func getChanges(changesUri *url.URL) error {
+func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
+	// if closed
+	if atomic.LoadInt32(c.isClosed) == int32(1) {
+		return quitSignalError{}
+	}
 	log.Debug("polling...")
 
 	/* Find the scopes associated with the config id */
@@ -83,9 +168,19 @@ func getChanges(changesUri *url.URL) error {
 	r, err := client.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
+		// if closed
+		if atomic.LoadInt32(c.isClosed) == int32(1) {
+			return quitSignalError{}
+		}
 		return err
 	}
 	defer r.Body.Close()
+
+	// has been closed
+	if atomic.LoadInt32(c.isClosed) == int32(1) {
+		log.Debugf("getChanges: changeManager has been closed")
+		return quitSignalError{}
+	}
 
 	if r.StatusCode != http.StatusOK {
 		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
@@ -157,11 +252,15 @@ func changesRequireDDLSync(changes common.ChangeList) bool {
 	return changesHaveNewTables(knownTables, changes.Changes)
 }
 
-func handleChangeServerError(err error) {
-
+func (c *pollChangeManager) handleChangeServerError(err error) {
+	// has been closed
+	if atomic.LoadInt32(c.isClosed) == int32(1) {
+		log.Debugf("handleChangeServerError: changeManager has been closed")
+		return
+	}
 	if _, ok := err.(changeServerError); ok {
 		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
-		downloadDataSnapshot(nil)
+		downloadDataSnapshot(c.quitChan)
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}

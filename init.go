@@ -37,8 +37,8 @@ var (
 	apidInfo                  apidInstanceInfo
 	newInstanceID             bool
 	tokenManager              *tokenMan
+	changeManager             *pollChangeManager
 	quitPollingSnapshotServer chan bool
-	quitPollingChangeServer   chan bool
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -77,7 +77,7 @@ func initVariables(services apid.Services) error {
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing
 	quitPollingSnapshotServer = make(chan bool)
-	quitPollingChangeServer = make(chan bool)
+	changeManager = createChangeManager()
 
 	// set up default database
 	db, err := dataService.DB()

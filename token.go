@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,6 +25,7 @@ Usage:
 */
 
 func createTokenManager() *tokenMan {
+	isClosedInt := int32(0)
 
 	t := &tokenMan{
 		quitPollingForToken: make(chan bool, 1),
@@ -32,6 +34,7 @@ func createTokenManager() *tokenMan {
 		invalidateTokenChan: make(chan bool),
 		returnTokenChan:     make(chan *oauthToken),
 		invalidateDone:      make(chan bool),
+		isClosed:            &isClosedInt,
 	}
 
 	t.retrieveNewToken()
@@ -42,6 +45,7 @@ func createTokenManager() *tokenMan {
 
 type tokenMan struct {
 	token               *oauthToken
+	isClosed            *int32
 	quitPollingForToken chan bool
 	closed              chan bool
 	getTokenChan        chan bool
@@ -77,24 +81,42 @@ func (t *tokenMan) maintainToken() {
 
 // will block until valid
 func (t *tokenMan) invalidateToken() {
+	//has been closed
+	if atomic.LoadInt32(t.isClosed) == int32(1) {
+		log.Debug("TokenManager: invalidateToken() called on closed tokenManager")
+		return
+	}
 	log.Debug("invalidating token")
 	t.invalidateTokenChan <- true
 	<-t.invalidateDone
 }
 
-
 func (t *tokenMan) getToken() *oauthToken {
+	//has been closed
+	if atomic.LoadInt32(t.isClosed) == int32(1) {
+		log.Debug("TokenManager: getToken() called on closed tokenManager")
+		return nil
+	}
 	t.getTokenChan <- true
 	return <-t.returnTokenChan
 }
 
+/*
+ * blocking close() of tokenMan
+ */
+
 func (t *tokenMan) close() {
+	//has been closed
+	if atomic.SwapInt32(t.isClosed, 1) == int32(1) {
+		log.Panic("TokenManager: close() has been called before!")
+		return
+	}
 	log.Debug("close token manager")
 	t.quitPollingForToken <- true
 	// sending instead of closing, to make sure it enters the t.doRefresh branch
-	log.Debug("token manager closed")
 	t.closed <- true
 	close(t.closed)
+	log.Debug("token manager closed")
 }
 
 // don't call externally. will block until success.
