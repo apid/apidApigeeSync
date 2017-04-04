@@ -51,8 +51,9 @@ func (c *pollChangeManager) close() <-chan bool {
 	}
 	// not launched
 	if atomic.LoadInt32(c.isLaunched) == int32(0) {
-		log.Error("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! close tokenManager!")
+		log.Error("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
 		go func() {
+			c.quitChan <- true
 			tokenManager.close()
 			<-snapManager.close()
 			finishChan <- false
@@ -77,11 +78,6 @@ func (c *pollChangeManager) close() <-chan bool {
  */
 
 func (c *pollChangeManager) pollChangeWithBackoff() {
-	// closed
-	if atomic.LoadInt32(c.isClosed) == int32(1) {
-		log.Error("pollChangeManager: pollChangeWithBackoff() called after closed")
-		return
-	}
 	// has been launched before
 	if atomic.SwapInt32(c.isLaunched, 1) == int32(1) {
 		log.Error("pollChangeManager: pollChangeWithBackoff() has been launched before")
