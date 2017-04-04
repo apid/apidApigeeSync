@@ -54,6 +54,7 @@ func (c *pollChangeManager) close() <-chan bool {
 		log.Error("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! close tokenManager!")
 		go func() {
 			tokenManager.close()
+			<-snapManager.close()
 			finishChan <- false
 			log.Debug("change manager closed")
 		}()
@@ -64,6 +65,7 @@ func (c *pollChangeManager) close() <-chan bool {
 	go func() {
 		c.quitChan <- true
 		tokenManager.close()
+		<-snapManager.close()
 		finishChan <- true
 		log.Debug("change manager closed")
 	}()
@@ -260,7 +262,7 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 	}
 	if _, ok := err.(changeServerError); ok {
 		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
-		downloadDataSnapshot(c.quitChan)
+		snapManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}

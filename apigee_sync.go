@@ -33,8 +33,8 @@ func bootstrap() {
 		return
 	}
 
-	downloadBootSnapshot(nil)
-	downloadDataSnapshot(quitPollingSnapshotServer)
+	snapManager.downloadBootSnapshot()
+	snapManager.downloadDataSnapshot()
 
 	changeManager.pollChangeWithBackoff()
 

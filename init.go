@@ -30,15 +30,15 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log                       apid.LogService
-	config                    apid.ConfigService
-	dataService               apid.DataService
-	events                    apid.EventsService
-	apidInfo                  apidInstanceInfo
-	newInstanceID             bool
-	tokenManager              *tokenMan
-	changeManager             *pollChangeManager
-	quitPollingSnapshotServer chan bool
+	log           apid.LogService
+	config        apid.ConfigService
+	dataService   apid.DataService
+	events        apid.EventsService
+	apidInfo      apidInstanceInfo
+	newInstanceID bool
+	tokenManager  *tokenMan
+	changeManager *pollChangeManager
+	snapManager   *snapShotManager
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -76,7 +76,7 @@ func initVariables(services apid.Services) error {
 	events = services.Events()
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing
-	quitPollingSnapshotServer = make(chan bool)
+	snapManager = createSnapShotManager()
 	changeManager = createChangeManager()
 
 	// set up default database
