@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var _ = FDescribe("backoff", func() {
+var _ = Describe("backoff", func() {
 
 	Context("Backoff timeout calculations", func() {
 
