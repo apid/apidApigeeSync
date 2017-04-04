@@ -10,18 +10,20 @@ var _ = Describe("init", func() {
 	Context("Apid Instance display name", func() {
 
 		It("should be hostname by default", func() {
-			initDefaults()
+			log.Info("Starting init tests...")
+
+			initConfigDefaults()
 			Expect(apidInfo.InstanceName).To(Equal("testhost"))
-		})
+		}, 3)
 
 		It("accept display name from config", func() {
 			config.Set(configName, "aa01")
-			initDefaults()
+			initConfigDefaults()
 			var apidInfoLatest apidInstanceInfo
 			apidInfoLatest, _ = getApidInstanceInfo()
 			Expect(apidInfoLatest.InstanceName).To(Equal("aa01"))
 			Expect(apidInfoLatest.LastSnapshot).To(Equal(""))
-		})
+		}, 3)
 
 	})
 

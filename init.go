@@ -29,14 +29,21 @@ const (
 )
 
 var (
-	log               apid.LogService
-	config            apid.ConfigService
-	data              apid.DataService
-	events            apid.EventsService
-	apidInfo          apidInstanceInfo
-	apidPluginDetails string
-	newInstanceID     bool
-	tokenManager      *tokenMan
+	/* All set during plugin initialization */
+	log                       apid.LogService
+	config                    apid.ConfigService
+	dataService               apid.DataService
+	events                    apid.EventsService
+	apidInfo                  apidInstanceInfo
+	newInstanceID             bool
+	tokenManager              *tokenMan
+	changeManager             *pollChangeManager
+	quitPollingSnapshotServer chan bool
+
+	/* Set during post plugin initialization
+	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
+	 */
+	apidPluginDetails string = `[{"name":"apidApigeeSync","schemaVer":"1.0"}]`
 )
 
 type apidInstanceInfo struct {
@@ -52,7 +59,7 @@ func init() {
 	apid.RegisterPlugin(initPlugin)
 }
 
-func initDefaults() {
+func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "json")
 	name, errh := os.Hostname()
@@ -64,63 +71,92 @@ func initDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func SetLogger(logger apid.LogService) {
-	log = logger
-}
-
-func initPlugin(services apid.Services) (apid.PluginData, error) {
-	SetLogger(services.Log().ForModule("apigeeSync"))
-	log.Debug("start init")
-
-	config = services.Config()
-	initDefaults()
-
-	data = services.Data()
+func initVariables(services apid.Services) error {
+	dataService = services.Data()
 	events = services.Events()
-
-	scopeCache = &DatascopeCache{requestChan: make(chan *cacheOperationRequest), readDoneChan: make(chan []string)}
-
-	go scopeCache.datascopeCacheManager()
-
-	/* This callback function will get called, once all the plugins are
-	 * initialized (not just this plugin). This is needed because,
-	 * downloadSnapshots/changes etc have to begin to be processed only
-	 * after all the plugins are initialized
-	 */
-	events.ListenOnceFunc(apid.SystemEventsSelector, postInitPlugins)
-
-	// check for required values
-	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
-		configSnapServerBaseURI, configChangeServerBaseURI} {
-		if !config.IsSet(key) {
-			return pluginData, fmt.Errorf("Missing required config value: %s", key)
-		}
-	}
-	proto := config.GetString(configSnapshotProtocol)
-	if proto != "json" && proto != "proto" {
-		return pluginData, fmt.Errorf("Illegal value for %s. Must be: 'json' or 'proto'", configSnapshotProtocol)
-	}
+	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
+	//also useful for testing
+	quitPollingSnapshotServer = make(chan bool)
+	changeManager = createChangeManager()
 
 	// set up default database
-	db, err := data.DB()
+	db, err := dataService.DB()
 	if err != nil {
-		return pluginData, fmt.Errorf("Unable to access DB: %v", err)
+		return fmt.Errorf("Unable to access DB: %v", err)
 	}
 	err = initDB(db)
 	if err != nil {
-		return pluginData, fmt.Errorf("Unable to access DB: %v", err)
+		return fmt.Errorf("Unable to access DB: %v", err)
 	}
 	setDB(db)
 
 	apidInfo, err = getApidInstanceInfo()
 	if err != nil {
-		return pluginData, fmt.Errorf("Unable to get apid instance info: %v", err)
+		return fmt.Errorf("Unable to get apid instance info: %v", err)
 	}
 
 	if config.IsSet(configApidInstanceID) {
 		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
+
+	return nil
+}
+
+func checkForRequiredValues() error {
+	// check for required values
+	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
+		configSnapServerBaseURI, configChangeServerBaseURI} {
+		if !config.IsSet(key) {
+			return fmt.Errorf("Missing required config value: %s", key)
+		}
+	}
+	proto := config.GetString(configSnapshotProtocol)
+	if proto != "json" && proto != "proto" {
+		return fmt.Errorf("Illegal value for %s. Must be: 'json' or 'proto'", configSnapshotProtocol)
+	}
+
+	return nil
+}
+
+func SetLogger(logger apid.LogService) {
+	log = logger
+}
+
+/* Idempotent state initialization */
+func _initPlugin(services apid.Services) error {
+	SetLogger(services.Log().ForModule("apigeeSync"))
+	log.Debug("start init")
+
+	config = services.Config()
+	err := checkForRequiredValues()
+	if err != nil {
+		return err
+	}
+
+	initConfigDefaults()
+
+	err = initVariables(services)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func initPlugin(services apid.Services) (apid.PluginData, error) {
+
+	err := _initPlugin(services)
+	if err != nil {
+		return pluginData, err
+	}
+
+	/* This callback function will get called once all the plugins are
+	 * initialized (not just this plugin). This is needed because,
+	 * downloadSnapshots/changes etc have to begin to be processed only
+	 * after all the plugins are initialized
+	 */
+	events.ListenOnceFunc(apid.SystemEventsSelector, postInitPlugins)
 
 	log.Debug("end init")
 

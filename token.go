@@ -7,13 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var (
 	refreshFloatTime = time.Minute
-	getTokenLock     sync.Mutex
 )
 
 /*
@@ -26,15 +25,34 @@ Usage:
 */
 
 func createTokenManager() *tokenMan {
-	t := &tokenMan{}
-	t.doRefresh = make(chan bool, 1)
-	t.maintainToken()
+	isClosedInt := int32(0)
+
+	t := &tokenMan{
+		quitPollingForToken: make(chan bool, 1),
+		closed:              make(chan bool),
+		getTokenChan:        make(chan bool),
+		invalidateTokenChan: make(chan bool),
+		returnTokenChan:     make(chan *oauthToken),
+		invalidateDone:      make(chan bool),
+		isClosed:            &isClosedInt,
+	}
+
+	t.retrieveNewToken()
+	t.refreshTimer = time.After(t.token.refreshIn())
+	go t.maintainToken()
 	return t
 }
 
 type tokenMan struct {
-	token     *oauthToken
-	doRefresh chan bool
+	token               *oauthToken
+	isClosed            *int32
+	quitPollingForToken chan bool
+	closed              chan bool
+	getTokenChan        chan bool
+	invalidateTokenChan chan bool
+	refreshTimer        <-chan time.Time
+	returnTokenChan     chan *oauthToken
+	invalidateDone      chan bool
 }
 
 func (t *tokenMan) getBearerToken() string {
@@ -42,50 +60,63 @@ func (t *tokenMan) getBearerToken() string {
 }
 
 func (t *tokenMan) maintainToken() {
-	go func() {
-		for {
-			if t.token.needsRefresh() {
-				getTokenLock.Lock()
-				t.retrieveNewToken()
-				getTokenLock.Unlock()
-			}
-			select {
-			case _, ok := <-t.doRefresh:
-				if !ok {
-					log.Debug("closed tokenMan")
-					return
-				}
-				log.Debug("force token refresh")
-			case <-time.After(t.token.refreshIn()):
-				log.Debug("auto refresh token")
-			}
+	for {
+		select {
+		case <-t.closed:
+			return
+		case <-t.refreshTimer:
+			log.Debug("auto refresh token")
+			t.retrieveNewToken()
+			t.refreshTimer = time.After(t.token.refreshIn())
+		case <-t.getTokenChan:
+			token := t.token
+			t.returnTokenChan <- token
+		case <-t.invalidateTokenChan:
+			t.retrieveNewToken()
+			t.refreshTimer = time.After(t.token.refreshIn())
+			t.invalidateDone <- true
 		}
-	}()
-}
-
-func (t *tokenMan) invalidateToken() {
-	log.Debug("invalidating token")
-	t.token = nil
-	t.doRefresh <- true
+	}
 }
 
 // will block until valid
-func (t *tokenMan) getToken() *oauthToken {
-	getTokenLock.Lock()
-	defer getTokenLock.Unlock()
-
-	if t.token.isValid() {
-		log.Debugf("returning existing token: %v", t.token)
-		return t.token
+func (t *tokenMan) invalidateToken() {
+	//has been closed
+	if atomic.LoadInt32(t.isClosed) == int32(1) {
+		log.Debug("TokenManager: invalidateToken() called on closed tokenManager")
+		return
 	}
-
-	t.retrieveNewToken()
-	return t.token
+	log.Debug("invalidating token")
+	t.invalidateTokenChan <- true
+	<-t.invalidateDone
 }
 
+func (t *tokenMan) getToken() *oauthToken {
+	//has been closed
+	if atomic.LoadInt32(t.isClosed) == int32(1) {
+		log.Debug("TokenManager: getToken() called on closed tokenManager")
+		return nil
+	}
+	t.getTokenChan <- true
+	return <-t.returnTokenChan
+}
+
+/*
+ * blocking close() of tokenMan
+ */
+
 func (t *tokenMan) close() {
+	//has been closed
+	if atomic.SwapInt32(t.isClosed, 1) == int32(1) {
+		log.Panic("TokenManager: close() has been called before!")
+		return
+	}
 	log.Debug("close token manager")
-	close(t.doRefresh)
+	t.quitPollingForToken <- true
+	// sending instead of closing, to make sure it enters the t.doRefresh branch
+	t.closed <- true
+	close(t.closed)
+	log.Debug("token manager closed")
 }
 
 // don't call externally. will block until success.
@@ -99,18 +130,11 @@ func (t *tokenMan) retrieveNewToken() {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	retryIn := 5 * time.Millisecond
-	maxBackOff := maxBackoffTimeout
-	backOffFunc := createBackOff(retryIn, maxBackOff)
-	first := true
+	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : ", err) })
+}
 
-	for {
-		if first {
-			first = false
-		} else {
-			backOffFunc()
-		}
-
+func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
+	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
 		form.Add("client_id", config.GetString(configConsumerKey))
@@ -133,26 +157,26 @@ func (t *tokenMan) retrieveNewToken() {
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
-			continue
+			return err
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			log.Errorf("Unable to read EdgeProxy Sever response: %v", err)
-			continue
+			return err
 		}
 
 		if resp.StatusCode != 200 {
 			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
-			continue
+			return expected200Error{}
 		}
 
 		var token oauthToken
 		err = json.Unmarshal(body, &token)
 		if err != nil {
 			log.Errorf("unable to unmarshal JSON response '%s': %v", string(body), err)
-			continue
+			return err
 		}
 
 		if token.ExpiresIn > 0 {
@@ -166,12 +190,17 @@ func (t *tokenMan) retrieveNewToken() {
 
 		if newInstanceID {
 			newInstanceID = false
-			updateApidInstanceInfo()
-		}
+			err = updateApidInstanceInfo()
+			if err != nil {
+				log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
+				return err
 
+			}
+		}
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
-		return
+
+		return nil
 	}
 }
 

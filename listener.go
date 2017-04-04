@@ -29,21 +29,41 @@ func (h *handler) Handle(e apid.Event) {
 }
 
 func processSnapshot(snapshot *common.Snapshot) {
-
 	log.Debugf("Snapshot received. Switching to DB version: %s", snapshot.SnapshotInfo)
 
-	db, err := data.DBVersion(snapshot.SnapshotInfo)
+	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Unable to access database: %v", err)
 	}
 
-	err = initDB(db)
+	if config.GetString(configSnapshotProtocol) == "json" {
+		processJsonSnapshot(snapshot, db)
+	} else if config.GetString(configSnapshotProtocol) == "sqlite" {
+		processSqliteSnapshot(snapshot, db)
+	}
+
+	//update apid instance info
+	apidInfo.LastSnapshot = snapshot.SnapshotInfo
+	err = updateApidInstanceInfo()
+	if err != nil {
+		log.Panicf("Unable to update instance info: %v", err)
+	}
+
+	setDB(db)
+	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
+
+}
+
+func processSqliteSnapshot(snapshot *common.Snapshot, db apid.DB) {
+	//nothing to do as of now, here as a placeholder
+}
+
+func processJsonSnapshot(snapshot *common.Snapshot, db apid.DB) {
+
+	err := initDB(db)
 	if err != nil {
 		log.Panicf("Unable to initialize database: %v", err)
 	}
-
-	// clear cache
-	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -73,10 +93,6 @@ func processSnapshot(snapshot *common.Snapshot) {
 				if err != nil {
 					log.Panicf("Snapshot update failed: %v", err)
 				}
-				// cache scopes for this cluster
-				if ds.ClusterID == apidInfo.ClusterID {
-					scopeCache.updateCache(&ds)
-				}
 			}
 		}
 	}
@@ -85,15 +101,6 @@ func processSnapshot(snapshot *common.Snapshot) {
 	if err != nil {
 		log.Panicf("Error committing Snapshot change: %v", err)
 	}
-
-	apidInfo.LastSnapshot = snapshot.SnapshotInfo
-	err = updateApidInstanceInfo()
-	if err != nil {
-		log.Panicf("Unable to update instance info: %v", err)
-	}
-
-	setDB(db)
-	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
 }
 
 func processChangeList(changes *common.ChangeList) {
@@ -121,19 +128,9 @@ func processChangeList(changes *common.ChangeList) {
 			case common.Insert:
 				ds := makeDataScopeFromRow(change.NewRow)
 				err = insertDataScope(ds, tx)
-
-				// cache scopes for this cluster
-				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
-					scopeCache.updateCache(&ds)
-				}
 			case common.Delete:
 				ds := makeDataScopeFromRow(change.OldRow)
 				err = deleteDataScope(ds, tx)
-
-				// cache scopes for this cluster
-				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
-					scopeCache.removeCache(&ds)
-				}
 			default:
 				// common.Update is not allowed
 				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
