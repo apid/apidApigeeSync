@@ -270,11 +270,8 @@ var _ = Describe("Sync", func() {
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
 
-			pie := apid.PluginsInitializedEvent{
-				Description: "plugins initialized",
-			}
-			pie.Plugins = append(pie.Plugins, pluginData)
-			postInitPlugins(pie)
+			tokenManager = createTokenManager()
+			events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}
