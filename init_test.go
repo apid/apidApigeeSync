@@ -14,7 +14,7 @@ var _ = Describe("init", func() {
 
 			initConfigDefaults()
 			Expect(apidInfo.InstanceName).To(Equal("testhost"))
-		})
+		}, 3)
 
 		It("accept display name from config", func() {
 			config.Set(configName, "aa01")
@@ -23,7 +23,7 @@ var _ = Describe("init", func() {
 			apidInfoLatest, _ = getApidInstanceInfo()
 			Expect(apidInfoLatest.InstanceName).To(Equal("aa01"))
 			Expect(apidInfoLatest.LastSnapshot).To(Equal(""))
-		})
+		}, 3)
 
 	})
 

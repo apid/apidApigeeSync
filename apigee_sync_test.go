@@ -155,7 +155,7 @@ var _ = Describe("Sync", func() {
 			}
 			pie.Plugins = append(pie.Plugins, pluginData)
 			postInitPlugins(pie)
-		})
+		}, 3)
 
 		It("should bootstrap from local DB if present", func(done Done) {
 
@@ -196,7 +196,7 @@ var _ = Describe("Sync", func() {
 			pie.Plugins = append(pie.Plugins, pluginData)
 			postInitPlugins(pie)
 
-		})
+		}, 3)
 
 		It("should correctly identify non-proper subsets with respect to maps", func() {
 
@@ -237,7 +237,7 @@ var _ = Describe("Sync", func() {
 			Expect(changesHaveNewTables(nil,
 				[]common.Change{common.Change{Table: "a"}},
 			)).To(BeTrue())
-		})
+		}, 3)
 
 		// todo: disabled for now -
 		// there is precondition I haven't been able to track down that breaks this test on occasion
@@ -262,7 +262,7 @@ var _ = Describe("Sync", func() {
 			Expect(getChangeStatus("1.2.1", "1.2.2")).To(Equal(1))
 			Expect(getChangeStatus("2.2.1", "1.2.2")).To(Equal(-1))
 			Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
-		})
+		}, 3)
 
 		/*
 		 * XAPID-869, there should not be any panic if received duplicate snapshots during bootstrap
@@ -279,6 +279,6 @@ var _ = Describe("Sync", func() {
 			storeBootSnapshot(snapshot)
 			storeDataSnapshot(snapshot)
 			restoreContext()
-		})
+		}, 3)
 	})
 })
