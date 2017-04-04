@@ -65,9 +65,6 @@ func processJsonSnapshot(snapshot *common.Snapshot, db apid.DB) {
 		log.Panicf("Unable to initialize database: %v", err)
 	}
 
-	// clear cache
-	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
-
 	tx, err := db.Begin()
 	if err != nil {
 		log.Panicf("Error starting transaction: %v", err)
@@ -95,10 +92,6 @@ func processJsonSnapshot(snapshot *common.Snapshot, db apid.DB) {
 				err := insertDataScope(ds, tx)
 				if err != nil {
 					log.Panicf("Snapshot update failed: %v", err)
-				}
-				// cache scopes for this cluster
-				if ds.ClusterID == apidInfo.ClusterID {
-					scopeCache.updateCache(&ds)
 				}
 			}
 		}
@@ -135,19 +128,9 @@ func processChangeList(changes *common.ChangeList) {
 			case common.Insert:
 				ds := makeDataScopeFromRow(change.NewRow)
 				err = insertDataScope(ds, tx)
-
-				// cache scopes for this cluster
-				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
-					scopeCache.updateCache(&ds)
-				}
 			case common.Delete:
 				ds := makeDataScopeFromRow(change.OldRow)
 				err = deleteDataScope(ds, tx)
-
-				// cache scopes for this cluster
-				if (ds.ClusterID == apidInfo.ClusterID) && (err == nil) {
-					scopeCache.removeCache(&ds)
-				}
 			default:
 				// common.Update is not allowed
 				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)

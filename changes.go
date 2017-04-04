@@ -138,7 +138,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debug("polling...")
 
 	/* Find the scopes associated with the config id */
-	scopes := scopeCache.readAllScope()
+	scopes := findScopesForId(apidInfo.ClusterID)
 	v := url.Values{}
 
 	/* Sequence added to the query if available */

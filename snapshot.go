@@ -26,28 +26,14 @@ func downloadBootSnapshot(quitPolling chan bool) {
 }
 
 func storeBootSnapshot(snapshot *common.Snapshot) {
-	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
-	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
-	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
-	for _, table := range snapshot.Tables {
-		if table.Name == LISTENER_TABLE_DATA_SCOPE {
-			for _, row := range table.Rows {
-				ds := makeDataScopeFromRow(row)
-				// cache scopes for this cluster
-				if ds.ClusterID == apidInfo.ClusterID {
-					scopeCache.updateCache(&ds)
-				}
-			}
-		}
-	}
-	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
+	processSnapshot(snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
 func downloadDataSnapshot(quitPolling chan bool) {
 	log.Debug("download Snapshot for data scopes")
 
-	scopes := scopeCache.readAllScope()
+	scopes := findScopesForId(apidInfo.ClusterID)
 	scopes = append(scopes, apidInfo.ClusterID)
 	snapshot := &common.Snapshot{}
 	downloadSnapshot(scopes, snapshot, quitPolling)
