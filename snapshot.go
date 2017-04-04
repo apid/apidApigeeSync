@@ -22,19 +22,39 @@ func downloadBootSnapshot(quitPolling chan bool) {
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := &common.Snapshot{}
 	downloadSnapshot(scopes, snapshot, quitPolling)
+	storeBootSnapshot(snapshot)
+}
+
+func storeBootSnapshot(snapshot *common.Snapshot) {
+	// note that for boot snapshot case, we don't touch databases. We only update in-mem cache
+	// This aims to deal with duplicate snapshot version#, see XAPID-869 for details
+	scopeCache.clearAndInitCache(snapshot.SnapshotInfo)
+	for _, table := range snapshot.Tables {
+		if table.Name == LISTENER_TABLE_DATA_SCOPE {
+			for _, row := range table.Rows {
+				ds := makeDataScopeFromRow(row)
+				// cache scopes for this cluster
+				if ds.ClusterID == apidInfo.ClusterID {
+					scopeCache.updateCache(&ds)
+				}
+			}
+		}
+	}
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
-	processSnapshot(snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
 func downloadDataSnapshot(quitPolling chan bool) {
 	log.Debug("download Snapshot for data scopes")
 
-	var scopes = findScopesForId(apidInfo.ClusterID)
+	scopes := scopeCache.readAllScope()
 	scopes = append(scopes, apidInfo.ClusterID)
 	snapshot := &common.Snapshot{}
 	downloadSnapshot(scopes, snapshot, quitPolling)
+	storeDataSnapshot(snapshot)
+}
 
+func storeDataSnapshot(snapshot *common.Snapshot) {
 	knownTables = extractTablesFromSnapshot(snapshot)
 
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
@@ -50,6 +70,7 @@ func downloadDataSnapshot(quitPolling chan bool) {
 		log.Panic("Timeout. Plugins failed to respond to snapshot.")
 	case <-events.Emit(ApigeeSyncEventSelector, snapshot):
 	}
+
 }
 
 func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]bool) {
@@ -113,7 +134,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 }
 
 // will keep retrying with backoff until success
-func downloadSnapshot(scopes []string, snapshot *common.Snapshot, quitPolling chan bool) error {
+func downloadSnapshot(scopes []string, snapshot *common.Snapshot, quitPolling chan bool) {
 
 	log.Debug("downloadSnapshot")
 
@@ -142,8 +163,6 @@ func downloadSnapshot(scopes []string, snapshot *common.Snapshot, quitPolling ch
 	attemptDownload := getAttemptDownloadClosure(client, snapshot, uri)
 
 	pollWithBackoff(quitPolling, attemptDownload, handleSnapshotServerError)
-	return nil
-
 }
 
 func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, uri string) func(chan bool) error {

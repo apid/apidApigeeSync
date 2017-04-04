@@ -100,6 +100,8 @@ func initVariables(services apid.Services) error {
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
 
+	scopeCache = &DatascopeCache{requestChan: make(chan *cacheOperationRequest), readDoneChan: make(chan []string)}
+	go scopeCache.datascopeCacheManager()
 	return nil
 }
 

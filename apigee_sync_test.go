@@ -253,5 +253,35 @@ var _ = Describe("Sync", func() {
 			})
 			testMock.forceNewSnapshot()
 		})
+
+
+		It("Verify the Sequence Number Logic works as expected", func() {
+			Expect(getChangeStatus("1.1.1", "1.1.2")).To(Equal(1))
+			Expect(getChangeStatus("1.1.1", "1.2.1")).To(Equal(1))
+			Expect(getChangeStatus("1.2.1", "1.2.1")).To(Equal(0))
+			Expect(getChangeStatus("1.2.1", "1.2.2")).To(Equal(1))
+			Expect(getChangeStatus("2.2.1", "1.2.2")).To(Equal(-1))
+			Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
+		})
+
+		/*
+		 * XAPID-869, there should not be any panic if received duplicate snapshots during bootstrap
+		 */
+		It("Should be able to handle duplicate snapshot during bootstrap", func() {
+			initializeContext()
+
+			pie := apid.PluginsInitializedEvent{
+				Description: "plugins initialized",
+			}
+			pie.Plugins = append(pie.Plugins, pluginData)
+			postInitPlugins(pie)
+
+			scopes := []string{apidInfo.ClusterID}
+			snapshot := &common.Snapshot{}
+			downloadSnapshot(scopes, snapshot, nil)
+			storeBootSnapshot(snapshot)
+			storeDataSnapshot(snapshot)
+			restoreContext()
+		})
 	})
 })

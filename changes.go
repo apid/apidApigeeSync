@@ -138,7 +138,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debug("polling...")
 
 	/* Find the scopes associated with the config id */
-	scopes := findScopesForId(apidInfo.ClusterID)
+	scopes := scopeCache.readAllScope()
 	v := url.Values{}
 
 	/* Sequence added to the query if available */
@@ -148,9 +148,9 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	v.Add("block", block)
 
 	/*
-	* Include all the scopes associated with the config Id
-	* The Config Id is included as well, as it acts as the
-	* Bootstrap scope
+	 * Include all the scopes associated with the config Id
+	 * The Config Id is included as well, as it acts as the
+	 * Bootstrap scope
 	 */
 	for _, scope := range scopes {
 		v.Add("scope", scope)
@@ -161,6 +161,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	uri := changesUri.String()
 	log.Debugf("Fetching changes: %s", uri)
 
+	/* If error, break the loop, and retry after interval */
 	client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 	req, err := http.NewRequest("GET", uri, nil)
 	addHeaders(req)
@@ -221,6 +222,17 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		return err
 	}
 
+	/*
+	 * If the lastSequence is already newer or the same than what we got via
+	 * resp.LastSequence, Ignore it.
+	 */
+	if lastSequence != "" &&
+		getChangeStatus(lastSequence, resp.LastSequence) != 1 {
+		return changeServerError{
+			Code: "Ignore change, already have newer changes",
+		}
+	}
+
 	if changesRequireDDLSync(resp) {
 		return changeServerError{
 			Code: "DDL changes detected; must get new snapshot",
@@ -238,13 +250,8 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		log.Debugf("No Changes detected for Scopes: %s", scopes)
 	}
 
-	if lastSequence != resp.LastSequence {
-		lastSequence = resp.LastSequence
-		err := updateLastSequence(resp.LastSequence)
-		if err != nil {
-			log.Panic("Unable to update Sequence in DB")
-		}
-	}
+	updateSequence(resp.LastSequence)
+
 	return nil
 }
 
@@ -284,4 +291,29 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 	}
 
 	return false
+}
+
+/*
+ * seqCurr.Compare() will return 1, if its newer than seqPrev,
+ * else will return 0, if same, or -1 if older.
+ */
+func getChangeStatus(lastSeq string, currSeq string) int {
+	seqPrev, err := common.ParseSequence(lastSeq)
+	if err != nil {
+		log.Panic("Unable to parse previous sequence string")
+	}
+	seqCurr, err := common.ParseSequence(currSeq)
+	if err != nil {
+		log.Panic("Unable to parse current sequence string")
+	}
+	return seqCurr.Compare(seqPrev)
+}
+
+func updateSequence(seq string) {
+	lastSequence = seq
+	err := updateLastSequence(seq)
+	if err != nil {
+		log.Panic("Unable to update Sequence in DB")
+	}
+
 }
