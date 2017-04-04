@@ -140,12 +140,15 @@ func downloadSnapshot(scopes []string, snapshot *common.Snapshot, quitPolling ch
 	log.Infof("Snapshot Download: %s", uri)
 
 	client := &http.Client{
-		CheckRedirect: Redirect,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+			return nil
+		},
 		Timeout:       httpTimeout,
 	}
 
 	//pollWithBackoff only accepts function that accept a single quit channel
-	//to accomadate functions which need more parameters, wrap them in closures
+	//to accommodate functions which need more parameters, wrap them in closures
 	attemptDownload := getAttemptDownloadClosure(client, snapshot, uri)
 
 	pollWithBackoff(quitPolling, attemptDownload, handleSnapshotServerError)

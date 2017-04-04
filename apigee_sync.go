@@ -86,12 +86,6 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	}
 }
 
-func Redirect(req *http.Request, _ []*http.Request) error {
-	req.Header.Add("Authorization", "Bearer "+tokenManager.getBearerToken())
-	req.Header.Add("org", apidInfo.ClusterID) // todo: this is strange.. is it needed?
-	return nil
-}
-
 func addHeaders(req *http.Request) {
 	req.Header.Add("Authorization", "Bearer "+ tokenManager.getBearerToken())
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
