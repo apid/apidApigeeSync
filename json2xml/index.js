@@ -74,14 +74,14 @@ module.exports.init = function (config, logger, stats) {
 
 			//if plugin is disabled don't process headers.
 			if (!disable) {
-				if (method === "get" && acceptType === "application/xml") {
+				if (method === "get" && acceptType.indexOf("application/xml") > -1) {
 					responseXML = true;
-				} else if (method === "get" && acceptType === "application/json") {
+				} else if (method === "get" && acceptType.indexOf("application/json") > -1) {
 					responseJSON = true;
-				} else if (method !== "get" && contentType === "application/json") {
+				} else if (method !== "get" && contentType.indexOf("application/json") > -1) {
 					requestJSON = true;
 					responseJSON = true;
-				} else if (method !== "get" && contentType === "application/xml") {
+				} else if (method !== "get" && contentType.indexOf("application/xml") > -1) {
 					requestXML = true;
 					responseXML = true;
 				}
@@ -156,9 +156,9 @@ module.exports.init = function (config, logger, stats) {
 			if (data && data.length > 0 && disable == false) accumulateResponse(res, data);
 
 			var contentType = res.getHeader('content-type');
-			if (contentType === "application/xml") {
+			if (contentType.indexOf("application/xml") > -1) {
 				responseIsXML = true;
-			} else if (contentType === "application/json") {
+			} else if (contentType.indexOf("application/json") > -1) {
 				responseIsJSON = true;
 			}
 

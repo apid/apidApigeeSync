@@ -1,5 +1,7 @@
 #Plugins
 
+Build Status [![Build Status](https://travis-ci.org/apigee/microgateway-plugins.svg?branch=accumulate-request-fixes)](https://travis-ci.org/apigee/microgateway-plugins)
+
 ##Overview
 This repo contains plugins for the [microgateway-core project](https://github.com/apigee/microgateway-core).  
 
