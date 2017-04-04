@@ -27,7 +27,7 @@ const dummyConfigValue string = "placeholder"
 
 var _ = BeforeSuite(func() {
 	wipeDBAferTest = true
-})
+}, 3)
 
 var _ = BeforeEach(func(done Done) {
 	apid.Initialize(factory.DefaultServicesFactory())

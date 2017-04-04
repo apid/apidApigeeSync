@@ -155,7 +155,7 @@ var _ = Describe("Sync", func() {
 			}
 			pie.Plugins = append(pie.Plugins, pluginData)
 			postInitPlugins(pie)
-		}, 3)
+		})
 
 		It("should bootstrap from local DB if present", func(done Done) {
 
@@ -196,7 +196,7 @@ var _ = Describe("Sync", func() {
 			pie.Plugins = append(pie.Plugins, pluginData)
 			postInitPlugins(pie)
 
-		}, 3)
+		})
 
 		It("should correctly identify non-proper subsets with respect to maps", func() {
 
