@@ -88,8 +88,9 @@ func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
 
 	log.Debugf("inserting into APID_CLUSTER: %v", dac)
 
+	//replace to accomodate same snapshot txid
 	stmt, err := txn.Prepare(`
-	INSERT INTO APID_CLUSTER
+	REPLACE INTO APID_CLUSTER
 		(id, description, name, umbrella_org_app_name,
 		created, created_by, updated, updated_by,
 		last_sequence)
@@ -117,8 +118,9 @@ func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
 
 	log.Debugf("insert DATA_SCOPE: %v", ds)
 
+	//replace to accomodate same snapshot txid
 	stmt, err := txn.Prepare(`
-	INSERT INTO DATA_SCOPE
+	REPLACE INTO DATA_SCOPE
 		(id, apid_cluster_id, scope, org,
 		env, created, created_by, updated,
 		updated_by)

@@ -46,7 +46,7 @@ func bootstrap() {
  */
 func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleError func(error)) {
 
-	backoff := NewExponentialBackoff(200*time.Millisecond, config.GetDuration(configPollInterval), 2)
+	backoff := NewExponentialBackoff(200*time.Millisecond, config.GetDuration(configPollInterval), 2, true)
 
 	//inintialize the retry channel to start first attempt immediately
 	retry := time.After(0 * time.Millisecond)
@@ -93,7 +93,7 @@ func Redirect(req *http.Request, _ []*http.Request) error {
 }
 
 func addHeaders(req *http.Request) {
-	req.Header.Add("Authorization", "Bearer "+tokenManager.getBearerToken())
+	req.Header.Add("Authorization", "Bearer "+ tokenManager.getBearerToken())
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))

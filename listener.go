@@ -130,7 +130,7 @@ func processChangeList(changes *common.ChangeList) {
 				err = insertDataScope(ds, tx)
 			case common.Delete:
 				ds := makeDataScopeFromRow(change.OldRow)
-				deleteDataScope(ds, tx)
+				err = deleteDataScope(ds, tx)
 			default:
 				// common.Update is not allowed
 				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)

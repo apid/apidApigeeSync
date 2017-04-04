@@ -19,7 +19,7 @@ var _ = Describe("Sync", func() {
 
 			// set up mock server
 			mockParms := MockParms{
-				ReliableAPI:  true,
+				ReliableAPI:  false,
 				ClusterID:    config.GetString(configApidClusterId),
 				TokenKey:     config.GetString(configConsumerKey),
 				TokenSecret:  config.GetString(configConsumerSecret),
@@ -237,7 +237,7 @@ var _ = Describe("Sync", func() {
 			Expect(changesHaveNewTables(nil,
 				[]common.Change{common.Change{Table: "a"}},
 			)).To(BeTrue())
-		})
+		}, 3)
 
 		// todo: disabled for now -
 		// there is precondition I haven't been able to track down that breaks this test on occasion
@@ -253,5 +253,32 @@ var _ = Describe("Sync", func() {
 			})
 			testMock.forceNewSnapshot()
 		})
+
+
+		It("Verify the Sequence Number Logic works as expected", func() {
+			Expect(getChangeStatus("1.1.1", "1.1.2")).To(Equal(1))
+			Expect(getChangeStatus("1.1.1", "1.2.1")).To(Equal(1))
+			Expect(getChangeStatus("1.2.1", "1.2.1")).To(Equal(0))
+			Expect(getChangeStatus("1.2.1", "1.2.2")).To(Equal(1))
+			Expect(getChangeStatus("2.2.1", "1.2.2")).To(Equal(-1))
+			Expect(getChangeStatus("2.2.1", "2.2.0")).To(Equal(-1))
+		}, 3)
+
+		/*
+		 * XAPID-869, there should not be any panic if received duplicate snapshots during bootstrap
+		 */
+		It("Should be able to handle duplicate snapshot during bootstrap", func() {
+			initializeContext()
+
+			tokenManager = createTokenManager()
+			events.Listen(ApigeeSyncEventSelector, &handler{})
+
+			scopes := []string{apidInfo.ClusterID}
+			snapshot := &common.Snapshot{}
+			downloadSnapshot(scopes, snapshot, nil)
+			storeBootSnapshot(snapshot)
+			storeDataSnapshot(snapshot)
+			restoreContext()
+		}, 3)
 	})
 })

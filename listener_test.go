@@ -48,7 +48,7 @@ var _ = Describe("listener", func() {
 			}
 
 			Expect(func() { handler.Handle(&event) }).To(Panic())
-		})
+		}, 3)
 
 		It("should process a valid Snapshot", func() {
 
@@ -204,7 +204,7 @@ var _ = Describe("listener", func() {
 
 			//restore the last snapshot
 			apidInfo.LastSnapshot = saveLastSnapshot
-		})
+		}, 3)
 	})
 
 	Context("ApigeeSync change event", func() {
@@ -226,7 +226,7 @@ var _ = Describe("listener", func() {
 				}
 
 				Expect(func() { handler.Handle(&event) }).To(Panic())
-			})
+			}, 3)
 
 			It("update event should panic", func() {
 
@@ -243,7 +243,7 @@ var _ = Describe("listener", func() {
 				Expect(func() { handler.Handle(&event) }).To(Panic())
 				//restore the last snapshot
 				apidInfo.LastSnapshot = saveLastSnapshot
-			})
+			}, 3)
 
 			PIt("delete event should kill all the things!")
 		})
@@ -329,7 +329,7 @@ var _ = Describe("listener", func() {
 				Expect(len(scopes)).To(Equal(2))
 				Expect(scopes[0]).To(Equal("s1"))
 				Expect(scopes[1]).To(Equal("s2"))
-			})
+			}, 3)
 
 			It("delete event should delete", func() {
 				insert := common.ChangeList{
@@ -373,7 +373,7 @@ var _ = Describe("listener", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(nRows).To(Equal(0))
-			})
+			}, 3)
 
 			It("update event should panic", func() {
 
@@ -390,7 +390,7 @@ var _ = Describe("listener", func() {
 				Expect(func() { handler.Handle(&event) }).To(Panic())
 				//restore the last snapshot
 				apidInfo.LastSnapshot = saveLastSnapshot
-			})
+			}, 3)
 
 		})
 

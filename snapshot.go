@@ -81,6 +81,7 @@ func (s *snapShotManager) downloadBootSnapshot() {
 
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := &common.Snapshot{}
+  
 	err := s.downloadSnapshot(scopes, snapshot)
 	if err != nil {
 		// this may happen during shutdown
@@ -97,6 +98,10 @@ func (s *snapShotManager) downloadBootSnapshot() {
 	}
 
 	// note that for boot snapshot case, we don't need to inform plugins as they'll get the data snapshot
+  storeBootSnapshot(snapshot)
+}
+
+func storeBootSnapshot(snapshot *common.Snapshot) {
 	processSnapshot(snapshot)
 }
 
@@ -116,7 +121,7 @@ func (s *snapShotManager) downloadDataSnapshot() {
 
 	log.Debug("download Snapshot for data scopes")
 
-	var scopes = findScopesForId(apidInfo.ClusterID)
+	scopes := findScopesForId(apidInfo.ClusterID)
 	scopes = append(scopes, apidInfo.ClusterID)
 	snapshot := &common.Snapshot{}
 	err := s.downloadSnapshot(scopes, snapshot)
@@ -127,7 +132,10 @@ func (s *snapShotManager) downloadDataSnapshot() {
 		}
 		return
 	}
+	storeDataSnapshot(snapshot)
+}
 
+func storeDataSnapshot(snapshot *common.Snapshot) {
 	knownTables = extractTablesFromSnapshot(snapshot)
 
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
@@ -150,8 +158,8 @@ func (s *snapShotManager) downloadDataSnapshot() {
 	case <-events.Emit(ApigeeSyncEventSelector, snapshot):
 		// the new snapshot has been processed
 		// if close() happen after persistKnownTablesToDB(), will not interrupt snapshot processing to maintain consistency
-		// In this case, will close now
 	}
+
 }
 
 func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]bool) {
@@ -216,6 +224,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 
 // a blocking method
 // will keep retrying with backoff until success
+
 func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
 	// if closed
 	if atomic.LoadInt32(s.isClosed) == int32(1) {
@@ -248,10 +257,8 @@ func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Sna
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accomadate functions which need more parameters, wrap them in closures
 	attemptDownload := getAttemptDownloadClosure(client, snapshot, uri)
-
 	pollWithBackoff(s.quitChan, attemptDownload, handleSnapshotServerError)
 	return nil
-
 }
 
 func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, uri string) func(chan bool) error {

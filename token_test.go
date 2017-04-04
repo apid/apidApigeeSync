@@ -30,7 +30,7 @@ var _ = Describe("token", func() {
 			Expect(t.refreshIn().Seconds()).To(BeNumerically(">", 0))
 			Expect(t.needsRefresh()).To(BeFalse())
 			Expect(t.isValid()).To(BeTrue())
-		})
+		}, 3)
 
 		It("should calculate expired token", func() {
 
@@ -42,7 +42,7 @@ var _ = Describe("token", func() {
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<", 0))
 			Expect(t.needsRefresh()).To(BeTrue())
 			Expect(t.isValid()).To(BeFalse())
-		})
+		}, 3)
 
 		It("should calculate token needing refresh", func() {
 
@@ -54,7 +54,7 @@ var _ = Describe("token", func() {
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<", 0))
 			Expect(t.needsRefresh()).To(BeTrue())
 			Expect(t.isValid()).To(BeTrue())
-		})
+		}, 3)
 
 		It("should calculate on empty token", func() {
 
@@ -62,7 +62,7 @@ var _ = Describe("token", func() {
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<=", 0))
 			Expect(t.needsRefresh()).To(BeTrue())
 			Expect(t.isValid()).To(BeFalse())
-		})
+		}, 3)
 	})
 
 	Context("tokenMan", func() {
@@ -91,7 +91,7 @@ var _ = Describe("token", func() {
 			Expect(bToken).To(Equal(token.AccessToken))
 			testedTokenManager.close()
 			ts.Close()
-		})
+		}, 3)
 
 		It("should refresh when forced to", func() {
 
@@ -119,7 +119,7 @@ var _ = Describe("token", func() {
 			Expect(token.AccessToken).ToNot(Equal(token2.AccessToken))
 			testedTokenManager.close()
 			ts.Close()
-		})
+		}, 3)
 
 		It("should refresh in refresh interval", func(done Done) {
 
@@ -157,7 +157,7 @@ var _ = Describe("token", func() {
 			ts.Close()
 
 			close(done)
-		})
+		}, 3)
 
 		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
 			finished := make(chan bool, 1)
@@ -197,6 +197,6 @@ var _ = Describe("token", func() {
 			testedTokenManager.close()
 			ts.Close()
 			close(done)
-		})
+		}, 3)
 	})
 })
