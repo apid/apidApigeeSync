@@ -155,7 +155,7 @@ var _ = Describe("Sync", func() {
 			}
 			pie.Plugins = append(pie.Plugins, pluginData)
 			postInitPlugins(pie)
-		}, 3)
+		}, 5)
 
 		It("should bootstrap from local DB if present", func(done Done) {
 
