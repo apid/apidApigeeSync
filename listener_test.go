@@ -328,6 +328,29 @@ var _ = Describe("listener", func() {
 				Expect(len(scopes)).To(Equal(2))
 				Expect(scopes[0]).To(Equal("s1"))
 				Expect(scopes[1]).To(Equal("s2"))
+
+				/* Simulate a datascope change */
+				event = common.ChangeList{
+					LastSequence: "testnew",
+					Changes: []common.Change{
+						{
+							Operation: common.Insert,
+							Table:     LISTENER_TABLE_DATA_SCOPE,
+							NewRow: common.Row{
+								"id":              &common.ColumnVal{Value: "k"},
+								"apid_cluster_id": &common.ColumnVal{Value: "a"},
+								"scope":           &common.ColumnVal{Value: "s3"},
+								"org":             &common.ColumnVal{Value: "o2"},
+								"env":             &common.ColumnVal{Value: "e"},
+							},
+						},
+					},
+				}
+				handler.Handle(&event)
+				newScopes := findScopesForId("a")
+				Expect(len(newScopes)).To(Equal(3))
+				Expect(ArrayEquals(newScopes, scopes)).To(Equal(false))
+
 			})
 
 			It("delete event should delete", func() {

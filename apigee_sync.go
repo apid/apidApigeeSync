@@ -167,7 +167,7 @@ func pollChangeAgent() error {
 		 */
 		if lastSequence != "" &&
 			getChangeStatus(lastSequence, resp.LastSequence) != 1 {
-			log.Errorf("Ignore change, already have newer changes")
+			log.Debugf("Ignore change, already have newer changes")
 			continue
 		}
 
@@ -193,8 +193,20 @@ func pollChangeAgent() error {
 		} else {
 			log.Debugf("No Changes detected for Scopes: %s", scopes)
 		}
-
 		updateSequence(resp.LastSequence)
+
+		/*
+		 * Check to see if there was any change in scope, if found handle it
+		 * by getting a new snapshot
+		 */
+		newScopes := findScopesForId(apidInfo.ClusterID)
+		if !ArrayEquals(newScopes, scopes) {
+			log.Debugf("Detected scope changes, going to fetch a new snapshot to sync...")
+			return changeServerError{
+				Code: "Scope changes detected; must get new snapshot",
+			}
+		}
+
 	}
 }
 
@@ -538,5 +550,20 @@ func mapIsSubset(a map[string]bool, b map[string]bool) bool {
 		}
 	}
 
+	return true
+}
+
+/*
+ * Returns true if the two arrays have matching contents
+ */
+func ArrayEquals(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
 	return true
 }
