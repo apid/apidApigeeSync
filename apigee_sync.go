@@ -46,7 +46,7 @@ func bootstrap() {
  */
 func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleError func(error)) {
 
-	backoff := NewExponentialBackoff(200*time.Millisecond, config.GetDuration(configPollInterval), 2)
+	backoff := NewExponentialBackoff(200*time.Millisecond, config.GetDuration(configPollInterval), 2, true)
 
 	//inintialize the retry channel to start first attempt immediately
 	retry := time.After(0 * time.Millisecond)
