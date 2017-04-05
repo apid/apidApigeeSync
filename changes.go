@@ -44,18 +44,21 @@ func (c *pollChangeManager) close() <-chan bool {
 	if atomic.SwapInt32(c.isClosed, 1) == int32(1) {
 		log.Error("pollChangeManager: close() called on a closed pollChangeManager!")
 		go func() {
-			finishChan <- false
 			log.Debug("change manager closed")
+			finishChan <- false
 		}()
 		return finishChan
 	}
 	// not launched
 	if atomic.LoadInt32(c.isLaunched) == int32(0) {
-		log.Error("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! close tokenManager!")
+		log.Debug("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
+		log.Warn("Attempt to close unstarted change manager")
 		go func() {
+			c.quitChan <- true
 			tokenManager.close()
-			finishChan <- false
+			<-snapManager.close()
 			log.Debug("change manager closed")
+			finishChan <- false
 		}()
 		return finishChan
 	}
@@ -64,8 +67,9 @@ func (c *pollChangeManager) close() <-chan bool {
 	go func() {
 		c.quitChan <- true
 		tokenManager.close()
-		finishChan <- true
+		<-snapManager.close()
 		log.Debug("change manager closed")
+		finishChan <- true
 	}()
 	return finishChan
 }
@@ -75,11 +79,6 @@ func (c *pollChangeManager) close() <-chan bool {
  */
 
 func (c *pollChangeManager) pollChangeWithBackoff() {
-	// closed
-	if atomic.LoadInt32(c.isClosed) == int32(1) {
-		log.Error("pollChangeManager: pollChangeWithBackoff() called after closed")
-		return
-	}
 	// has been launched before
 	if atomic.SwapInt32(c.isLaunched, 1) == int32(1) {
 		log.Error("pollChangeManager: pollChangeWithBackoff() has been launched before")
@@ -267,7 +266,7 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 	}
 	if _, ok := err.(changeServerError); ok {
 		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
-		downloadDataSnapshot(c.quitChan)
+		snapManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}

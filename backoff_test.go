@@ -24,7 +24,7 @@ var _ = Describe("backoff", func() {
 		})
 
 		It("should properly apply exponential backoff strategy", func() {
-			b := NewExponentialBackoff(200 * time.Millisecond, 2 * time.Second, 2, false)
+			b := NewExponentialBackoff(200*time.Millisecond, 2*time.Second, 2, false)
 			Expect(200 * time.Millisecond).To(Equal(b.Duration()))
 			Expect(1).To(Equal(b.Attempt()))
 			Expect(400 * time.Millisecond).To(Equal(b.Duration()))
@@ -36,7 +36,7 @@ var _ = Describe("backoff", func() {
 		})
 
 		It("should reset properly", func() {
-			b := NewExponentialBackoff(200 * time.Millisecond, 2 * time.Second, 2, false)
+			b := NewExponentialBackoff(200*time.Millisecond, 2*time.Second, 2, false)
 			Expect(200 * time.Millisecond).To(Equal(b.Duration()))
 			Expect(1).To(Equal(b.Attempt()))
 			Expect(400 * time.Millisecond).To(Equal(b.Duration()))
