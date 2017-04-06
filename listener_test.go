@@ -50,6 +50,22 @@ var _ = Describe("listener", func() {
 			Expect(func() { handler.Handle(&event) }).To(Panic())
 		}, 3)
 
+		It("should fail if more than one apid_cluster rows", func() {
+			newScopes := []string{"foo"}
+			scopes := []string{"bar"}
+			Expect(scopeChanged(newScopes, scopes)).To(Equal(changeServerError{Code: "Scope changes detected; must get new snapshot"}))
+			newScopes = []string{"foo", "bar"}
+			scopes = []string{"bar"}
+			Expect(scopeChanged(newScopes, scopes)).To(Equal(changeServerError{Code: "Scope changes detected; must get new snapshot"}))
+			newScopes = []string{"foo"}
+			scopes = []string{"bar", "foo"}
+			Expect(scopeChanged(newScopes, scopes)).To(Equal(changeServerError{Code: "Scope changes detected; must get new snapshot"}))
+			newScopes = []string{"foo", "bar"}
+			scopes = []string{"bar", "foo"}
+			Expect(scopeChanged(newScopes, scopes)).To(BeNil())
+
+		}, 3)
+
 		It("should process a valid Snapshot", func() {
 
 			event := common.Snapshot{
@@ -329,6 +345,7 @@ var _ = Describe("listener", func() {
 				Expect(len(scopes)).To(Equal(2))
 				Expect(scopes[0]).To(Equal("s1"))
 				Expect(scopes[1]).To(Equal("s2"))
+
 			}, 3)
 
 			It("delete event should delete", func() {

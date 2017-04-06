@@ -2,14 +2,14 @@ package apidApigeeSync
 
 import (
 	"encoding/json"
+	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-	"time"
-
-	"github.com/apigee-labs/transicator/common"
+	"sort"
 	"sync/atomic"
+	"time"
 )
 
 var lastSequence string
@@ -227,9 +227,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	 */
 	if lastSequence != "" &&
 		getChangeStatus(lastSequence, resp.LastSequence) != 1 {
-		return changeServerError{
-			Code: "Ignore change, already have newer changes",
-		}
+		return nil
 	}
 
 	if changesRequireDDLSync(resp) {
@@ -251,6 +249,16 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	updateSequence(resp.LastSequence)
 
+	/*
+	 * Check to see if there was any change in scope. If found, handle it
+	 * by getting a new snapshot
+	 */
+	newScopes := findScopesForId(apidInfo.ClusterID)
+	cs := scopeChanged(newScopes, scopes)
+	if cs != nil {
+		return cs
+	}
+
 	return nil
 }
 
@@ -264,8 +272,8 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 		log.Debugf("handleChangeServerError: changeManager has been closed")
 		return
 	}
-	if _, ok := err.(changeServerError); ok {
-		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
+	if c, ok := err.(changeServerError); ok {
+		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
 		snapManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
@@ -316,4 +324,26 @@ func updateSequence(seq string) {
 		log.Panic("Unable to update Sequence in DB")
 	}
 
+}
+
+/*
+ * Returns nil if the two arrays have matching contents
+ */
+func scopeChanged(a, b []string) error {
+
+	if len(a) != len(b) {
+		return changeServerError{
+			Code: "Scope changes detected; must get new snapshot",
+		}
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	for i, v := range a {
+		if v != b[i] {
+			return changeServerError{
+				Code: "Scope changes detected; must get new snapshot",
+			}
+		}
+	}
+	return nil
 }
