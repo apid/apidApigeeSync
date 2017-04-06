@@ -2,14 +2,14 @@ package apidApigeeSync
 
 import (
 	"encoding/json"
+	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-	"time"
-
-	"github.com/apigee-labs/transicator/common"
+	"sort"
 	"sync/atomic"
+	"time"
 )
 
 var lastSequence string
@@ -251,6 +251,17 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	updateSequence(resp.LastSequence)
 
+	/*
+	 * Check to see if there was any change in scope. If found, handle it
+	 * by getting a new snapshot
+	 */
+	newScopes := findScopesForId(apidInfo.ClusterID)
+	cs := scopeChanged(newScopes, scopes)
+	if cs != nil {
+		log.Debugf("Detected scope changes, going to fetch a new snapshot to sync...")
+		return cs
+	}
+
 	return nil
 }
 
@@ -315,4 +326,26 @@ func updateSequence(seq string) {
 		log.Panic("Unable to update Sequence in DB")
 	}
 
+}
+
+/*
+ * Returns nil if the two arrays have matching contents
+ */
+func scopeChanged(a, b []string) error {
+
+	if len(a) != len(b) {
+		return changeServerError{
+			Code: "Scope changes detected; must get new snapshot",
+		}
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	for i, v := range a {
+		if v != b[i] {
+			return changeServerError{
+				Code: "Scope changes detected; must get new snapshot",
+			}
+		}
+	}
+	return nil
 }
