@@ -227,9 +227,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	 */
 	if lastSequence != "" &&
 		getChangeStatus(lastSequence, resp.LastSequence) != 1 {
-		return changeServerError{
-			Code: "Ignore change, already have newer changes",
-		}
+		return nil
 	}
 
 	if changesRequireDDLSync(resp) {
@@ -258,7 +256,6 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	newScopes := findScopesForId(apidInfo.ClusterID)
 	cs := scopeChanged(newScopes, scopes)
 	if cs != nil {
-		log.Debugf("Detected scope changes, going to fetch a new snapshot to sync...")
 		return cs
 	}
 
@@ -275,8 +272,8 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 		log.Debugf("handleChangeServerError: changeManager has been closed")
 		return
 	}
-	if _, ok := err.(changeServerError); ok {
-		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
+	if c, ok := err.(changeServerError); ok {
+		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
 		snapManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
