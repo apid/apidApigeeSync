@@ -278,7 +278,8 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
-	if a == nil || changes == nil {
+	if a == nil {
+		log.Warn("Nil map passed to function changesHaveNewTables, may be bug")
 		return true
 	}
 

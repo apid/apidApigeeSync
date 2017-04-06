@@ -231,7 +231,7 @@ var _ = Describe("Sync", func() {
 			)).To(BeFalse())
 
 			//test b nil
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeTrue())
+			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeFalse())
 
 			//test a nil
 			Expect(changesHaveNewTables(nil,
