@@ -129,12 +129,12 @@ func _initPlugin(services apid.Services) error {
 	log.Debug("start init")
 
 	config = services.Config()
+	initConfigDefaults()
+
 	err := checkForRequiredValues()
 	if err != nil {
 		return err
 	}
-
-	initConfigDefaults()
 
 	err = initVariables(services)
 	if err != nil {
