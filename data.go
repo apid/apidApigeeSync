@@ -10,6 +10,11 @@ import (
 	"github.com/30x/apid-core"
 )
 
+const (
+	sqlTimeFormat = "2006-01-02 15:04:05.999 -0700 MST"
+	iso8601       = "2006-01-02T15:04:05.999Z07:00"
+)
+
 var (
 	unsafeDB apid.DB
 	dbMux    sync.RWMutex

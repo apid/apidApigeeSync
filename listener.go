@@ -3,6 +3,7 @@ package apidApigeeSync
 import (
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
+	"time"
 )
 
 const (
@@ -160,6 +161,23 @@ func makeApidClusterFromRow(row common.Row) dataApidCluster {
 	row.Get("updated_by", &dac.UpdatedBy)
 	row.Get("description", &dac.Description)
 
+	// convert timestamp to ISO8601
+	if dac.Created != "" {
+		created, err := time.Parse(sqlTimeFormat, dac.Created)
+		if err != nil {
+			log.Panic(err)
+		}
+		dac.Created = created.Format(iso8601)
+	}
+
+	if dac.Updated != "" {
+		updated, err := time.Parse(sqlTimeFormat, dac.Updated)
+		if err != nil {
+			log.Panic(err)
+		}
+		dac.Updated = updated.Format(iso8601)
+	}
+
 	return dac
 }
 
@@ -177,5 +195,21 @@ func makeDataScopeFromRow(row common.Row) dataDataScope {
 	row.Get("updated", &ds.Updated)
 	row.Get("updated_by", &ds.UpdatedBy)
 
+	// convert timestamp to ISO8601
+	if ds.Created != "" {
+		created, err := time.Parse(sqlTimeFormat, ds.Created)
+		if err != nil {
+			log.Panic(err)
+		}
+		ds.Created = created.Format(iso8601)
+	}
+
+	if ds.Updated != "" {
+		updated, err := time.Parse(sqlTimeFormat, ds.Updated)
+		if err != nil {
+			log.Panic(err)
+		}
+		ds.Updated = updated.Format(iso8601)
+	}
 	return ds
 }

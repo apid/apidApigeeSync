@@ -252,7 +252,7 @@ func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Sna
 			req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
 			return nil
 		},
-		Timeout:       httpTimeout,
+		Timeout: httpTimeout,
 	}
 
 	//pollWithBackoff only accepts function that accept a single quit channel
