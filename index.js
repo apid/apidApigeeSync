@@ -10,6 +10,8 @@ module.exports = {
   'quota-memory':require('./quota-memory'),
   spikearrest:require('./spikearrest'),
   'transform-uppercase':require('./transform-uppercase'),
+  accesscontrol:require('./accesscontrol'),
+  eurekaclient:require('./eurekaclient')
   json2xml: require('./json2xml'),
   healthcheck: require('./healthcheck')
 }

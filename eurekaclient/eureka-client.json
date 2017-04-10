@@ -1,0 +1,15 @@
+{
+	"instance":{
+		"app": "microgateway",
+		"vipAddress": "microgateway",
+		"dataCenterInfo":{
+		  "name": "MyOwn"
+		},
+		"port": {}
+	},
+	"eureka":{
+		"host": "localhost",
+		"port": 8761,
+		"servicePath": "/eureka/apps/"
+	}	
+}
