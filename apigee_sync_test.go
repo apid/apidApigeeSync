@@ -198,6 +198,21 @@ var _ = Describe("Sync", func() {
 
 		}, 3)
 
+		It("should detect apid_cluster_id change in config yaml", func () {
+			Expect(apidInfo).ToNot(BeNil())
+			Expect(apidInfo.ClusterID).To(Equal("bootstrap"))
+			Expect(apidInfo.InstanceID).ToNot(BeEmpty())
+			previousInstanceId := apidInfo.InstanceID
+
+			config.Set(configApidClusterId, "new value")
+			apidInfo, err := getApidInstanceInfo()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apidInfo.LastSnapshot).To(BeEmpty())
+			Expect(apidInfo.InstanceID).ToNot(BeEmpty())
+			Expect(apidInfo.InstanceID).ToNot(Equal(previousInstanceId))
+			Expect(apidInfo.ClusterID).To(Equal("new value"))
+		})
+
 		It("should correctly identify non-proper subsets with respect to maps", func() {
 
 			//test b proper subset of a
