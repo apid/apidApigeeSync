@@ -24,7 +24,7 @@ func (h *handler) Handle(e apid.Event) {
 	} else if snapShot, ok := e.(*common.Snapshot); ok {
 		processSnapshot(snapShot)
 	} else {
-		log.Errorf("Received invalid event. Ignoring. %v", e)
+		log.Debugf("Received invalid event. Ignoring. %v", e)
 	}
 }
 

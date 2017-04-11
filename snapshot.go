@@ -250,6 +250,7 @@ func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Sna
 	httpclient.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
 		req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
 		return nil
+
 	}
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accommodate functions which need more parameters, wrap them in closures
@@ -296,7 +297,7 @@ func getAttemptDownloadClosure(client *http.Client, snapshot *common.Snapshot, u
 		// Decode the Snapshot server response
 		err = processSnapshotResponse(r, snapshot)
 		if err != nil {
-			log.Errorf("Response Data not parsable: %v", err)
+			log.Errorf("Snapshot server response Data not parsable: %v", err)
 			return err
 		}
 
