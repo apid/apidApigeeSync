@@ -5,8 +5,8 @@ import (
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"net/http"
 	"net/http/httptest"
-	//"time"
 )
 
 var _ = Describe("Sync", func() {
@@ -268,9 +268,13 @@ var _ = Describe("Sync", func() {
 		 */
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
-
+			tr := &http.Transport{
+				DisableKeepAlives:   true,
+				MaxIdleConnsPerHost: maxIdleConnsPerHost,
+			}
+			client := &http.Client{Transport: tr, Timeout: httpTimeout}
 			tokenManager = createTokenManager()
-			snapManager = createSnapShotManager()
+			snapManager = createSnapShotManager(client)
 			events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
@@ -282,5 +286,42 @@ var _ = Describe("Sync", func() {
 			<-snapManager.close()
 			tokenManager.close()
 		}, 3)
+
+		It("Reuse http.Client connection for multiple concurrent requests", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			}))
+			tr := &http.Transport{
+				DisableKeepAlives:   true,
+				MaxIdleConnsPerHost: 10,
+			}
+			var rspcnt int = 0
+			ch := make(chan *http.Response)
+			client := &http.Client{Transport: tr}
+			for i := 0; i < maxIdleConnsPerHost; i++ {
+				go func(client *http.Client) {
+					req, err := http.NewRequest("GET", server.URL, nil)
+					resp, err := client.Do(req)
+					if err != nil {
+						Fail("Unable to process Client request")
+					}
+					ch <- resp
+					resp.Body.Close()
+
+				}(client)
+			}
+			for {
+				select {
+				case resp := <-ch:
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					if rspcnt >= maxIdleConnsPerHost-1 {
+						return
+					}
+					rspcnt++
+				default:
+				}
+			}
+
+		}, 3)
+
 	})
 })

@@ -21,15 +21,18 @@ type pollChangeManager struct {
 	// 0 for pollChangeWithBackoff() not launched, 1 for launched
 	isLaunched *int32
 	quitChan   chan bool
+	client     *http.Client
 }
 
-func createChangeManager() *pollChangeManager {
+func createChangeManager(client *http.Client) *pollChangeManager {
 	isClosedInt := int32(0)
 	isLaunchedInt := int32(0)
+	client.CheckRedirect = nil
 	return &pollChangeManager{
 		isClosed:   &isClosedInt,
 		quitChan:   make(chan bool),
 		isLaunched: &isLaunchedInt,
+		client:     client,
 	}
 }
 
@@ -161,11 +164,10 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debugf("Fetching changes: %s", uri)
 
 	/* If error, break the loop, and retry after interval */
-	client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 	req, err := http.NewRequest("GET", uri, nil)
 	addHeaders(req)
 
-	r, err := client.Do(req)
+	r, err := c.client.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
 		// if closed

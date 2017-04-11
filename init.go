@@ -3,8 +3,8 @@ package apidApigeeSync
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
-
 	"time"
 
 	"github.com/30x/apid-core"
@@ -74,10 +74,17 @@ func initConfigDefaults() {
 func initVariables(services apid.Services) error {
 	dataService = services.Data()
 	events = services.Events()
+
+	tr := &http.Transport{
+		DisableKeepAlives:   false,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+	}
+	client := &http.Client{Transport: tr, Timeout: httpTimeout}
+
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing
-	snapManager = createSnapShotManager()
-	changeManager = createChangeManager()
+	snapManager = createSnapShotManager(client)
+	changeManager = createChangeManager(client)
 
 	// set up default database
 	db, err := dataService.DB()
