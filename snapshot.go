@@ -25,19 +25,16 @@ type snapShotManager struct {
 	isClosed *int32
 	// make sure close() returns immediately if there's no downloading/processing snapshot
 	isDownloading *int32
-	client        *http.Client
 }
 
-func createSnapShotManager(client *http.Client) *snapShotManager {
+func createSnapShotManager() *snapShotManager {
 	isClosedInt := int32(0)
 	isDownloadingInt := int32(0)
-	client.CheckRedirect = nil
 	return &snapShotManager{
 		quitChan:      make(chan bool, 1),
 		finishChan:    make(chan bool, 1),
 		isClosed:      &isClosedInt,
 		isDownloading: &isDownloadingInt,
-		client:        client,
 	}
 }
 
@@ -250,13 +247,13 @@ func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Sna
 	uri := snapshotUri.String()
 	log.Infof("Snapshot Download: %s", uri)
 
-	s.client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+	httpclient.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
 		req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
 		return nil
 	}
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accommodate functions which need more parameters, wrap them in closures
-	attemptDownload := getAttemptDownloadClosure(s.client, snapshot, uri)
+	attemptDownload := getAttemptDownloadClosure(httpclient, snapshot, uri)
 	pollWithBackoff(s.quitChan, attemptDownload, handleSnapshotServerError)
 	return nil
 }

@@ -39,6 +39,7 @@ var (
 	tokenManager  *tokenMan
 	changeManager *pollChangeManager
 	snapManager   *snapShotManager
+	httpclient    *http.Client
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -78,12 +79,12 @@ func initVariables(services apid.Services) error {
 	tr := &http.Transport{
 		MaxIdleConnsPerHost: maxIdleConnsPerHost,
 	}
-	client := &http.Client{Transport: tr, Timeout: httpTimeout}
+	httpclient = &http.Client{Transport: tr, Timeout: httpTimeout}
 
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing
-	snapManager = createSnapShotManager(client)
-	changeManager = createChangeManager(client)
+	snapManager = createSnapShotManager()
+	changeManager = createChangeManager()
 
 	// set up default database
 	db, err := dataService.DB()

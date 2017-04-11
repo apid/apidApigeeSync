@@ -268,12 +268,8 @@ var _ = Describe("Sync", func() {
 		 */
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
-			tr := &http.Transport{
-				MaxIdleConnsPerHost: maxIdleConnsPerHost,
-			}
-			client := &http.Client{Transport: tr, Timeout: httpTimeout}
 			tokenManager = createTokenManager()
-			snapManager = createSnapShotManager(client)
+			snapManager = createSnapShotManager()
 			events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
