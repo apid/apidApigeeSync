@@ -51,8 +51,7 @@ func (c *pollChangeManager) close() <-chan bool {
 	}
 	// not launched
 	if atomic.LoadInt32(c.isLaunched) == int32(0) {
-		log.Debug("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
-		log.Warn("Attempt to close unstarted change manager")
+		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
 		go func() {
 			c.quitChan <- true
 			tokenManager.close()
