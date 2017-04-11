@@ -269,7 +269,6 @@ var _ = Describe("Sync", func() {
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
 			tr := &http.Transport{
-				DisableKeepAlives:   true,
 				MaxIdleConnsPerHost: maxIdleConnsPerHost,
 			}
 			client := &http.Client{Transport: tr, Timeout: httpTimeout}
@@ -291,7 +290,6 @@ var _ = Describe("Sync", func() {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			}))
 			tr := &http.Transport{
-				DisableKeepAlives:   true,
 				MaxIdleConnsPerHost: maxIdleConnsPerHost,
 			}
 			var rspcnt int = 0

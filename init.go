@@ -76,7 +76,6 @@ func initVariables(services apid.Services) error {
 	events = services.Events()
 
 	tr := &http.Transport{
-		DisableKeepAlives:   false,
 		MaxIdleConnsPerHost: maxIdleConnsPerHost,
 	}
 	client := &http.Client{Transport: tr, Timeout: httpTimeout}
