@@ -292,12 +292,12 @@ var _ = Describe("Sync", func() {
 			}))
 			tr := &http.Transport{
 				DisableKeepAlives:   true,
-				MaxIdleConnsPerHost: 10,
+				MaxIdleConnsPerHost: maxIdleConnsPerHost,
 			}
 			var rspcnt int = 0
 			ch := make(chan *http.Response)
 			client := &http.Client{Transport: tr}
-			for i := 0; i < maxIdleConnsPerHost; i++ {
+			for i := 0; i < 2*maxIdleConnsPerHost; i++ {
 				go func(client *http.Client) {
 					req, err := http.NewRequest("GET", server.URL, nil)
 					resp, err := client.Do(req)
@@ -313,7 +313,7 @@ var _ = Describe("Sync", func() {
 				select {
 				case resp := <-ch:
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
-					if rspcnt >= maxIdleConnsPerHost-1 {
+					if rspcnt >= 2*maxIdleConnsPerHost-1 {
 						return
 					}
 					rspcnt++
