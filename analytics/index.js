@@ -18,6 +18,12 @@ module.exports.init = function(config, logger, stats) {
       record.request_path = config.mask_request_path;
     }
     
+
+    var xffHeader = req.headers['x-forwarded-for'];
+    if(xffHeader) {
+      record.client_ip = xffHeader;
+    }
+
     cb(null, record);
   };
 
