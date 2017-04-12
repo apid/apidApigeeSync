@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	httpTimeout   = time.Minute
-	pluginTimeout = time.Minute
+	httpTimeout         = time.Minute
+	pluginTimeout       = time.Minute
+	maxIdleConnsPerHost = 10
 )
 
 var knownTables = make(map[string]bool)

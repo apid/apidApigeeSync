@@ -160,11 +160,9 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debugf("Fetching changes: %s", uri)
 
 	/* If error, break the loop, and retry after interval */
-	client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 	req, err := http.NewRequest("GET", uri, nil)
 	addHeaders(req)
-
-	r, err := client.Do(req)
+	r, err := httpclient.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
 		// if closed

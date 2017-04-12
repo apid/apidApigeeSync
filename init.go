@@ -3,8 +3,8 @@ package apidApigeeSync
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
-
 	"time"
 
 	"github.com/30x/apid-core"
@@ -39,6 +39,7 @@ var (
 	tokenManager  *tokenMan
 	changeManager *pollChangeManager
 	snapManager   *snapShotManager
+	httpclient    *http.Client
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -74,6 +75,19 @@ func initConfigDefaults() {
 func initVariables(services apid.Services) error {
 	dataService = services.Data()
 	events = services.Events()
+
+	tr := &http.Transport{
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+	}
+	httpclient = &http.Client{
+		Transport: tr,
+		Timeout:   httpTimeout,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+			return nil
+		},
+	}
+
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing
 	snapManager = createSnapShotManager()
