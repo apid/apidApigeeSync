@@ -35,6 +35,7 @@ func initDB(db apid.DB) error {
 	_, err := db.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
+	    apid_cluster_id text,
 	    last_snapshot_info text,
 	    PRIMARY KEY (instance_id)
 	);
@@ -237,6 +238,8 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	info.InstanceName = config.GetString(configName)
 	info.ClusterID = config.GetString(configApidClusterId)
 
+	var savedClusterId string
+
 	// always use default database for this
 	var db apid.DB
 	db, err = dataService.DB()
@@ -244,8 +247,8 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		return
 	}
 
-	err = db.QueryRow("SELECT instance_id, last_snapshot_info FROM APID LIMIT 1").
-		Scan(&info.InstanceID, &info.LastSnapshot)
+	err = db.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
+		Scan(&info.InstanceID, &savedClusterId, &info.LastSnapshot)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
@@ -257,9 +260,18 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID = generateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
-			db.Exec("INSERT INTO APID (instance_id, last_snapshot_info) VALUES (?,?)",
-				info.InstanceID, "")
+			db.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+				info.InstanceID, info.ClusterID, "")
 		}
+	} else if savedClusterId != info.ClusterID {
+		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
+		err = nil
+		newInstanceID = true
+		info.InstanceID = generateUUID()
+
+		db.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+			info.InstanceID, info.ClusterID, "")
+		info.LastSnapshot = ""
 	}
 	return
 }
@@ -273,10 +285,10 @@ func updateApidInstanceInfo() error {
 	}
 
 	rows, err := db.Exec(`
-		INSERT OR REPLACE
-		INTO APID (instance_id, last_snapshot_info)
-		VALUES (?, ?)`,
-		apidInfo.InstanceID, apidInfo.LastSnapshot)
+		REPLACE
+		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
+		VALUES (?,?,?)`,
+		apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
 	if err != nil {
 		return err
 	}
