@@ -162,7 +162,6 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	/* If error, break the loop, and retry after interval */
 	req, err := http.NewRequest("GET", uri, nil)
 	addHeaders(req)
-	httpclient.CheckRedirect = nil
 	r, err := httpclient.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
