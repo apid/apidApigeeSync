@@ -79,7 +79,14 @@ func initVariables(services apid.Services) error {
 	tr := &http.Transport{
 		MaxIdleConnsPerHost: maxIdleConnsPerHost,
 	}
-	httpclient = &http.Client{Transport: tr, Timeout: httpTimeout}
+	httpclient = &http.Client{
+		Transport: tr,
+		Timeout:   httpTimeout,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+			return nil
+		},
+	}
 
 	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
 	//also useful for testing

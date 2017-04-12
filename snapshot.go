@@ -247,11 +247,6 @@ func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Sna
 	uri := snapshotUri.String()
 	log.Infof("Snapshot Download: %s", uri)
 
-	httpclient.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
-		req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
-		return nil
-
-	}
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accommodate functions which need more parameters, wrap them in closures
 	attemptDownload := getAttemptDownloadClosure(httpclient, snapshot, uri)
