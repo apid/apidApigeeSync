@@ -1,6 +1,6 @@
 {
   "name": "microgateway-plugins",
-  "version": "2.3.7-beta",
+  "version": "2.3.8-beta",
   "description": "Plugins for Apige Edge Microgateway",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,7 @@
   "dependencies": {
     "async": "^1.4.2",
     "debug": "^2.2.0",
+    "eureka-js-client": "^4.3.0",
     "js2xmlparser": "^2.0.2",
     "jsonwebtoken": "^5.0.1",
     "lodash": "^3.10.1",
