@@ -11,7 +11,7 @@ module.exports = {
   spikearrest:require('./spikearrest'),
   'transform-uppercase':require('./transform-uppercase'),
   accesscontrol:require('./accesscontrol'),
-  eurekaclient:require('./eurekaclient')
+  eurekaclient:require('./eurekaclient'),
   json2xml: require('./json2xml'),
   healthcheck: require('./healthcheck')
 }
