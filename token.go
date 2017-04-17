@@ -180,7 +180,7 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 		}
 
 		if token.ExpiresIn > 0 {
-			token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Millisecond)
+			token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 		} else {
 			// no expiration, arbitrarily expire about a year from now
 			token.ExpiresAt = time.Now().Add(365 * 24 * time.Hour)
@@ -205,18 +205,19 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 }
 
 type oauthToken struct {
-	IssuedAt       int64    `json:"issuedAt"`
-	AppName        string   `json:"applicationName"`
-	Scope          string   `json:"scope"`
-	Status         string   `json:"status"`
-	ApiProdList    []string `json:"apiProductList"`
-	ExpiresIn      int64    `json:"expiresIn"`
-	DeveloperEmail string   `json:"developerEmail"`
-	TokenType      string   `json:"tokenType"`
-	ClientId       string   `json:"clientId"`
-	AccessToken    string   `json:"accessToken"`
-	RefreshExpIn   int64    `json:"refreshTokenExpiresIn"`
-	RefreshCount   int64    `json:"refreshCount"`
+	IssuedAt    int64    `json:"issuedAt"`
+	AppName     string   `json:"applicationName"`
+	Scope       string   `json:"scope"`
+	Status      string   `json:"status"`
+	ApiProdList []string `json:"apiProductList"`
+	// in seconds
+	ExpiresIn      int64  `json:"expiresIn"`
+	DeveloperEmail string `json:"developerEmail"`
+	TokenType      string `json:"tokenType"`
+	ClientId       string `json:"clientId"`
+	AccessToken    string `json:"accessToken"`
+	RefreshExpIn   int64  `json:"refreshTokenExpiresIn"`
+	RefreshCount   int64  `json:"refreshCount"`
 	ExpiresAt      time.Time
 }
 
