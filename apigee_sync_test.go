@@ -198,7 +198,7 @@ var _ = Describe("Sync", func() {
 
 		}, 3)
 
-		It("should detect apid_cluster_id change in config yaml", func () {
+		It("should detect apid_cluster_id change in config yaml", func() {
 			Expect(apidInfo).ToNot(BeNil())
 			Expect(apidInfo.ClusterID).To(Equal("bootstrap"))
 			Expect(apidInfo.InstanceID).ToNot(BeEmpty())

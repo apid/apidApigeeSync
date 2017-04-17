@@ -24,7 +24,7 @@ var _ = Describe("token", func() {
 
 			t := &oauthToken{
 				AccessToken: "x",
-				ExpiresIn:   120000,
+				ExpiresIn:   120,
 				ExpiresAt:   time.Now().Add(2 * time.Minute),
 			}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically(">", 0))
@@ -48,7 +48,7 @@ var _ = Describe("token", func() {
 
 			t := &oauthToken{
 				AccessToken: "x",
-				ExpiresIn:   59000,
+				ExpiresIn:   59,
 				ExpiresAt:   time.Now().Add(time.Minute - time.Second),
 			}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<", 0))
@@ -73,7 +73,7 @@ var _ = Describe("token", func() {
 
 				res := oauthToken{
 					AccessToken: "ABCD",
-					ExpiresIn:   1000,
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -100,7 +100,7 @@ var _ = Describe("token", func() {
 
 				res := oauthToken{
 					AccessToken: generateUUID(),
-					ExpiresIn:   1000,
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -139,7 +139,7 @@ var _ = Describe("token", func() {
 
 				res := oauthToken{
 					AccessToken: string(count),
-					ExpiresIn:   1000,
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -180,7 +180,7 @@ var _ = Describe("token", func() {
 				}
 				res := oauthToken{
 					AccessToken: string(count),
-					ExpiresIn:   200000,
+					ExpiresIn:   200,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())

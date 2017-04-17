@@ -38,7 +38,7 @@ Relations:
   product => * app_credential
 */
 
-const oauthExpiresIn = 2 * 60 * 1000 // 2 minutes
+const oauthExpiresIn = 2 * 60 // 2 minutes
 
 type MockParms struct {
 	ReliableAPI            bool
