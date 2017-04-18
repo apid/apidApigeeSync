@@ -4,7 +4,6 @@ module.exports = {
   'accumulate-request':require('./accumulate-request'),
   'accumulate-response':require('./accumulate-response'),
   analytics:require('./analytics'),
-  cache:require('./cache'),
   'header-uppercase':require('./header-uppercase'),
   oauth:require('./oauth'),
   quota:require('./quota'),
@@ -13,4 +12,6 @@ module.exports = {
   'transform-uppercase':require('./transform-uppercase'),
   accesscontrol:require('./accesscontrol'),
   eurekaclient:require('./eurekaclient')
+  json2xml: require('./json2xml'),
+  healthcheck: require('./healthcheck')
 }

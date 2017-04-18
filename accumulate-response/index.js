@@ -29,7 +29,10 @@ module.exports.init = function(config, logger, stats) {
 
     onend_response: function(req, res, data, next) {
       if (data && data.length > 0) accumulate(res, data);
-      var content = Buffer.concat(res._chunks);
+      var content = null;
+      if(res._chunks && res._chunks.length) {
+        content = Buffer.concat(res._chunks);
+      }
       delete res._chunks;
       next(null, content);
     }

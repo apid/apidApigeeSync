@@ -14,7 +14,6 @@
  * should only be used when it is known that request/response bodies are small.
  */
 module.exports.init = function(config, logger, stats) {
-
   function accumulate(req, data) {
     if (!req._chunks) req._chunks = [];
     req._chunks.push(data);
@@ -29,11 +28,13 @@ module.exports.init = function(config, logger, stats) {
 
     onend_request: function(req, res, data, next) {
       if (data && data.length > 0) accumulate(req, data);
-      var content = Buffer.concat(req._chunks);
+      var content = null;
+      if (req._chunks && req._chunks.length) {
+        content = Buffer.concat(req._chunks);
+      }
       delete req._chunks;
       next(null, content);
     }
-
   };
 
 }

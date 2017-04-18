@@ -9,6 +9,15 @@ module.exports.init = function(config, logger, stats) {
       record.apiproxy = res.proxy.name;
       record.apiproxy_revision = res.proxy.revision;
     }
+
+    if(config.mask_request_uri) {
+      record.request_uri = config.mask_request_uri;  
+    }
+
+    if(config.mask_request_path) {
+      record.request_path = config.mask_request_path;
+    }
+    
     cb(null, record);
   };
 
