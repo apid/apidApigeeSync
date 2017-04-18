@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "srinandans@google.com",
-  "license": "Apache 2.0",
+  "license": "ISC",
   "dependencies": {
     "eureka-js-client": "^4.3.0"
   },
