@@ -45,15 +45,11 @@ module.exports.init = function (config, logger, stats) {
       if (!req.headers[apiKeyHeaderName]) {
         debug('missing api key');
         return sendError(req, res, next, logger, stats, 'invalid_auth', 'Missing API Key header');        
-      } else {
-        if (!req.headers[apiKeyHeaderName]) {
-          debug('missing api key');
-          return sendError(req, res, next, logger, stats, 'invalid_auth', 'Missing API Key header');        
-        } 
-      }
+      } 
     }
+
     //leaving rest of the code same to ensure backward compatibility
-    if (!req.headers[authHeaderName]) {
+    if (!req.headers[authHeaderName]  || config.allowAPIKeyOnly) {
       if (apiKey = req.headers[apiKeyHeaderName]) {
         exchangeApiKeyForToken(req, res, next, config, logger, stats, middleware, apiKey);
       } else if (req.reqUrl && req.reqUrl.query && (apiKey = req.reqUrl.query[apiKeyHeaderName])) {
@@ -73,15 +69,14 @@ module.exports.init = function (config, logger, stats) {
         }        
       }
 
-      var token = '';
-      if (header) {
-        token = header[1];        
-      }
-
       if (!keepAuthHeader) {
         delete (req.headers[authHeaderName]); // don't pass this header to target
       }
 
+      var token = '';
+      if (header) {
+        token = header[1];        
+      }
       verify(token, config, logger, stats, middleware, req, res, next);
     }
   }
