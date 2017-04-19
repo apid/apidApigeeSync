@@ -13,6 +13,9 @@ var _ = Describe("Sync", func() {
 
 	Context("Sync", func() {
 
+		const expectedDataScopeId1 = "dataScope1"
+		const expectedDataScopeId2 = "dataScope2"
+
 		var initializeContext = func() {
 			testRouter = apid.API().Router()
 			testServer = httptest.NewServer(testRouter)
@@ -53,53 +56,58 @@ var _ = Describe("Sync", func() {
 			var lastSnapshot *common.Snapshot
 
 			expectedSnapshotTables := common.ChangeList{
-				Changes: []common.Change{common.Change{Table: "kms.company"},
-					common.Change{Table: "edgex.apid_cluster"},
-					common.Change{Table: "edgex.data_scope"}},
+				Changes: []common.Change{common.Change{Table: "kms_company"},
+							 common.Change{Table: "edgex_apid_cluster"},
+							 common.Change{Table: "edgex_data_scope"},
+							common.Change{Table: "kms_app_credential"},
+							common.Change{Table: "kms_app_credential_apiproduct_mapper"},
+							common.Change{Table: "kms_developer"},
+							common.Change{Table: "kms_company_developer"},
+							common.Change{Table: "kms_api_product"},
+							common.Change{Table: "kms_app"}},
 			}
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 				if s, ok := event.(*common.Snapshot); ok {
 
+					Expect(16).To(Equal(len(knownTables)))
 					Expect(changesRequireDDLSync(expectedSnapshotTables)).To(BeFalse())
-
-					//add apid_cluster and data_scope since those would present if this were a real scenario
-					knownTables["kms.app_credential"] = true
-					knownTables["kms.app_credential_apiproduct_mapper"] = true
-					knownTables["kms.developer"] = true
-					knownTables["kms.company_developer"] = true
-					knownTables["kms.api_product"] = true
-					knownTables["kms.app"] = true
 
 					lastSnapshot = s
 
-					for _, t := range s.Tables {
-						switch t.Name {
+					db, _ := dataService.DBVersion(s.SnapshotInfo)
+					var rowCount int
+					var id string
 
-						case "edgex.apid_cluster":
-							Expect(t.Rows).To(HaveLen(1))
-							r := t.Rows[0]
-							var id string
-							r.Get("id", &id)
-							Expect(id).To(Equal("bootstrap"))
+					err := db.Ping()
+					Expect(err).NotTo(HaveOccurred())
+					numApidClusters, err := db.Query("select distinct count(*) from edgex_apid_cluster;")
+					if err != nil {
+						Fail("Failed to get correct DB")
+					}
+					Expect(true).To(Equal(numApidClusters.Next()))
+					numApidClusters.Scan(&rowCount)
+					Expect(1).To(Equal(rowCount))
+					apidClusters, _ := db.Query("select id from edgex_apid_cluster;")
+					apidClusters.Next()
+					apidClusters.Scan(&id)
+					Expect(id).To(Equal(expectedClusterId))
 
-						case "edgex.data_scope":
-							Expect(t.Rows).To(HaveLen(2))
-							r := t.Rows[1] // get the non-cluster row
+					numDataScopes, _ := db.Query("select distinct count(*) from edgex_data_scope;")
+					Expect(true).To(Equal(numDataScopes.Next()))
+					numDataScopes.Scan(&rowCount)
+					Expect(2).To(Equal(rowCount))
+					dataScopes, _ := db.Query("select id from edgex_data_scope;")
+					dataScopes.Next()
+					dataScopes.Scan(&id)
+					dataScopes.Next()
 
-							var id, clusterID, env, org, scope string
-							r.Get("id", &id)
-							r.Get("apid_cluster_id", &clusterID)
-							r.Get("env", &env)
-							r.Get("org", &org)
-							r.Get("scope", &scope)
-
-							Expect(id).To(Equal("ert452"))
-							Expect(scope).To(Equal("ert452"))
-							Expect(clusterID).To(Equal("bootstrap"))
-							Expect(env).To(Equal("prod"))
-							Expect(org).To(Equal("att"))
-						}
+					if id == expectedDataScopeId1 {
+						dataScopes.Scan(&id)
+						Expect(id).To(Equal(expectedDataScopeId2))
+					} else {
+						dataScopes.Scan(&id)
+						Expect(id).To(Equal(expectedDataScopeId1))
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
@@ -122,12 +130,12 @@ var _ = Describe("Sync", func() {
 						Expect(tenantID).To(Equal("ert452"))
 					}
 
-					Expect(tables).To(ContainElement("kms.app_credential"))
-					Expect(tables).To(ContainElement("kms.app_credential_apiproduct_mapper"))
-					Expect(tables).To(ContainElement("kms.developer"))
-					Expect(tables).To(ContainElement("kms.company_developer"))
-					Expect(tables).To(ContainElement("kms.api_product"))
-					Expect(tables).To(ContainElement("kms.app"))
+					Expect(tables).To(ContainElement("kms_app_credential"))
+					Expect(tables).To(ContainElement("kms_app_credential_apiproduct_mapper"))
+					Expect(tables).To(ContainElement("kms_developer"))
+					Expect(tables).To(ContainElement("kms_company_developer"))
+					Expect(tables).To(ContainElement("kms_api_product"))
+					Expect(tables).To(ContainElement("kms_app"))
 
 					go func() {
 						// when close done, all handlers for the first changeList have been executed
@@ -135,10 +143,8 @@ var _ = Describe("Sync", func() {
 						defer GinkgoRecover()
 						// allow other handler to execute to insert last_sequence
 						var seq string
-						//for seq = ""; seq == ""; {
-						//	time.Sleep(50 * time.Millisecond)
-						err := getDB().
-							QueryRow("SELECT last_sequence FROM APID_CLUSTER LIMIT 1;").
+						err = getDB().
+							QueryRow("SELECT last_sequence FROM EDGEX_APID_CLUSTER LIMIT 1;").
 							Scan(&seq)
 						Expect(err).NotTo(HaveOccurred())
 						//}
@@ -163,9 +169,9 @@ var _ = Describe("Sync", func() {
 
 			initializeContext()
 			expectedTables := common.ChangeList{
-				Changes: []common.Change{common.Change{Table: "kms.company"},
-					common.Change{Table: "edgex.apid_cluster"},
-					common.Change{Table: "edgex.data_scope"}},
+				Changes: []common.Change{common.Change{Table: "kms_company"},
+							 common.Change{Table: "edgex_apid_cluster"},
+							 common.Change{Table: "edgex_data_scope"}},
 			}
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 

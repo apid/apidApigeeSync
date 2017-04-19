@@ -5,48 +5,32 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/apigee-labs/transicator/common"
+	"os"
 )
 
 var _ = Describe("listener", func() {
 
 	handler := handler{}
-	var saveLastSnapshot string
+
+	var createTestDb = func (sqlfile string, dbId string) common.Snapshot{
+		initDb(sqlfile, "./mockdb.sqlite3")
+		file, err := os.Open("./mockdb.sqlite3")
+		if err != nil {
+			Fail("Failed to open mock db for test")
+		}
+
+		s := common.Snapshot{}
+		err = processSnapshotServerFileResponse(dbId, file, &s)
+		if err != nil {
+			Fail("Error processing test snapshots")
+		}
+		return s
+	}
 
 	Context("ApigeeSync snapshot event", func() {
 
-		It("should set DB to appropriate version", func() {
-			log.Info("Starting listener tests...")
-
-			//save the last snapshot, so we can restore it at the end of this context
-			saveLastSnapshot = apidInfo.LastSnapshot
-
-			event := common.Snapshot{
-				SnapshotInfo: "test_snapshot",
-				Tables:       []common.Table{},
-			}
-
-			handler.Handle(&event)
-
-			Expect(apidInfo.LastSnapshot).To(Equal(event.SnapshotInfo))
-
-			expectedDB, err := dataService.DBVersion(event.SnapshotInfo)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(getDB() == expectedDB).Should(BeTrue())
-		})
-
 		It("should fail if more than one apid_cluster rows", func() {
-
-			event := common.Snapshot{
-				SnapshotInfo: "test_snapshot_fail",
-				Tables: []common.Table{
-					{
-						Name: LISTENER_TABLE_APID_CLUSTER,
-						Rows: []common.Row{{}, {}},
-					},
-				},
-			}
-
+			event := createTestDb("./sql/init_listener_test_duplicate_apids.sql", "test_snapshot_fail_multiple_clusters")
 			Expect(func() { handler.Handle(&event) }).To(Panic())
 		}, 3)
 
@@ -68,74 +52,7 @@ var _ = Describe("listener", func() {
 
 		It("should process a valid Snapshot", func() {
 
-			event := common.Snapshot{
-				SnapshotInfo: "test_snapshot_valid",
-				Tables: []common.Table{
-					{
-						Name: LISTENER_TABLE_APID_CLUSTER,
-						Rows: []common.Row{
-							{
-								"id":                    &common.ColumnVal{Value: "i"},
-								"name":                  &common.ColumnVal{Value: "n"},
-								"umbrella_org_app_name": &common.ColumnVal{Value: "o"},
-								"created":               &common.ColumnVal{Value: "c"},
-								"created_by":            &common.ColumnVal{Value: "c"},
-								"updated":               &common.ColumnVal{Value: "u"},
-								"updated_by":            &common.ColumnVal{Value: "u"},
-								"description":           &common.ColumnVal{Value: "d"},
-							},
-						},
-					},
-					{
-						Name: LISTENER_TABLE_DATA_SCOPE,
-						Rows: []common.Row{
-							{
-								"id":              &common.ColumnVal{Value: "i"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope":           &common.ColumnVal{Value: "s1"},
-								"org":             &common.ColumnVal{Value: "o"},
-								"env":             &common.ColumnVal{Value: "e1"},
-								"created":         &common.ColumnVal{Value: "c"},
-								"created_by":      &common.ColumnVal{Value: "c"},
-								"updated":         &common.ColumnVal{Value: "u"},
-								"updated_by":      &common.ColumnVal{Value: "u"},
-							},
-						},
-					},
-					{
-						Name: LISTENER_TABLE_DATA_SCOPE,
-						Rows: []common.Row{
-							{
-								"id":              &common.ColumnVal{Value: "j"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope":           &common.ColumnVal{Value: "s1"},
-								"org":             &common.ColumnVal{Value: "o"},
-								"env":             &common.ColumnVal{Value: "e2"},
-								"created":         &common.ColumnVal{Value: "c"},
-								"created_by":      &common.ColumnVal{Value: "c"},
-								"updated":         &common.ColumnVal{Value: "u"},
-								"updated_by":      &common.ColumnVal{Value: "u"},
-							},
-						},
-					},
-					{
-						Name: LISTENER_TABLE_DATA_SCOPE,
-						Rows: []common.Row{
-							{
-								"id":              &common.ColumnVal{Value: "k"},
-								"apid_cluster_id": &common.ColumnVal{Value: "a"},
-								"scope":           &common.ColumnVal{Value: "s2"},
-								"org":             &common.ColumnVal{Value: "o"},
-								"env":             &common.ColumnVal{Value: "e3"},
-								"created":         &common.ColumnVal{Value: "c"},
-								"created_by":      &common.ColumnVal{Value: "c"},
-								"updated":         &common.ColumnVal{Value: "u"},
-								"updated_by":      &common.ColumnVal{Value: "u"},
-							},
-						},
-					},
-				},
-			}
+			event := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_snapshot_valid")
 
 			handler.Handle(&event)
 
@@ -146,13 +63,18 @@ var _ = Describe("listener", func() {
 
 			db := getDB()
 
+			expectedDB, err := dataService.DBVersion(event.SnapshotInfo)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(db == expectedDB).Should(BeTrue())
+
 			// apid Cluster
 			var dcs []dataApidCluster
 
 			rows, err := db.Query(`
 			SELECT id, name, description, umbrella_org_app_name,
 				created, created_by, updated, updated_by
-			FROM APID_CLUSTER`)
+			FROM EDGEX_APID_CLUSTER`)
 			Expect(err).NotTo(HaveOccurred())
 			defer rows.Close()
 
@@ -182,7 +104,7 @@ var _ = Describe("listener", func() {
 			SELECT id, apid_cluster_id, scope, org,
 				env, created, created_by, updated,
 				updated_by
-			FROM DATA_SCOPE`)
+			FROM EDGEX_DATA_SCOPE`)
 			Expect(err).NotTo(HaveOccurred())
 			defer rows.Close()
 
@@ -219,7 +141,6 @@ var _ = Describe("listener", func() {
 			Expect(scopes[1]).To(Equal("s2"))
 
 			//restore the last snapshot
-			apidInfo.LastSnapshot = saveLastSnapshot
 		}, 3)
 	})
 
@@ -228,10 +149,12 @@ var _ = Describe("listener", func() {
 		Context(LISTENER_TABLE_APID_CLUSTER, func() {
 
 			It("insert event should panic", func() {
-				//save the last snapshot, so we can restore it at the end of this context
-				saveLastSnapshot = apidInfo.LastSnapshot
+				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_changes_insert_panic")
+				handler.Handle(&ssEvent)
 
-				event := common.ChangeList{
+				//save the last snapshot, so we can restore it at the end of this context
+
+				csEvent := common.ChangeList{
 					LastSequence: "test",
 					Changes: []common.Change{
 						{
@@ -241,10 +164,12 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func() { handler.Handle(&event) }).To(Panic())
+				Expect(func() { handler.Handle(&csEvent) }).To(Panic())
 			}, 3)
 
 			It("update event should panic", func() {
+				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_changes_update_panic")
+				handler.Handle(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -258,17 +183,15 @@ var _ = Describe("listener", func() {
 
 				Expect(func() { handler.Handle(&event) }).To(Panic())
 				//restore the last snapshot
-				apidInfo.LastSnapshot = saveLastSnapshot
 			}, 3)
 
-			PIt("delete event should kill all the things!")
 		})
 
 		Context(LISTENER_TABLE_DATA_SCOPE, func() {
 
 			It("insert event should add", func() {
-				//save the last snapshot, so we can restore it at the end of this context
-				saveLastSnapshot = apidInfo.LastSnapshot
+				ssEvent := createTestDb("./sql/init_listener_test_no_datascopes.sql", "test_changes_insert")
+				handler.Handle(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -286,6 +209,7 @@ var _ = Describe("listener", func() {
 								"created_by":      &common.ColumnVal{Value: "c"},
 								"updated":         &common.ColumnVal{Value: "u"},
 								"updated_by":      &common.ColumnVal{Value: "u"},
+								"_change_selector": &common.ColumnVal{Value: "cs"},
 							},
 						},
 						{
@@ -301,6 +225,7 @@ var _ = Describe("listener", func() {
 								"created_by":      &common.ColumnVal{Value: "c"},
 								"updated":         &common.ColumnVal{Value: "u"},
 								"updated_by":      &common.ColumnVal{Value: "u"},
+								"_change_selector": &common.ColumnVal{Value: "cs"},
 							},
 						},
 					},
@@ -314,7 +239,7 @@ var _ = Describe("listener", func() {
 				SELECT id, apid_cluster_id, scope, org,
 					env, created, created_by, updated,
 					updated_by
-				FROM DATA_SCOPE`)
+				FROM EDGEX_DATA_SCOPE`)
 				Expect(err).NotTo(HaveOccurred())
 				defer rows.Close()
 
@@ -326,6 +251,7 @@ var _ = Describe("listener", func() {
 					dds = append(dds, d)
 				}
 
+				//three already existing
 				Expect(len(dds)).To(Equal(2))
 				ds := dds[0]
 
@@ -349,6 +275,8 @@ var _ = Describe("listener", func() {
 			}, 3)
 
 			It("delete event should delete", func() {
+				ssEvent := createTestDb("./sql/init_listener_test_no_datascopes.sql", "test_changes_delete")
+				handler.Handle(&ssEvent)
 				insert := common.ChangeList{
 					LastSequence: "test",
 					Changes: []common.Change{
@@ -365,6 +293,7 @@ var _ = Describe("listener", func() {
 								"created_by":      &common.ColumnVal{Value: "c"},
 								"updated":         &common.ColumnVal{Value: "u"},
 								"updated_by":      &common.ColumnVal{Value: "u"},
+								"_change_selector": &common.ColumnVal{Value: "cs"},
 							},
 						},
 					},
@@ -386,13 +315,15 @@ var _ = Describe("listener", func() {
 				handler.Handle(&delete)
 
 				var nRows int
-				err := getDB().QueryRow("SELECT count(id) FROM DATA_SCOPE").Scan(&nRows)
+				err := getDB().QueryRow("SELECT count(id) FROM EDGEX_DATA_SCOPE").Scan(&nRows)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(nRows).To(Equal(0))
+				Expect(0).To(Equal(nRows))
 			}, 3)
 
-			It("update event should panic", func() {
+			It("update event should panic for data scopes table", func() {
+				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_update_panic")
+				handler.Handle(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -406,10 +337,9 @@ var _ = Describe("listener", func() {
 
 				Expect(func() { handler.Handle(&event) }).To(Panic())
 				//restore the last snapshot
-				apidInfo.LastSnapshot = saveLastSnapshot
 			}, 3)
 
+			//TODO add tests for update/insert/delete cluster
 		})
-
 	})
 })
