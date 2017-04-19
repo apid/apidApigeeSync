@@ -101,10 +101,10 @@ func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	_, err = prep.Exec(values...)
 
 	if err != nil {
-		log.Errorf("INSERT Fail [%s] value=[%v] error=[%v]", sql, values, err)
+		log.Errorf("INSERT Fail [%s] values=%v error=[%v]", sql, values, err)
 		return false
 	} else {
-		log.Debugf("INSERT Success [%s] value=[%v]", sql, values)
+		log.Debugf("INSERT Success [%s] values=%v", sql, values)
 	}
 
 	return true
@@ -146,17 +146,17 @@ func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
 			// delete prepared statement from existing template statement
 			res, err := txn.Stmt(prep).Exec(values...)
 			if err != nil {
-				log.Errorf("DELETE Fail [%s] value=[%v] error=[%v]", sql, values, err)
+				log.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
 				return false
 			} else {
 				affected, err := res.RowsAffected()
 				if err == nil && affected != 0 {
-					log.Debugf("DELETE Success [%s] value=[%v]", sql, values)
+					log.Debugf("DELETE Success [%s] values=%v", sql, values)
 				} else if err == nil && affected == 0 {
-					log.Errorf("Entry not found [%s] value=[%v]. Nothing to delete.", sql, values)
+					log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
 					return false
 				} else {
-					log.Errorf("DELETE Failed [%s] value=[%v] error=[%v]", sql, values, err)
+					log.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
 					return false
 				}
 			}
@@ -243,17 +243,17 @@ func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
 			res, err := txn.Stmt(prep).Exec(values...)
 
 			if err != nil {
-				log.Errorf("UPDATE Fail [%s] value=[%v] error=[%v]", sql, values, err)
+				log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
 				return false
 			} else {
 				numRowsAffected, err := res.RowsAffected()
 				if err != nil {
-					log.Errorf("UPDATE Fail [%s] value=[%v] error=[%v]", sql, values, err)
+					log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
 					return false
 				}
 				//delete this once we figure out why tests are failing/not updating
 				log.Infof("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
-				log.Debugf("UPDATE Success [%s] value=[%v]", sql, values)
+				log.Debugf("UPDATE Success [%s] values=%v", sql, values)
 			}
 		}
 

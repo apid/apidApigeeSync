@@ -415,7 +415,6 @@ func (m *MockServer) createDeveloper(developerID string) tableRowMap {
 
 	// map developer onto to existing company
 	rows["kms_company_developer"] = m.newRow(map[string]string{
-		"id":           developerID,
 		"tenant_id":    tenantID,
 		"company_id":   companyID,
 		"developer_id": developerID,
