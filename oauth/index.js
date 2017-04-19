@@ -42,13 +42,14 @@ module.exports.init = function (config, logger, stats) {
       }
     }
     else if (apikey_only) {
-      if (req.headers[authHeaderName]) {
-        debug('Invalid Authorization Type');
-        return sendError(req, res, next, logger, stats, 'invalid_auth', 'Invalid Authorization type');        
-      }
+      if (!req.headers[apiKeyHeaderName]) {
+        debug('missing api key');
+        return sendError(req, res, next, logger, stats, 'invalid_auth', 'Missing API Key header');        
+      } 
     }
+
     //leaving rest of the code same to ensure backward compatibility
-    if (!req.headers[authHeaderName]) {
+    if (!req.headers[authHeaderName]  || config.allowAPIKeyOnly) {
       if (apiKey = req.headers[apiKeyHeaderName]) {
         exchangeApiKeyForToken(req, res, next, config, logger, stats, middleware, apiKey);
       } else if (req.reqUrl && req.reqUrl.query && (apiKey = req.reqUrl.query[apiKeyHeaderName])) {
@@ -61,17 +62,21 @@ module.exports.init = function (config, logger, stats) {
       }
     } else {
       var header = authHeaderRegex.exec(req.headers[authHeaderName]);
-      if (!header || header.length < 2) {
-        debug('Invalid Authorization Header');
-        return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
+      if (!config.allowInvalidAuthorization) {
+        if (!header || header.length < 2) {
+          debug('Invalid Authorization Header');
+          return sendError(req, res, next, logger, stats, 'invalid_request', 'Invalid Authorization header');
+        }        
       }
-
-      var token = header[1];
 
       if (!keepAuthHeader) {
         delete (req.headers[authHeaderName]); // don't pass this header to target
       }
 
+      var token = '';
+      if (header) {
+        token = header[1];        
+      }
       verify(token, config, logger, stats, middleware, req, res, next);
     }
   }

@@ -1,14 +1,22 @@
 {
-  "name": "eurekaclient",
+  "name": "edgemicro-eurekaclient",
   "version": "1.0.0",
-  "description": "",
+  "description": "This microgateway plugin integrates for NetFlix's Eureka",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "srinandans@google.com",
+  "license": "Apache 2.0",
   "dependencies": {
     "eureka-js-client": "^4.3.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apigee/microgateway-plugins.git"
+  },
+  "bugs": {
+    "url": "https://github.com/apigee/microgateway-plugins/issues"
+  },
+  "homepage": "https://github.com/apigee/microgateway-plugins#readme"
 }

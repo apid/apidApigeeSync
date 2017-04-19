@@ -1,5 +1,5 @@
 {
-  "name": "edgemicro-access-control",
+  "name": "edgemicro-accesscontrol",
   "version": "1.0.0",
   "description": "This provides ip based whitelisting or blacklisting",
   "main": "index.js",
