@@ -274,12 +274,12 @@ func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan 
 
 		var processSnapshotResponse func(string, io.Reader, *common.Snapshot) error
 
-		if config.GetString(configSnapshotProtocol) == "sqlite" {
-			req.Header.Set("Accept", "application/transicator+sqlite")
-			processSnapshotResponse = processSnapshotServerFileResponse
-		} else {
+		if config.GetString(configSnapshotProtocol) != "sqlite" {
 			log.Panic("Only currently supported snashot protocol is sqlite")
+
 		}
+		req.Header.Set("Accept", "application/transicator+sqlite")
+		processSnapshotResponse = processSnapshotServerFileResponse
 
 		// Issue the request to the snapshot server
 		r, err := httpclient.Do(req)

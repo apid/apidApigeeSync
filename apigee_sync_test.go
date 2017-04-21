@@ -57,14 +57,14 @@ var _ = Describe("Sync", func() {
 
 			expectedSnapshotTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms_company"},
-							 common.Change{Table: "edgex_apid_cluster"},
-							 common.Change{Table: "edgex_data_scope"},
-							common.Change{Table: "kms_app_credential"},
-							common.Change{Table: "kms_app_credential_apiproduct_mapper"},
-							common.Change{Table: "kms_developer"},
-							common.Change{Table: "kms_company_developer"},
-							common.Change{Table: "kms_api_product"},
-							common.Change{Table: "kms_app"}},
+					common.Change{Table: "edgex_apid_cluster"},
+					common.Change{Table: "edgex_data_scope"},
+					common.Change{Table: "kms_app_credential"},
+					common.Change{Table: "kms_app_credential_apiproduct_mapper"},
+					common.Change{Table: "kms_developer"},
+					common.Change{Table: "kms_company_developer"},
+					common.Change{Table: "kms_api_product"},
+					common.Change{Table: "kms_app"}},
 			}
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
@@ -170,8 +170,8 @@ var _ = Describe("Sync", func() {
 			initializeContext()
 			expectedTables := common.ChangeList{
 				Changes: []common.Change{common.Change{Table: "kms_company"},
-							 common.Change{Table: "edgex_apid_cluster"},
-							 common.Change{Table: "edgex_data_scope"}},
+					common.Change{Table: "edgex_apid_cluster"},
+					common.Change{Table: "edgex_data_scope"}},
 			}
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 

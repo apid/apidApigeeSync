@@ -50,7 +50,6 @@ func processSnapshot(snapshot *common.Snapshot) {
 
 }
 
-
 func processSqliteSnapshot(db apid.DB) {
 
 	var numApidClusters int

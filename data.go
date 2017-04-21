@@ -112,7 +112,6 @@ func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 
 func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
 	var values []interface{}
-	// TODO Handle multiple data types
 	for _, pkey := range pkeys {
 		if row[pkey] == nil {
 			values = append(values, nil)
@@ -133,7 +132,6 @@ func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
 		log.Errorf("No rows found for table.", tableName)
 		return false
 	} else {
-
 		sql := buildDeleteSql(tableName, rows[0], pkeys)
 		prep, err := txn.Prepare(sql)
 		if err != nil {
@@ -349,36 +347,6 @@ func getPkeysForTable(tableName string) ([]string, error) {
 
 func normalizeTableName(tableName string) string {
 	return strings.Replace(tableName, ".", "_", 1)
-}
-
-func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
-
-	log.Debugf("inserting into APID_CLUSTER: %v", dac)
-
-	//replace to accomodate same snapshot txid
-	stmt, err := txn.Prepare(`
-	REPLACE INTO APID_CLUSTER
-		(id, description, name, umbrella_org_app_name,
-		created, created_by, updated, updated_by,
-		last_sequence)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-	`)
-	if err != nil {
-		log.Errorf("prepare insert into APID_CLUSTER transaction Failed: %v", err)
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
-		dac.ID, dac.Description, dac.Name, dac.OrgAppName,
-		dac.Created, dac.CreatedBy, dac.Updated, dac.UpdatedBy,
-		"")
-
-	if err != nil {
-		log.Errorf("insert APID_CLUSTER failed: %v", err)
-	}
-
-	return err
 }
 
 /*

@@ -13,15 +13,15 @@ import (
 
 	"net"
 
+	"database/sql"
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"strconv"
-	"os"
 	"io"
-	"database/sql"
 	"io/ioutil"
+	"os"
+	"strconv"
 )
 
 /*
@@ -44,16 +44,16 @@ Relations:
 const oauthExpiresIn = 2 * 60 // 2 minutes
 
 type MockParms struct {
-	ReliableAPI            bool
-	ClusterID              string
-	TokenKey               string
-	TokenSecret            string
-	Scope                  string
-	Organization           string
-	Environment            string
-	NumDevelopers          int
-	NumDeployments         int
-	BundleURI              string
+	ReliableAPI    bool
+	ClusterID      string
+	TokenKey       string
+	TokenSecret    string
+	Scope          string
+	Organization   string
+	Environment    string
+	NumDevelopers  int
+	NumDeployments int
+	BundleURI      string
 }
 
 func Mock(params MockParms, router apid.Router) *MockServer {

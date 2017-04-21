@@ -126,8 +126,8 @@ func checkForRequiredValues() error {
 		}
 	}
 	proto := config.GetString(configSnapshotProtocol)
-	if proto != "json" && proto != "proto"  && proto != "sqlite" {
-		return fmt.Errorf("Illegal value for %s. Must be: 'json', 'proto', or 'sqlite'", configSnapshotProtocol)
+	if proto != "sqlite" {
+		return fmt.Errorf("Illegal value for %s. Only currently supported snashot protocol is sqlite", configSnapshotProtocol)
 	}
 
 	return nil
