@@ -62,7 +62,7 @@ func init() {
 
 func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
-	config.SetDefault(configSnapshotProtocol, "json")
+	config.SetDefault(configSnapshotProtocol, "sqlite")
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
