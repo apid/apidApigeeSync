@@ -289,7 +289,7 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 	}
 
 	for _, change := range changes {
-		if !a[change.Table] {
+		if !a[normalizeTableName(change.Table)] {
 			log.Infof("Unable to find %s table in current known tables", change.Table)
 			return true
 		}
