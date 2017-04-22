@@ -91,8 +91,6 @@ func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	for _, row := range rows {
 		for _, columnName := range orderedColumns {
 			//use Value so that stmt exec does not complain about common.ColumnVal being a struct
-			//TODO will need to convert the Value (which is a string) to the appropriate field, using type for mapping
-			//TODO right now this will only work when the column type is a string
 			values = append(values, row[columnName].Value)
 		}
 	}
@@ -111,12 +109,12 @@ func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 }
 
 func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
-	var values []interface{}
-	for _, pkey := range pkeys {
+	var values = make([]interface{}, len(pkeys))
+	for i, pkey := range pkeys {
 		if row[pkey] == nil {
-			values = append(values, nil)
+			values[i] = nil
 		} else {
-			values = append(values, row[pkey].Value)
+			values[i] = row[pkey].Value
 		}
 	}
 	return values
@@ -191,72 +189,72 @@ func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
 	if len(pkeys) == 0 || err != nil {
 		log.Errorf("UPDATE No primary keys found for table.", tableName)
 		return false
-	} else {
-		if len(oldRows) == 0 || len(newRows) == 0 {
-			return false
-		}
-
-		var orderedColumns []string
-
-		//extract sorted orderedColumns
-		for columnName := range newRows[0] {
-			orderedColumns = append(orderedColumns, columnName)
-		}
-		sort.Strings(orderedColumns)
-
-		//build update statement, use arbitrary row as template
-		sql := buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
-		prep, err := txn.Prepare(sql)
-		if err != nil {
-			log.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
-			return false
-		}
-		defer prep.Close()
-
-		for i, row := range newRows {
-			var values []interface{}
-
-			for _, columnName := range orderedColumns {
-				//use Value so that stmt exec does not complain about common.ColumnVal being a struct
-				//TODO will need to convert the Value (which is a string) to the appropriate field, using type for mapping
-				//TODO right now this will only work when the column type is a string
-				if row[columnName] != nil {
-					values = append(values, row[columnName].Value)
-				} else {
-					values = append(values, nil)
-				}
-			}
-
-			//add values for where clause, use PKs of old row
-			for _, pk := range pkeys {
-				if oldRows[i][pk] != nil {
-					values = append(values, oldRows[i][pk].Value)
-				} else {
-					values = append(values, nil)
-				}
-
-			}
-
-			//create prepared statement from existing template statement
-			res, err := txn.Stmt(prep).Exec(values...)
-
-			if err != nil {
-				log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
-				return false
-			} else {
-				numRowsAffected, err := res.RowsAffected()
-				if err != nil {
-					log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
-					return false
-				}
-				//delete this once we figure out why tests are failing/not updating
-				log.Infof("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
-				log.Debugf("UPDATE Success [%s] values=%v", sql, values)
-			}
-		}
-
-		return true
 	}
+	if len(oldRows) == 0 || len(newRows) == 0 {
+		return false
+	}
+
+	var orderedColumns []string
+
+	//extract sorted orderedColumns
+	for columnName := range newRows[0] {
+		orderedColumns = append(orderedColumns, columnName)
+	}
+	sort.Strings(orderedColumns)
+
+	//build update statement, use arbitrary row as template
+	sql := buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
+	prep, err := txn.Prepare(sql)
+	if err != nil {
+		log.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
+		return false
+	}
+	defer prep.Close()
+
+	for i, row := range newRows {
+		var values []interface{}
+
+		for _, columnName := range orderedColumns {
+			//use Value so that stmt exec does not complain about common.ColumnVal being a struct
+			//TODO will need to convert the Value (which is a string) to the appropriate field, using type for mapping
+			//TODO right now this will only work when the column type is a string
+			if row[columnName] != nil {
+				values = append(values, row[columnName].Value)
+			} else {
+				values = append(values, nil)
+			}
+		}
+
+		//add values for where clause, use PKs of old row
+		for _, pk := range pkeys {
+			if oldRows[i][pk] != nil {
+				values = append(values, oldRows[i][pk].Value)
+			} else {
+				values = append(values, nil)
+			}
+
+		}
+
+		//create prepared statement from existing template statement
+		res, err := txn.Stmt(prep).Exec(values...)
+
+		if err != nil {
+			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+		numRowsAffected, err := res.RowsAffected()
+		if err != nil {
+			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+		//delete this once we figure out why tests are failing/not updating
+		log.Infof("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
+		log.Debugf("UPDATE Success [%s] values=%v", sql, values)
+
+	}
+
+	return true
+
 }
 
 func buildUpdateSql(tableName string, orderedColumns []string, row common.Row, pkeys []string) string {
