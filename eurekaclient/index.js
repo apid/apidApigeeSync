@@ -48,11 +48,11 @@ module.exports.init = function (config, logger, stats) {
   }
 
   function getAppName(url) {
-    for (var index in lookup) {
-      if (url.includes(lookup[index].uri) || url == lookup[index].uri) {
+    for (var index in config.lookup) {
+      if (url.includes(config.lookup[index].uri) || url == config.lookup[index].uri) {
         return {
-                  app: lookup[index].app,
-                  secure: lookup[index].secure
+                  app: config.lookup[index].app,
+                  secure: config.lookup[index].secure
                };
       }
     }
