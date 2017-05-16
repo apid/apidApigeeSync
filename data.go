@@ -248,7 +248,7 @@ func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
 			return false
 		}
 		//delete this once we figure out why tests are failing/not updating
-		log.Infof("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
+		log.Debugf("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
 		log.Debugf("UPDATE Success [%s] values=%v", sql, values)
 
 	}
@@ -409,8 +409,8 @@ func updateLastSequence(lastSequence string) error {
 		return err
 	}
 
-	log.Infof("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
-
+	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
+	log.Infof("Replication lastSequence=%s", lastSequence)
 	return nil
 }
 
