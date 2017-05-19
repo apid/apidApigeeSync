@@ -203,6 +203,8 @@ module.exports.init = function (config, logger, stats) {
 // then check if that proxy is one of the authorized proxies in bootstrap
 const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAuthorized(config, urlPath, proxy, decodedToken) {
 
+  var parsedUrl = url.parse(urlPath);
+  urlPath = parsedUrl.pathname;
   if (!decodedToken.api_product_list) { debug('no api product list'); return false; }
 
   return decodedToken.api_product_list.some(function (product) {
@@ -219,6 +221,7 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
             debug('found matching proxy rule');
             return;
           }
+          
           const apiproxy = tempApiProxy.includes(proxy.base_path)
             ? tempApiProxy
             : proxy.base_path + (tempApiProxy.startsWith("/") ? "" : "/") +  tempApiProxy
@@ -228,7 +231,7 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
 
           if(apiproxy.includes(SUPPORTED_DOUBLE_ASTERIK_PATTERN)){
             const regex = apiproxy.replace(/\*\*/gi,".*")
-            matchesProxyRules =  urlPath.match(regex)
+            matchesProxyRules = urlPath.match(regex)
           }else{
             if(apiproxy.includes(SUPPORTED_SINGLE_ASTERIK_PATTERN)){
               const regex = apiproxy.replace(/\*/gi,"[^/]+");
@@ -237,6 +240,7 @@ const checkIfAuthorized = module.exports.checkIfAuthorized = function checkIfAut
               // if(apiproxy.includes(SUPPORTED_SINGLE_FORWARD_SLASH_PATTERN)){
               // }
               matchesProxyRules = urlPath == apiproxy;
+
             }
           }
       })
