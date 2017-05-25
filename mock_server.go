@@ -79,6 +79,19 @@ type MockServer struct {
 	minDeploymentID *int64
 	maxDeploymentID *int64
 	newSnap         *int32
+	authFail        *int32
+}
+
+func (m *MockServer) forceAuthFail() {
+	atomic.StoreInt32(m.authFail, 1)
+}
+
+func (m *MockServer) normalAuthCheck() {
+	atomic.StoreInt32(m.authFail, 0)
+}
+
+func (m *MockServer) passAuthCheck() {
+	atomic.StoreInt32(m.authFail, 2)
 }
 
 func (m *MockServer) forceNewSnapshot() {
@@ -146,6 +159,8 @@ func (m *MockServer) init() {
 	*m.minDeploymentID = 1
 	m.maxDeploymentID = new(int64)
 	m.newSnap = new(int32)
+	m.authFail = new(int32)
+	*m.authFail = 0
 
 	initDb("./sql/init_mock_db.sql", "./mockdb.sqlite3")
 	initDb("./sql/init_mock_boot_db.sql", "./mockdb_boot.sqlite3")
@@ -303,6 +318,12 @@ func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
 // enforces handler auth
 func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+
+		if atomic.LoadInt32(m.authFail) > 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
+			return
+		}
 		auth := req.Header.Get("Authorization")
 
 		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)

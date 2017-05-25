@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-type snapShotManager struct {
+type simpleSnapShotManager struct {
 	// to send quit signal to the downloading thread
 	quitChan chan bool
 	// to mark the graceful close of snapshotManager
@@ -26,10 +26,10 @@ type snapShotManager struct {
 	isDownloading *int32
 }
 
-func createSnapShotManager() *snapShotManager {
+func createSnapShotManager() *simpleSnapShotManager {
 	isClosedInt := int32(0)
 	isDownloadingInt := int32(0)
-	return &snapShotManager{
+	return &simpleSnapShotManager{
 		quitChan:      make(chan bool, 1),
 		finishChan:    make(chan bool, 1),
 		isClosed:      &isClosedInt,
@@ -43,7 +43,7 @@ func createSnapShotManager() *snapShotManager {
  * use <- close() for blocking close
  * should only be called by pollChangeManager, because pollChangeManager is dependent on it
  */
-func (s *snapShotManager) close() <-chan bool {
+func (s *simpleSnapShotManager) close() <-chan bool {
 	//has been closed before
 	if atomic.SwapInt32(s.isClosed, 1) == int32(1) {
 		log.Error("snapShotManager: close() called on a closed snapShotManager!")
@@ -63,7 +63,7 @@ func (s *snapShotManager) close() <-chan bool {
 }
 
 // retrieve boot information: apid_config and apid_config_scope
-func (s *snapShotManager) downloadBootSnapshot() {
+func (s *simpleSnapShotManager) downloadBootSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadBootSnapshot: only 1 thread can download snapshot at the same time!")
 	}
@@ -99,12 +99,12 @@ func (s *snapShotManager) downloadBootSnapshot() {
 	s.storeBootSnapshot(snapshot)
 }
 
-func (s *snapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
+func (s *simpleSnapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
 	processSnapshot(snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
-func (s *snapShotManager) downloadDataSnapshot() {
+func (s *simpleSnapShotManager) downloadDataSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadDataSnapshot: only 1 thread can download snapshot at the same time!")
 	}
@@ -132,7 +132,7 @@ func (s *snapShotManager) downloadDataSnapshot() {
 	s.storeDataSnapshot(snapshot)
 }
 
-func (s *snapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
+func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 	knownTables = extractTablesFromSnapshot(snapshot)
 
 	_, err := dataService.DBVersion(snapshot.SnapshotInfo)
@@ -232,7 +232,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 // a blocking method
 // will keep retrying with backoff until success
 
-func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
+func (s *simpleSnapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
 	// if closed
 	if atomic.LoadInt32(s.isClosed) == int32(1) {
 		log.Warn("Trying to download snapshot with a closed snapShotManager")
