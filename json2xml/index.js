@@ -156,9 +156,9 @@ module.exports.init = function (config, logger, stats) {
 			if (data && data.length > 0 && disable == false) accumulateResponse(res, data);
 
 			var contentType = res.getHeader('content-type');
-			if (contentType.indexOf("application/xml") > -1) {
+			if (contentType && contentType.indexOf("application/xml") > -1) {
 				responseIsXML = true;
-			} else if (contentType.indexOf("application/json") > -1) {
+			} else if (contentType && contentType.indexOf("application/json") > -1) {
 				responseIsJSON = true;
 			}
 
