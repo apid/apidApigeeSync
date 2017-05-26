@@ -58,7 +58,10 @@ func processSqliteSnapshot(db apid.DB) {
 		log.Panicf("Unable to read database: %s", err.Error())
 	}
 	apidClusters.Next()
-	apidClusters.Scan(&numApidClusters)
+	err = apidClusters.Scan(&numApidClusters)
+	if err != nil {
+		log.Panicf("Unable to read database: %s", err.Error())
+	}
 
 	if numApidClusters != 1 {
 		log.Panic("Illegal state for apid_cluster. Must be a single row.")

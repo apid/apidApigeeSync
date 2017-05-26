@@ -101,9 +101,8 @@ func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	if err != nil {
 		log.Errorf("INSERT Fail [%s] values=%v error=[%v]", sql, values, err)
 		return false
-	} else {
-		log.Debugf("INSERT Success [%s] values=%v", sql, values)
 	}
+	log.Debugf("INSERT Success [%s] values=%v", sql, values)
 
 	return true
 }
@@ -126,39 +125,42 @@ func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	if len(pkeys) == 0 || err != nil {
 		log.Errorf("DELETE No primary keys found for table. %s", tableName)
 		return false
-	} else if len(rows) == 0 {
+	}
+
+	if len(rows) == 0 {
 		log.Errorf("No rows found for table.", tableName)
 		return false
-	} else {
-		sql := buildDeleteSql(tableName, rows[0], pkeys)
-		prep, err := txn.Prepare(sql)
+	}
+
+	sql := buildDeleteSql(tableName, rows[0], pkeys)
+	prep, err := txn.Prepare(sql)
+	if err != nil {
+		log.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
+		return false
+	}
+	defer prep.Close()
+	for _, row := range rows {
+		values := getValueListFromKeys(row, pkeys)
+		// delete prepared statement from existing template statement
+		res, err := txn.Stmt(prep).Exec(values...)
 		if err != nil {
-			log.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
+			log.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
 			return false
 		}
-		defer prep.Close()
-		for _, row := range rows {
-			values := getValueListFromKeys(row, pkeys)
-			// delete prepared statement from existing template statement
-			res, err := txn.Stmt(prep).Exec(values...)
-			if err != nil {
-				log.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
-				return false
-			} else {
-				affected, err := res.RowsAffected()
-				if err == nil && affected != 0 {
-					log.Debugf("DELETE Success [%s] values=%v", sql, values)
-				} else if err == nil && affected == 0 {
-					log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
-					return false
-				} else {
-					log.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
-					return false
-				}
-			}
+		affected, err := res.RowsAffected()
+		if err == nil && affected != 0 {
+			log.Debugf("DELETE Success [%s] values=%v", sql, values)
+		} else if err == nil && affected == 0 {
+			log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
+			return false
+		} else {
+			log.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
+			return false
 		}
-		return true
+
 	}
+	return true
+
 }
 
 // Syntax "DELETE FROM Obj WHERE key1=$1 AND key2=$2 ... ;"
