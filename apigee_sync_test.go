@@ -111,7 +111,7 @@ var _ = Describe("Sync", func() {
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
-					closeDone = changeManager.close()
+					closeDone = apidChangeManager.close()
 					// ensure that snapshot switched DB versions
 					Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
 					expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
@@ -180,7 +180,7 @@ var _ = Describe("Sync", func() {
 				if s, ok := event.(*common.Snapshot); ok {
 					// In this test, the changeManager.pollChangeWithBackoff() has not been launched when changeManager closed
 					// This is because the changeManager.pollChangeWithBackoff() in bootstrap() happened after this handler
-					closeDone = changeManager.close()
+					closeDone = apidChangeManager.close()
 					go func() {
 						// when close done, all handlers for the first snapshot have been executed
 						<-closeDone
@@ -289,18 +289,19 @@ var _ = Describe("Sync", func() {
 		 */
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
-			tokenManager = createTokenManager()
-			snapManager = createSnapShotManager()
+			apidTokenManager = createSimpleTokenManager()
+			apidTokenManager.start()
+			apidSnapshotManager = createSnapShotManager()
 			events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}
-			snapManager.downloadSnapshot(scopes, snapshot)
-			snapManager.storeBootSnapshot(snapshot)
-			snapManager.storeDataSnapshot(snapshot)
+			apidSnapshotManager.downloadSnapshot(scopes, snapshot)
+			apidSnapshotManager.storeBootSnapshot(snapshot)
+			apidSnapshotManager.storeDataSnapshot(snapshot)
 			restoreContext()
-			<-snapManager.close()
-			tokenManager.close()
+			<-apidSnapshotManager.close()
+			apidTokenManager.close()
 		}, 3)
 
 		It("Reuse http.Client connection for multiple concurrent requests", func() {

@@ -30,16 +30,16 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log           apid.LogService
-	config        apid.ConfigService
-	dataService   apid.DataService
-	events        apid.EventsService
-	apidInfo      apidInstanceInfo
-	newInstanceID bool
-	tokenManager  *tokenMan
-	changeManager *pollChangeManager
-	snapManager   *snapShotManager
-	httpclient    *http.Client
+	log                 apid.LogService
+	config              apid.ConfigService
+	dataService         apid.DataService
+	events              apid.EventsService
+	apidInfo            apidInstanceInfo
+	newInstanceID       bool
+	apidTokenManager    tokenManager
+	apidChangeManager   changeManager
+	apidSnapshotManager snapShotManager
+	httpclient          *http.Client
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -83,15 +83,10 @@ func initVariables(services apid.Services) error {
 		Transport: tr,
 		Timeout:   httpTimeout,
 		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+			req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
 			return nil
 		},
 	}
-
-	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
-	//also useful for testing
-	snapManager = createSnapShotManager()
-	changeManager = createChangeManager()
 
 	// set up default database
 	db, err := dataService.DB()
@@ -117,6 +112,12 @@ func initVariables(services apid.Services) error {
 	return nil
 }
 
+func createManagers() {
+	apidSnapshotManager = createSnapShotManager()
+	apidChangeManager = createChangeManager()
+	apidTokenManager = createSimpleTokenManager()
+}
+
 func checkForRequiredValues() error {
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
@@ -137,7 +138,7 @@ func SetLogger(logger apid.LogService) {
 	log = logger
 }
 
-/* Idempotent state initialization */
+/* initialization */
 func _initPlugin(services apid.Services) error {
 	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
@@ -164,6 +165,8 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	if err != nil {
 		return pluginData, err
 	}
+
+	createManagers()
 
 	/* This callback function will get called once all the plugins are
 	 * initialized (not just this plugin). This is needed because,
@@ -208,8 +211,7 @@ func postInitPlugins(event apid.Event) {
 
 		log.Debug("start post plugin init")
 
-		tokenManager = createTokenManager()
-
+		apidTokenManager.start()
 		go bootstrap()
 
 		events.Listen(ApigeeSyncEventSelector, &handler{})

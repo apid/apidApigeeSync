@@ -58,7 +58,10 @@ func processSqliteSnapshot(db apid.DB) {
 		log.Panicf("Unable to read database: %s", err.Error())
 	}
 	apidClusters.Next()
-	apidClusters.Scan(&numApidClusters)
+	err = apidClusters.Scan(&numApidClusters)
+	if err != nil {
+		log.Panicf("Unable to read database: %s", err.Error())
+	}
 
 	if numApidClusters != 1 {
 		log.Panic("Illegal state for apid_cluster. Must be a single row.")
@@ -116,21 +119,4 @@ func processChangeList(changes *common.ChangeList) bool {
 	}
 
 	return ok
-}
-
-func makeDataScopeFromRow(row common.Row) dataDataScope {
-
-	ds := dataDataScope{}
-
-	row.Get("id", &ds.ID)
-	row.Get("apid_cluster_id", &ds.ClusterID)
-	row.Get("scope", &ds.Scope)
-	row.Get("org", &ds.Org)
-	row.Get("env", &ds.Env)
-	row.Get("created", &ds.Created)
-	row.Get("created_by", &ds.CreatedBy)
-	row.Get("updated", &ds.Updated)
-	row.Get("updated_by", &ds.UpdatedBy)
-
-	return ds
 }

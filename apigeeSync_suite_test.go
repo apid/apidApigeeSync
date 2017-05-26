@@ -55,6 +55,7 @@ var _ = BeforeEach(func(done Done) {
 	log = apid.Log()
 
 	_initPlugin(apid.AllServices())
+	createManagers()
 	close(done)
 }, 3)
 

@@ -15,15 +15,11 @@ var _ = Describe("listener", func() {
 	var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 		initDb(sqlfile, "./mockdb.sqlite3")
 		file, err := os.Open("./mockdb.sqlite3")
-		if err != nil {
-			Fail("Failed to open mock db for test")
-		}
+		Expect(err).ShouldNot(HaveOccurred())
 
 		s := common.Snapshot{}
 		err = processSnapshotServerFileResponse(dbId, file, &s)
-		if err != nil {
-			Fail("Error processing test snapshots")
-		}
+		Expect(err).ShouldNot(HaveOccurred())
 		return s
 	}
 

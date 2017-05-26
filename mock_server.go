@@ -79,10 +79,27 @@ type MockServer struct {
 	minDeploymentID *int64
 	maxDeploymentID *int64
 	newSnap         *int32
+	authFail        *int32
+}
+
+func (m *MockServer) forceAuthFail() {
+	atomic.StoreInt32(m.authFail, 1)
+}
+
+func (m *MockServer) normalAuthCheck() {
+	atomic.StoreInt32(m.authFail, 0)
+}
+
+func (m *MockServer) passAuthCheck() {
+	atomic.StoreInt32(m.authFail, 2)
 }
 
 func (m *MockServer) forceNewSnapshot() {
-	atomic.SwapInt32(m.newSnap, 1)
+	atomic.StoreInt32(m.newSnap, 1)
+}
+
+func (m *MockServer) forceNoSnapshot() {
+	atomic.StoreInt32(m.newSnap, 0)
 }
 
 func (m *MockServer) lastSequenceID() string {
@@ -146,6 +163,8 @@ func (m *MockServer) init() {
 	*m.minDeploymentID = 1
 	m.maxDeploymentID = new(int64)
 	m.newSnap = new(int32)
+	m.authFail = new(int32)
+	*m.authFail = 0
 
 	initDb("./sql/init_mock_db.sql", "./mockdb.sqlite3")
 	initDb("./sql/init_mock_boot_db.sql", "./mockdb_boot.sqlite3")
@@ -253,6 +272,7 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 
 	val := atomic.SwapInt32(m.newSnap, 0)
 	if val > 0 {
+		log.Debug("MockServer: force new snapshot")
 		w.WriteHeader(http.StatusBadRequest)
 		apiErr := changeServerError{
 			Code: "SNAPSHOT_TOO_OLD",
@@ -262,6 +282,8 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 		w.Write(bytes)
 		return
 	}
+
+	log.Debug("mock server sending change list")
 
 	q := req.URL.Query()
 
@@ -303,15 +325,29 @@ func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
 // enforces handler auth
 func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		auth := req.Header.Get("Authorization")
 
+		// force failing auth check
+		if atomic.LoadInt32(m.authFail) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
+			return
+		}
+
+		// force passing auth check
+		if atomic.LoadInt32(m.authFail) == 2 {
+			target(w, req)
+			return
+		}
+
+		// check auth header
+		auth := req.Header.Get("Authorization")
 		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
 		if auth != expectedAuth {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
-		} else {
-			target(w, req)
+			return
 		}
+		target(w, req)
 	}
 }
 
