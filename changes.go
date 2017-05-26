@@ -54,8 +54,8 @@ func (c *pollChangeManager) close() <-chan bool {
 		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
 		go func() {
 			c.quitChan <- true
-			tokenManager.close()
-			<-snapManager.close()
+			apidTokenManager.close()
+			<-apidSnapshotManager.close()
 			log.Debug("change manager closed")
 			finishChan <- false
 		}()
@@ -65,8 +65,8 @@ func (c *pollChangeManager) close() <-chan bool {
 	log.Debug("pollChangeManager: close pollChangeWithBackoff and token manager")
 	go func() {
 		c.quitChan <- true
-		tokenManager.close()
-		<-snapManager.close()
+		apidTokenManager.close()
+		<-apidSnapshotManager.close()
 		log.Debug("change manager closed")
 		finishChan <- true
 	}()
@@ -183,8 +183,11 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 		switch r.StatusCode {
 		case http.StatusUnauthorized:
-			tokenManager.invalidateToken()
-			return nil
+			err = apidTokenManager.invalidateToken()
+			if err != nil {
+				return err
+			}
+			return authFailError{}
 
 		case http.StatusNotModified:
 			return nil
@@ -206,7 +209,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
 				err = apiErr
 			}
-			return nil
+			return err
 		}
 		return nil
 	}
@@ -271,7 +274,7 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 	}
 	if c, ok := err.(changeServerError); ok {
 		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
-		snapManager.downloadDataSnapshot()
+		apidSnapshotManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}
@@ -289,7 +292,7 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 	}
 
 	for _, change := range changes {
-		if !a[change.Table] {
+		if !a[normalizeTableName(change.Table)] {
 			log.Infof("Unable to find %s table in current known tables", change.Table)
 			return true
 		}

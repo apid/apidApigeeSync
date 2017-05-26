@@ -8,17 +8,20 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"net"
 
+	"database/sql"
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"io"
+	"io/ioutil"
+	"os"
+	"strconv"
 )
 
 /*
@@ -41,19 +44,16 @@ Relations:
 const oauthExpiresIn = 2 * 60 // 2 minutes
 
 type MockParms struct {
-	ReliableAPI            bool
-	ClusterID              string
-	TokenKey               string
-	TokenSecret            string
-	Scope                  string
-	Organization           string
-	Environment            string
-	NumDevelopers          int
-	AddDeveloperEvery      time.Duration
-	UpdateDeveloperEvery   time.Duration
-	NumDeployments         int
-	ReplaceDeploymentEvery time.Duration
-	BundleURI              string
+	ReliableAPI    bool
+	ClusterID      string
+	TokenKey       string
+	TokenSecret    string
+	Scope          string
+	Organization   string
+	Environment    string
+	NumDevelopers  int
+	NumDeployments int
+	BundleURI      string
 }
 
 func Mock(params MockParms, router apid.Router) *MockServer {
@@ -72,7 +72,6 @@ type MockServer struct {
 	params          MockParms
 	oauthToken      string
 	snapshotID      string
-	snapshotTables  map[string][]common.Table // key = scopeID
 	changeChannel   chan []byte
 	sequenceID      *int64
 	maxDevID        *int64
@@ -80,10 +79,27 @@ type MockServer struct {
 	minDeploymentID *int64
 	maxDeploymentID *int64
 	newSnap         *int32
+	authFail        *int32
+}
+
+func (m *MockServer) forceAuthFail() {
+	atomic.StoreInt32(m.authFail, 1)
+}
+
+func (m *MockServer) normalAuthCheck() {
+	atomic.StoreInt32(m.authFail, 0)
+}
+
+func (m *MockServer) passAuthCheck() {
+	atomic.StoreInt32(m.authFail, 2)
 }
 
 func (m *MockServer) forceNewSnapshot() {
-	atomic.SwapInt32(m.newSnap, 1)
+	atomic.StoreInt32(m.newSnap, 1)
+}
+
+func (m *MockServer) forceNoSnapshot() {
+	atomic.StoreInt32(m.newSnap, 0)
 }
 
 func (m *MockServer) lastSequenceID() string {
@@ -111,6 +127,28 @@ func (m *MockServer) popDeploymentID() string {
 	return strconv.FormatInt(newMinID-1, 10)
 }
 
+func initDb(statements, path string) {
+
+	f, _ := os.Create(path)
+	f.Close()
+
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		log.Panic("Could not instantiate mock db, %s", err)
+	}
+	defer db.Close()
+	sqlStatementsBuffer, err := ioutil.ReadFile(statements)
+	if err != nil {
+		log.Panic("Could not instantiate mock db, %s", err)
+	}
+	sqlStatementsString := string(sqlStatementsBuffer)
+	_, err = db.Exec(sqlStatementsString)
+	if err != nil {
+		log.Panic("Could not instantiate mock db, %s", err)
+	}
+
+}
+
 func (m *MockServer) init() {
 	defer GinkgoRecover()
 	RegisterFailHandler(func(message string, callerSkip ...int) {
@@ -125,79 +163,12 @@ func (m *MockServer) init() {
 	*m.minDeploymentID = 1
 	m.maxDeploymentID = new(int64)
 	m.newSnap = new(int32)
+	m.authFail = new(int32)
+	*m.authFail = 0
 
-	go m.developerGenerator()
-	go m.developerUpdater()
-	go m.deploymentReplacer()
+	initDb("./sql/init_mock_db.sql", "./mockdb.sqlite3")
+	initDb("./sql/init_mock_boot_db.sql", "./mockdb_boot.sqlite3")
 
-	// cluster "scope"
-	cluster := m.newRow(map[string]string{
-		"id":               m.params.ClusterID,
-		"_change_selector": m.params.ClusterID,
-	})
-
-	// data scopes
-	var dataScopes []common.Row
-	dataScopes = append(dataScopes, cluster)
-	dataScopes = append(dataScopes, m.newRow(map[string]string{
-		"id":               m.params.Scope,
-		"scope":            m.params.Scope,
-		"org":              m.params.Organization,
-		"env":              m.params.Environment,
-		"apid_cluster_id":  m.params.ClusterID,
-		"_change_selector": m.params.Scope,
-	}))
-
-	// cluster & data_scope snapshot tables
-	m.snapshotTables = map[string][]common.Table{}
-	m.snapshotTables[m.params.ClusterID] = []common.Table{
-		{
-			Name: "edgex.apid_cluster",
-			Rows: []common.Row{cluster},
-		},
-		{
-			Name: "edgex.data_scope",
-			Rows: dataScopes,
-		},
-	}
-
-	var snapshotTableRows []tableRowMap
-
-	// generate one company
-	companyID := m.params.Organization
-	tenantID := m.params.Scope
-	changeSelector := m.params.Scope
-	company := tableRowMap{
-		"kms.company": m.newRow(map[string]string{
-			"id":               companyID,
-			"status":           "Active",
-			"tenant_id":        tenantID,
-			"name":             companyID,
-			"display_name":     companyID,
-			"_change_selector": changeSelector,
-		}),
-	}
-	snapshotTableRows = append(snapshotTableRows, company)
-
-	// generate snapshot developers
-	for i := 0; i < m.params.NumDevelopers; i++ {
-		developer := m.createDeveloperWithProductAndApp()
-		snapshotTableRows = append(snapshotTableRows, developer)
-	}
-	log.Infof("created %d developers", m.params.NumDevelopers)
-
-	// generate snapshot deployments
-	for i := 0; i < m.params.NumDeployments; i++ {
-		deployment := m.createDeployment()
-		snapshotTableRows = append(snapshotTableRows, deployment)
-	}
-	log.Infof("created %d deployments", m.params.NumDeployments)
-
-	m.snapshotTables[m.params.Scope] = m.concatTableRowMaps(snapshotTableRows...)
-
-	if m.params.NumDevelopers < 10 && m.params.NumDeployments < 10 {
-		log.Debugf("snapshotTables: %v", m.snapshotTables[m.params.Scope])
-	}
 }
 
 // developer, product, application, credential will have the same ID (developerID)
@@ -281,28 +252,19 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
 
-	m.snapshotID = generateUUID()
-	snapshot := &common.Snapshot{
-		SnapshotInfo: m.snapshotID,
+	w.Header().Set("Transicator-Snapshot-TXID", generateUUID())
+
+	if len(scopes) == 1 {
+		//send bootstrap db
+		err := streamFile("./mockdb_boot.sqlite3", w)
+		Expect(err).NotTo(HaveOccurred())
+		return
+	} else {
+		//send data db
+		err := streamFile("./mockdb.sqlite3", w)
+		Expect(err).NotTo(HaveOccurred())
+		return
 	}
-
-	// Note: if/when we support multiple scopes, we'd have to do a merge of table rows
-	for _, scope := range scopes {
-		tables := m.snapshotTables[scope]
-		for _, table := range tables {
-			snapshot.AddTables(table)
-		}
-	}
-
-	body, err := json.Marshal(snapshot)
-	Expect(err).NotTo(HaveOccurred())
-
-	log.Infof("sending snapshot: %s", m.snapshotID)
-	if len(body) < 10000 {
-		log.Debugf("snapshot: %#v", string(body))
-	}
-
-	w.Write(body)
 }
 
 func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
@@ -310,6 +272,7 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 
 	val := atomic.SwapInt32(m.newSnap, 0)
 	if val > 0 {
+		log.Debug("MockServer: force new snapshot")
 		w.WriteHeader(http.StatusBadRequest)
 		apiErr := changeServerError{
 			Code: "SNAPSHOT_TOO_OLD",
@@ -320,23 +283,20 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	log.Debug("mock server sending change list")
+
 	q := req.URL.Query()
 
 	scopes := q["scope"]
-	block, err := strconv.Atoi(q.Get("block"))
+	_, err := strconv.Atoi(q.Get("block"))
 	Expect(err).NotTo(HaveOccurred())
-	since := q.Get("since")
+	_ = q.Get("since")
 
 	Expect(req.Header.Get("apid_cluster_Id")).To(Equal(m.params.ClusterID))
 	//Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
 	//Expect(scopes).To(ContainElement(m.params.Scope))
-
-	if since != "" {
-		m.sendChange(w, time.Duration(block)*time.Second)
-		return
-	}
 
 	// todo: the following is just legacy for the existing test in apigeeSync_suite_test
 	developer := m.createDeveloperWithProductAndApp()
@@ -346,93 +306,6 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 		log.Errorf("Error generating developer: %v", err)
 	}
 	w.Write(body)
-}
-
-// generate developers w/ product and app
-func (m *MockServer) developerGenerator() {
-
-	for range time.Tick(m.params.AddDeveloperEvery) {
-
-		developer := m.createDeveloperWithProductAndApp()
-		changeList := m.createInsertChange(developer)
-
-		body, err := json.Marshal(changeList)
-		if err != nil {
-			log.Errorf("Error adding developer: %v", err)
-		}
-
-		log.Info("adding developer")
-		log.Debugf("body: %#v", string(body))
-		m.changeChannel <- body
-	}
-}
-
-// update random developers - set username
-func (m *MockServer) developerUpdater() {
-
-	for range time.Tick(m.params.UpdateDeveloperEvery) {
-
-		developerID := m.randomDeveloperID()
-
-		oldDev := m.createDeveloper(developerID)
-		delete(oldDev, "kms.company_developer")
-		newDev := m.createDeveloper(developerID)
-		delete(newDev, "kms.company_developer")
-
-		newRow := newDev["kms.developer"]
-		newRow["username"] = m.stringColumnVal("i_am_not_a_number")
-
-		changeList := m.createUpdateChange(oldDev, newDev)
-
-		body, err := json.Marshal(changeList)
-		if err != nil {
-			log.Errorf("Error updating developer: %v", err)
-		}
-
-		log.Info("updating developer")
-		log.Debugf("body: %#v", string(body))
-		m.changeChannel <- body
-	}
-}
-
-func (m *MockServer) deploymentReplacer() {
-
-	for range time.Tick(m.params.ReplaceDeploymentEvery) {
-
-		// delete
-		oldDep := tableRowMap{}
-		oldDep["edgex.deployment"] = m.newRow(map[string]string{
-			"id": m.popDeploymentID(),
-		})
-		deleteChange := m.createDeleteChange(oldDep)
-
-		// insert
-		newDep := m.createDeployment()
-		insertChange := m.createInsertChange(newDep)
-
-		changeList := m.concatChangeLists(deleteChange, insertChange)
-
-		body, err := json.Marshal(changeList)
-		if err != nil {
-			log.Errorf("Error replacing deployment: %v", err)
-		}
-
-		log.Info("replacing deployment")
-		log.Debugf("body: %#v", string(body))
-		m.changeChannel <- body
-	}
-}
-
-// todo: we could debounce this if necessary
-func (m *MockServer) sendChange(w http.ResponseWriter, timeout time.Duration) {
-	select {
-	case change := <-m.changeChannel:
-		log.Info("sending change to client")
-		w.Write(change)
-	case <-time.After(timeout):
-		log.Info("change request timeout")
-		w.WriteHeader(http.StatusNotModified)
-	}
 }
 
 // enables GoMega handling
@@ -452,15 +325,29 @@ func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
 // enforces handler auth
 func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		auth := req.Header.Get("Authorization")
 
+		// force failing auth check
+		if atomic.LoadInt32(m.authFail) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
+			return
+		}
+
+		// force passing auth check
+		if atomic.LoadInt32(m.authFail) == 2 {
+			target(w, req)
+			return
+		}
+
+		// check auth header
+		auth := req.Header.Get("Authorization")
 		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
 		if auth != expectedAuth {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
-		} else {
-			target(w, req)
+			return
 		}
+		target(w, req)
 	}
 }
 
@@ -537,7 +424,7 @@ func (m *MockServer) createDeployment() tableRowMap {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	rows := tableRowMap{}
-	rows["edgex.deployment"] = m.newRow(map[string]string{
+	rows["kms_deployment"] = m.newRow(map[string]string{
 		"id":                 deploymentID,
 		"bundle_config_id":   bundleID,
 		"apid_cluster_id":    m.params.ClusterID,
@@ -556,15 +443,14 @@ func (m *MockServer) createDeveloper(developerID string) tableRowMap {
 
 	rows := tableRowMap{}
 
-	rows["kms.developer"] = m.newRow(map[string]string{
+	rows["kms_developer"] = m.newRow(map[string]string{
 		"id":        developerID,
 		"status":    "Active",
 		"tenant_id": tenantID,
 	})
 
 	// map developer onto to existing company
-	rows["kms.company_developer"] = m.newRow(map[string]string{
-		"id":           developerID,
+	rows["kms_company_developer"] = m.newRow(map[string]string{
 		"tenant_id":    tenantID,
 		"company_id":   companyID,
 		"developer_id": developerID,
@@ -581,7 +467,7 @@ func (m *MockServer) createProduct(productID string) tableRowMap {
 	resources := fmt.Sprintf("{%s}", "/") // todo: what should be here?
 
 	rows := tableRowMap{}
-	rows["kms.api_product"] = m.newRow(map[string]string{
+	rows["kms_api_product"] = m.newRow(map[string]string{
 		"id":            productID,
 		"api_resources": resources,
 		"environments":  environments,
@@ -596,21 +482,21 @@ func (m *MockServer) createApplication(developerID, productID, applicationID, cr
 
 	rows := tableRowMap{}
 
-	rows["kms.app"] = m.newRow(map[string]string{
+	rows["kms_app"] = m.newRow(map[string]string{
 		"id":           applicationID,
 		"developer_id": developerID,
 		"status":       "Approved",
 		"tenant_id":    tenantID,
 	})
 
-	rows["kms.app_credential"] = m.newRow(map[string]string{
+	rows["kms_app_credential"] = m.newRow(map[string]string{
 		"id":        credentialID,
 		"app_id":    applicationID,
 		"tenant_id": tenantID,
 		"status":    "Approved",
 	})
 
-	rows["kms.app_credential_apiproduct_mapper"] = m.newRow(map[string]string{
+	rows["kms_app_credential_apiproduct_mapper"] = m.newRow(map[string]string{
 		"apiprdt_id": productID,
 		"app_id":     applicationID,
 		"appcred_id": credentialID,
@@ -688,26 +574,6 @@ func (m *MockServer) mergeTableRowMaps(maps ...tableRowMap) tableRowMap {
 }
 
 // create []common.Table from array of tableRowMaps
-func (m *MockServer) concatTableRowMaps(maps ...tableRowMap) []common.Table {
-	tableMap := map[string]*common.Table{}
-	for _, m := range maps {
-		for name, row := range m {
-			if _, ok := tableMap[name]; !ok {
-				tableMap[name] = &common.Table{
-					Name: name,
-				}
-			}
-			tableMap[name].AddRowstoTable(row)
-		}
-	}
-	result := []common.Table{}
-	for _, v := range tableMap {
-		result = append(result, *v)
-	}
-	return result
-}
-
-// create []common.Table from array of tableRowMaps
 func (m *MockServer) concatChangeLists(changeLists ...common.ChangeList) common.ChangeList {
 	result := common.ChangeList{}
 	if len(changeLists) > 0 {
@@ -720,4 +586,17 @@ func (m *MockServer) concatChangeLists(changeLists ...common.ChangeList) common.
 		}
 	}
 	return result
+}
+
+func streamFile(srcFile string, w http.ResponseWriter) error {
+	inFile, err := os.Open(srcFile)
+	if err != nil {
+		return err
+	}
+	defer inFile.Close()
+
+	w.Header().Set("Content-Type", "application/transicator+sqlite")
+
+	_, err = io.Copy(w, inFile)
+	return err
 }

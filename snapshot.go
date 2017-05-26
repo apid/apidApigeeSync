@@ -1,7 +1,6 @@
 package apidApigeeSync
 
 import (
-	"encoding/json"
 	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/data"
 	"github.com/apigee-labs/transicator/common"
@@ -16,7 +15,7 @@ import (
 	"time"
 )
 
-type snapShotManager struct {
+type simpleSnapShotManager struct {
 	// to send quit signal to the downloading thread
 	quitChan chan bool
 	// to mark the graceful close of snapshotManager
@@ -27,10 +26,10 @@ type snapShotManager struct {
 	isDownloading *int32
 }
 
-func createSnapShotManager() *snapShotManager {
+func createSnapShotManager() *simpleSnapShotManager {
 	isClosedInt := int32(0)
 	isDownloadingInt := int32(0)
-	return &snapShotManager{
+	return &simpleSnapShotManager{
 		quitChan:      make(chan bool, 1),
 		finishChan:    make(chan bool, 1),
 		isClosed:      &isClosedInt,
@@ -44,7 +43,7 @@ func createSnapShotManager() *snapShotManager {
  * use <- close() for blocking close
  * should only be called by pollChangeManager, because pollChangeManager is dependent on it
  */
-func (s *snapShotManager) close() <-chan bool {
+func (s *simpleSnapShotManager) close() <-chan bool {
 	//has been closed before
 	if atomic.SwapInt32(s.isClosed, 1) == int32(1) {
 		log.Error("snapShotManager: close() called on a closed snapShotManager!")
@@ -64,7 +63,7 @@ func (s *snapShotManager) close() <-chan bool {
 }
 
 // retrieve boot information: apid_config and apid_config_scope
-func (s *snapShotManager) downloadBootSnapshot() {
+func (s *simpleSnapShotManager) downloadBootSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadBootSnapshot: only 1 thread can download snapshot at the same time!")
 	}
@@ -100,12 +99,12 @@ func (s *snapShotManager) downloadBootSnapshot() {
 	s.storeBootSnapshot(snapshot)
 }
 
-func (s *snapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
+func (s *simpleSnapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
 	processSnapshot(snapshot)
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
-func (s *snapShotManager) downloadDataSnapshot() {
+func (s *simpleSnapShotManager) downloadDataSnapshot() {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadDataSnapshot: only 1 thread can download snapshot at the same time!")
 	}
@@ -133,20 +132,13 @@ func (s *snapShotManager) downloadDataSnapshot() {
 	s.storeDataSnapshot(snapshot)
 }
 
-func (s *snapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
+func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 	knownTables = extractTablesFromSnapshot(snapshot)
 
-	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
+	_, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
-
-	// if closed
-	if atomic.LoadInt32(s.isClosed) == int32(1) {
-		log.Warn("Trying to persistKnownTablesToDB with a closed snapShotManager")
-		return
-	}
-	persistKnownTablesToDB(knownTables, db)
 
 	log.Info("Emitting Snapshot to plugins")
 
@@ -167,14 +159,31 @@ func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]boo
 	log.Debug("Extracting table names from snapshot")
 	if snapshot.Tables == nil {
 		//if this panic ever fires, it's a bug
-		log.Panicf("Attempt to extract known tables from snapshot without tables failed")
-	}
+		db, err := dataService.DBVersion(snapshot.SnapshotInfo)
+		if err != nil {
+			log.Panicf("Database inaccessible: %v", err)
+		}
+		rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
+		if err != nil {
+			log.Panicf("Unable to read in known snapshot tables from sqlite file")
+		}
+		for rows.Next() {
+			var tableName string
+			rows.Scan(&tableName)
+			if err != nil {
+				log.Panic("Error scaning tableNames from _transicator_tables")
+			}
+			tables[tableName] = true
+		}
 
-	for _, table := range snapshot.Tables {
-		tables[table.Name] = true
-	}
+	} else {
 
+		for _, table := range snapshot.Tables {
+			tables[table.Name] = true
+		}
+	}
 	return tables
+
 }
 
 func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
@@ -182,7 +191,7 @@ func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 	tables = make(map[string]bool)
 
 	log.Debug("Extracting table names from existing DB")
-	rows, err := db.Query("SELECT name FROM _known_tables;")
+	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
 	defer rows.Close()
 
 	if err != nil {
@@ -223,7 +232,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 // a blocking method
 // will keep retrying with backoff until success
 
-func (s *snapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
+func (s *simpleSnapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
 	// if closed
 	if atomic.LoadInt32(s.isClosed) == int32(1) {
 		log.Warn("Trying to download snapshot with a closed snapShotManager")
@@ -263,16 +272,14 @@ func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan 
 		}
 		addHeaders(req)
 
-		var processSnapshotResponse func(*http.Response, *common.Snapshot) error
+		var processSnapshotResponse func(string, io.Reader, *common.Snapshot) error
 
-		// Set the transport protocol type based on conf file input
-		if config.GetString(configSnapshotProtocol) == "json" {
-			req.Header.Set("Accept", "application/json")
-			processSnapshotResponse = processSnapshotServerJsonResponse
-		} else if config.GetString(configSnapshotProtocol) == "sqlite" {
-			req.Header.Set("Accept", "application/transicator+sqlite")
-			processSnapshotResponse = processSnapshotServerFileResponse
+		if config.GetString(configSnapshotProtocol) != "sqlite" {
+			log.Panic("Only currently supported snashot protocol is sqlite")
+
 		}
+		req.Header.Set("Accept", "application/transicator+sqlite")
+		processSnapshotResponse = processSnapshotServerFileResponse
 
 		// Issue the request to the snapshot server
 		r, err := httpclient.Do(req)
@@ -290,7 +297,7 @@ func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan 
 		}
 
 		// Decode the Snapshot server response
-		err = processSnapshotResponse(r, snapshot)
+		err = processSnapshotResponse(r.Header.Get("Transicator-Snapshot-TXID"), r.Body, snapshot)
 		if err != nil {
 			log.Errorf("Snapshot server response Data not parsable: %v", err)
 			return err
@@ -300,50 +307,24 @@ func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan 
 	}
 }
 
-func persistKnownTablesToDB(tables map[string]bool, db apid.DB) {
-	log.Debugf("Inserting table names found in snapshot into db")
+func processSnapshotServerFileResponse(dbId string, body io.Reader, snapshot *common.Snapshot) error {
+	dbPath := data.DBPath("common/" + dbId)
+	log.Infof("Attempting to stream the sqlite snapshot to %s", dbPath)
 
-	tx, err := db.Begin()
+	//this path includes the sqlite3 file name.  why does mkdir all stop at parent??
+	log.Infof("Creating directory with mkdirall %s", dbPath)
+	err := os.MkdirAll(dbPath[0:len(dbPath)-7], 0700)
 	if err != nil {
-		log.Panicf("Error starting transaction: %v", err)
+		log.Errorf("Error creating db path %s", err)
 	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec("CREATE TABLE _known_tables (name text, PRIMARY KEY(name));")
-	if err != nil {
-		log.Panicf("Could not create _known_tables table: %s", err)
-	}
-
-	for name := range tables {
-		log.Debugf("Inserting %s into _known_tables", name)
-		_, err := tx.Exec("INSERT INTO _known_tables VALUES(?);", name)
-		if err != nil {
-			log.Panicf("Error encountered inserting into known tables ", err)
-		}
-
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		log.Panicf("Error committing transaction: %v", err)
-
-	}
-}
-
-func processSnapshotServerJsonResponse(r *http.Response, snapshot *common.Snapshot) error {
-	return json.NewDecoder(r.Body).Decode(snapshot)
-}
-
-func processSnapshotServerFileResponse(r *http.Response, snapshot *common.Snapshot) error {
-	dbId := r.Header.Get("Transicator-Snapshot-TXID")
-	out, err := os.Create(data.DBPath(dbId))
+	out, err := os.Create(dbPath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
 	//stream respose to DB
-	_, err = io.Copy(out, r.Body)
+	_, err = io.Copy(out, body)
 
 	if err != nil {
 		return err

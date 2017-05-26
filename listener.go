@@ -36,11 +36,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 		log.Panicf("Unable to access database: %v", err)
 	}
 
-	if config.GetString(configSnapshotProtocol) == "json" {
-		processJsonSnapshot(snapshot, db)
-	} else if config.GetString(configSnapshotProtocol) == "sqlite" {
-		processSqliteSnapshot(snapshot, db)
-	}
+	processSqliteSnapshot(db)
 
 	//update apid instance info
 	apidInfo.LastSnapshot = snapshot.SnapshotInfo
@@ -54,128 +50,73 @@ func processSnapshot(snapshot *common.Snapshot) {
 
 }
 
-func processSqliteSnapshot(snapshot *common.Snapshot, db apid.DB) {
-	//nothing to do as of now, here as a placeholder
-}
+func processSqliteSnapshot(db apid.DB) {
 
-func processJsonSnapshot(snapshot *common.Snapshot, db apid.DB) {
-
-	err := initDB(db)
+	var numApidClusters int
+	apidClusters, err := db.Query("SELECT COUNT(*) FROM edgex_apid_cluster")
 	if err != nil {
-		log.Panicf("Unable to initialize database: %v", err)
+		log.Panicf("Unable to read database: %s", err.Error())
+	}
+	apidClusters.Next()
+	err = apidClusters.Scan(&numApidClusters)
+	if err != nil {
+		log.Panicf("Unable to read database: %s", err.Error())
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		log.Panicf("Error starting transaction: %v", err)
+	if numApidClusters != 1 {
+		log.Panic("Illegal state for apid_cluster. Must be a single row.")
 	}
-	defer tx.Rollback()
 
-	for _, table := range snapshot.Tables {
-
-		switch table.Name {
-		case LISTENER_TABLE_APID_CLUSTER:
-			if len(table.Rows) > 1 {
-				log.Panic("Illegal state for apid_cluster. Must be a single row.")
-			}
-			for _, row := range table.Rows {
-				ac := makeApidClusterFromRow(row)
-				err := insertApidCluster(ac, tx)
-				if err != nil {
-					log.Panicf("Snapshot update failed: %v", err)
-				}
-			}
-
-		case LISTENER_TABLE_DATA_SCOPE:
-			for _, row := range table.Rows {
-				ds := makeDataScopeFromRow(row)
-				err := insertDataScope(ds, tx)
-				if err != nil {
-					log.Panicf("Snapshot update failed: %v", err)
-				}
-			}
+	_, err = db.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
+	if err != nil {
+		if err.Error() == "duplicate column name: last_sequence" {
+			return
+		} else {
+			log.Error("[[" + err.Error() + "]]")
+			log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error ", err)
 		}
 	}
-
-	err = tx.Commit()
-	if err != nil {
-		log.Panicf("Error committing Snapshot change: %v", err)
-	}
 }
 
-func processChangeList(changes *common.ChangeList) {
+func processChangeList(changes *common.ChangeList) bool {
+
+	ok := false
 
 	tx, err := getDB().Begin()
 	if err != nil {
 		log.Panicf("Error processing ChangeList: %v", err)
+		return ok
 	}
 	defer tx.Rollback()
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
 
 	for _, change := range changes.Changes {
-		switch change.Table {
-		case "edgex.apid_cluster":
-			switch change.Operation {
-			case common.Delete:
-				// todo: shut down apid, delete databases, scorch the earth!
-				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
-			default:
-				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
-			}
-		case "edgex.data_scope":
-			switch change.Operation {
-			case common.Insert:
-				ds := makeDataScopeFromRow(change.NewRow)
-				err = insertDataScope(ds, tx)
-			case common.Delete:
-				ds := makeDataScopeFromRow(change.OldRow)
-				err = deleteDataScope(ds, tx)
-			default:
-				// common.Update is not allowed
-				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
-			}
+		if change.Table == LISTENER_TABLE_APID_CLUSTER {
+			log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
 		}
-		if err != nil {
-			log.Panicf("Error processing ChangeList: %v", err)
+		switch change.Operation {
+		case common.Insert:
+			ok = insert(change.Table, []common.Row{change.NewRow}, tx)
+		case common.Update:
+			if change.Table == LISTENER_TABLE_DATA_SCOPE {
+				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
+			}
+			ok = update(change.Table, []common.Row{change.OldRow}, []common.Row{change.NewRow}, tx)
+		case common.Delete:
+			ok = _delete(change.Table, []common.Row{change.OldRow}, tx)
+		}
+		if !ok {
+			log.Error("Sql Operation error. Operation rollbacked")
+			return ok
 		}
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		log.Panicf("Error processing ChangeList: %v", err)
+		return false
 	}
-}
 
-func makeApidClusterFromRow(row common.Row) dataApidCluster {
-
-	dac := dataApidCluster{}
-
-	row.Get("id", &dac.ID)
-	row.Get("name", &dac.Name)
-	row.Get("umbrella_org_app_name", &dac.OrgAppName)
-	row.Get("created", &dac.Created)
-	row.Get("created_by", &dac.CreatedBy)
-	row.Get("updated", &dac.Updated)
-	row.Get("updated_by", &dac.UpdatedBy)
-	row.Get("description", &dac.Description)
-
-	return dac
-}
-
-func makeDataScopeFromRow(row common.Row) dataDataScope {
-
-	ds := dataDataScope{}
-
-	row.Get("id", &ds.ID)
-	row.Get("apid_cluster_id", &ds.ClusterID)
-	row.Get("scope", &ds.Scope)
-	row.Get("org", &ds.Org)
-	row.Get("env", &ds.Env)
-	row.Get("created", &ds.Created)
-	row.Get("created_by", &ds.CreatedBy)
-	row.Get("updated", &ds.Updated)
-	row.Get("updated_by", &ds.UpdatedBy)
-
-	return ds
+	return ok
 }

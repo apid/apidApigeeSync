@@ -5,7 +5,6 @@ import (
 
 	"os"
 
-	"time"
 
 	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/factory"
@@ -22,11 +21,8 @@ func main() {
 	reliable := f.Bool("reliable", true, "if false, server will often send 500 errors")
 
 	numDevs := f.Int("numDevs", 2, "number of developers in snapshot")
-	addDevEach := f.Duration("addDevEach", 0*time.Second, "add a developer each duration (default 0s)")
-	upDevEach := f.Duration("upDevEach", 0*time.Second, "update a developer each duration (default 0s)")
 
 	numDeps := f.Int("numDeps", 2, "number of deployments in snapshot")
-	upDepEach := f.Duration("upDepEach", 0*time.Second, "update (replace) a deployment each duration (default 0s)")
 
 	f.Parse(os.Args[1:])
 
@@ -51,10 +47,7 @@ func main() {
 		Organization:           "org",
 		Environment:            "test",
 		NumDevelopers:          *numDevs,
-		AddDeveloperEvery:      *addDevEach,
-		UpdateDeveloperEvery:   *upDevEach,
 		NumDeployments:         *numDeps,
-		ReplaceDeploymentEvery: *upDepEach,
 		BundleURI:              *bundleURI,
 	}
 

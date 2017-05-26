@@ -27,17 +27,17 @@ func bootstrap() {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
 
 		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
-			changeManager.pollChangeWithBackoff()
+			apidChangeManager.pollChangeWithBackoff()
 		})
 
 		log.Infof("Started on local snapshot: %s", snapshot.SnapshotInfo)
 		return
 	}
 
-	snapManager.downloadBootSnapshot()
-	snapManager.downloadDataSnapshot()
+	apidSnapshotManager.downloadBootSnapshot()
+	apidSnapshotManager.downloadDataSnapshot()
 
-	changeManager.pollChangeWithBackoff()
+	apidChangeManager.pollChangeWithBackoff()
 
 }
 
@@ -88,7 +88,7 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 }
 
 func addHeaders(req *http.Request) {
-	req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+	req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
@@ -104,6 +104,9 @@ type quitSignalError struct {
 type expected200Error struct {
 }
 
+type authFailError struct {
+}
+
 func (an expected200Error) Error() string {
 	return "Did not recieve OK response"
 }
@@ -114,4 +117,8 @@ func (a quitSignalError) Error() string {
 
 func (a changeServerError) Error() string {
 	return a.Code
+}
+
+func (a authFailError) Error() string {
+	return "Authorization failed"
 }
