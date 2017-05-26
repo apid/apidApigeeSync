@@ -30,16 +30,16 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log           apid.LogService
-	config        apid.ConfigService
-	dataService   apid.DataService
-	events        apid.EventsService
-	apidInfo      apidInstanceInfo
-	newInstanceID bool
-	apidTokenManager  tokenManager
-	apidChangeManager changeManager
+	log                 apid.LogService
+	config              apid.ConfigService
+	dataService         apid.DataService
+	events              apid.EventsService
+	apidInfo            apidInstanceInfo
+	newInstanceID       bool
+	apidTokenManager    tokenManager
+	apidChangeManager   changeManager
 	apidSnapshotManager snapShotManager
-	httpclient    *http.Client
+	httpclient          *http.Client
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -83,7 +83,7 @@ func initVariables(services apid.Services) error {
 		Transport: tr,
 		Timeout:   httpTimeout,
 		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			req.Header.Set("Authorization", "Bearer "+ apidTokenManager.getBearerToken())
+			req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
 			return nil
 		},
 	}
@@ -112,13 +112,11 @@ func initVariables(services apid.Services) error {
 	return nil
 }
 
-
 func createManagers() {
 	apidSnapshotManager = createSnapShotManager()
 	apidChangeManager = createChangeManager()
 	apidTokenManager = createSimpleTokenManager()
 }
-
 
 func checkForRequiredValues() error {
 	// check for required values
@@ -212,7 +210,6 @@ func postInitPlugins(event apid.Event) {
 		apidPluginDetails = string(pgInfo[:])
 
 		log.Debug("start post plugin init")
-
 
 		apidTokenManager.start()
 		go bootstrap()

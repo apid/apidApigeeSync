@@ -1,8 +1,8 @@
 package apidApigeeSync
 
 import (
-	"net/url"
 	"github.com/apigee-labs/transicator/common"
+	"net/url"
 )
 
 type tokenManager interface {

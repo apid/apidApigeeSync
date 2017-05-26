@@ -184,7 +184,10 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		switch r.StatusCode {
 		case http.StatusUnauthorized:
 			err = apidTokenManager.invalidateToken()
-			return err
+			if err != nil {
+				return err
+			}
+			return authFailError{}
 
 		case http.StatusNotModified:
 			return nil
@@ -206,7 +209,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
 				err = apiErr
 			}
-			return nil
+			return err
 		}
 		return nil
 	}

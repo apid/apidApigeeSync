@@ -1,9 +1,4 @@
-
 package apidApigeeSync
-
-
-
-
 
 import (
 	"github.com/30x/apid-core"
@@ -11,19 +6,18 @@ import (
 	. "github.com/onsi/ginkgo"
 	"net/http/httptest"
 	"net/url"
-	"errors"
 	"os"
+	"time"
 )
-
 
 var _ = Describe("Change Agent", func() {
 
-	Context("Change Agent", func() {
+	Context("Change Agent Unit Tests", func() {
 		handler := handler{}
 
 		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
-			initDb(sqlfile, "./mockdb.sqlite3")
-			file, err := os.Open("./mockdb.sqlite3")
+			initDb(sqlfile, "./mockdb_change.sqlite3")
+			file, err := os.Open("./mockdb_change.sqlite3")
 			if err != nil {
 				Fail("Failed to open mock db for test")
 			}
@@ -37,9 +31,9 @@ var _ = Describe("Change Agent", func() {
 		}
 
 		BeforeEach(func() {
-			event := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_snapshot_valid")
-
+			event := createTestDb("./sql/init_mock_db.sql", "test_change")
 			handler.Handle(&event)
+			knownTables = extractTablesFromDB(getDB())
 		})
 
 		var initializeContext = func() {
@@ -61,6 +55,7 @@ var _ = Describe("Change Agent", func() {
 			config.Set(configProxyServerBaseURI, testServer.URL)
 			config.Set(configSnapServerBaseURI, testServer.URL)
 			config.Set(configChangeServerBaseURI, testServer.URL)
+			config.Set(configPollInterval, 1*time.Millisecond)
 		}
 
 		var restoreContext = func() {
@@ -69,11 +64,11 @@ var _ = Describe("Change Agent", func() {
 			config.Set(configProxyServerBaseURI, dummyConfigValue)
 			config.Set(configSnapServerBaseURI, dummyConfigValue)
 			config.Set(configChangeServerBaseURI, dummyConfigValue)
-
+			config.Set(configPollInterval, 10*time.Millisecond)
 		}
 
-		It("test change server agent", func() {
-			log.Debug("test change server agent")
+		It("test change agent with authorization failure", func() {
+			log.Debug("test change agent with authorization failure")
 			testTokenManager := &dummyTokenManager{make(chan bool)}
 			apidTokenManager = testTokenManager
 			apidTokenManager.start()
@@ -82,77 +77,126 @@ var _ = Describe("Change Agent", func() {
 			testMock.forceAuthFail()
 			wipeDBAferTest = true
 			apidChangeManager.pollChangeWithBackoff()
-			<- testTokenManager.invalidateChan
+			// auth check fails
+			<-testTokenManager.invalidateChan
 			log.Debug("closing")
-			<- apidChangeManager.close()
+			<-apidChangeManager.close()
 			restoreContext()
-		}, 5)
+		})
 
+		It("test change agent with too old snapshot", func() {
+			log.Debug("test change agent with too old snapshot")
+			testTokenManager := &dummyTokenManager{make(chan bool)}
+			apidTokenManager = testTokenManager
+			apidTokenManager.start()
+			testSnapshotManager := &dummySnapshotManager{make(chan bool)}
+			apidSnapshotManager = testSnapshotManager
+			initializeContext()
+
+			testMock.passAuthCheck()
+			testMock.forceNewSnapshot()
+			wipeDBAferTest = true
+			apidChangeManager.pollChangeWithBackoff()
+			<-testSnapshotManager.downloadCalledChan
+			log.Debug("closing")
+			<-apidChangeManager.close()
+			restoreContext()
+		})
+
+		It("change agent should retry with authorization failure", func(done Done) {
+			log.Debug("change agent should retry with authorization failure")
+			testTokenManager := &dummyTokenManager{make(chan bool)}
+			apidTokenManager = testTokenManager
+			apidTokenManager.start()
+			apidSnapshotManager = &dummySnapshotManager{}
+			initializeContext()
+			testMock.forceAuthFail()
+			testMock.forceNoSnapshot()
+			wipeDBAferTest = true
+
+			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
+
+				if _, ok := event.(*common.ChangeList); ok {
+					closeDone := apidChangeManager.close()
+					log.Debug("closing")
+					go func() {
+						// when close done, all handlers for the first snapshot have been executed
+						<-closeDone
+						restoreContext()
+						close(done)
+					}()
+
+				}
+			})
+
+			apidChangeManager.pollChangeWithBackoff()
+			// auth check fails
+			<-testTokenManager.invalidateChan
+		})
 
 	})
 })
 
-
 type dummyTokenManager struct {
 	invalidateChan chan bool
-
 }
 
-func (t * dummyTokenManager) getBearerToken() string {
+func (t *dummyTokenManager) getBearerToken() string {
 	return ""
 }
 
-func (t * dummyTokenManager) invalidateToken() error {
+func (t *dummyTokenManager) invalidateToken() error {
 	log.Debug("invalidateToken called")
 	testMock.passAuthCheck()
 	t.invalidateChan <- true
-	return errors.New("invalidate called")
-}
-
-func (t * dummyTokenManager) getToken() *oauthToken {
 	return nil
 }
 
-func (t * dummyTokenManager) close() {
+func (t *dummyTokenManager) getToken() *oauthToken {
+	return nil
+}
+
+func (t *dummyTokenManager) close() {
 	return
 }
 
-func (t * dummyTokenManager) getRetrieveNewTokenClosure(*url.URL) func(chan bool) error {
-	return func(chan bool) error{
+func (t *dummyTokenManager) getRetrieveNewTokenClosure(*url.URL) func(chan bool) error {
+	return func(chan bool) error {
 		return nil
 	}
 }
 
-func (* dummyTokenManager) start() {
+func (t *dummyTokenManager) start() {
 
 }
 
 type dummySnapshotManager struct {
-
+	downloadCalledChan chan bool
 }
 
-func (* dummySnapshotManager) close() <-chan bool {
+func (s *dummySnapshotManager) close() <-chan bool {
 	closeChan := make(chan bool)
 	close(closeChan)
 	return closeChan
 }
 
-func (* dummySnapshotManager) downloadBootSnapshot() {
+func (s *dummySnapshotManager) downloadBootSnapshot() {
 
 }
 
-func (* dummySnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {
+func (s *dummySnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {
 
 }
 
-func (* dummySnapshotManager) downloadDataSnapshot(){
+func (s *dummySnapshotManager) downloadDataSnapshot() {
+	log.Debug("dummySnapshotManager.downloadDataSnapshot() called")
+	s.downloadCalledChan <- true
+}
+
+func (s *dummySnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 
 }
 
-func (* dummySnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {
-
-}
-
-func (* dummySnapshotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error{
+func (s *dummySnapshotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
 	return nil
 }

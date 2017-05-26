@@ -3,13 +3,13 @@ package apidApigeeSync
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"sync/atomic"
 	"time"
-	"errors"
 )
 
 var (
@@ -51,6 +51,7 @@ type simpleTokenManager struct {
 	returnTokenChan     chan *oauthToken
 	invalidateDone      chan bool
 }
+
 func (t *simpleTokenManager) start() {
 	t.retrieveNewToken()
 	t.refreshTimer = time.After(t.token.refreshIn())

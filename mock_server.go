@@ -95,7 +95,11 @@ func (m *MockServer) passAuthCheck() {
 }
 
 func (m *MockServer) forceNewSnapshot() {
-	atomic.SwapInt32(m.newSnap, 1)
+	atomic.StoreInt32(m.newSnap, 1)
+}
+
+func (m *MockServer) forceNoSnapshot() {
+	atomic.StoreInt32(m.newSnap, 0)
 }
 
 func (m *MockServer) lastSequenceID() string {
@@ -268,6 +272,7 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 
 	val := atomic.SwapInt32(m.newSnap, 0)
 	if val > 0 {
+		log.Debug("MockServer: force new snapshot")
 		w.WriteHeader(http.StatusBadRequest)
 		apiErr := changeServerError{
 			Code: "SNAPSHOT_TOO_OLD",
@@ -277,6 +282,8 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 		w.Write(bytes)
 		return
 	}
+
+	log.Debug("mock server sending change list")
 
 	q := req.URL.Query()
 
@@ -319,20 +326,28 @@ func (m *MockServer) gomega(target http.HandlerFunc) http.HandlerFunc {
 func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 
-		if atomic.LoadInt32(m.authFail) > 0 {
+		// force failing auth check
+		if atomic.LoadInt32(m.authFail) == 1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
 			return
 		}
-		auth := req.Header.Get("Authorization")
 
+		// force passing auth check
+		if atomic.LoadInt32(m.authFail) == 2 {
+			target(w, req)
+			return
+		}
+
+		// check auth header
+		auth := req.Header.Get("Authorization")
 		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
 		if auth != expectedAuth {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
-		} else {
-			target(w, req)
+			return
 		}
+		target(w, req)
 	}
 }
 
