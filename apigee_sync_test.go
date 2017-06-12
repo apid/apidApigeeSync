@@ -296,7 +296,7 @@ var _ = Describe("Sync", func() {
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}
-			apidSnapshotManager.downloadSnapshot(scopes, snapshot)
+			apidSnapshotManager.downloadSnapshot(true, scopes, snapshot)
 			apidSnapshotManager.storeBootSnapshot(snapshot)
 			apidSnapshotManager.storeDataSnapshot(snapshot)
 			restoreContext()
