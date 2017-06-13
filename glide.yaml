@@ -18,6 +18,4 @@ import:
   version: master
 testImport:
 - package: github.com/onsi/ginkgo/ginkgo
-  version: master
 - package: github.com/onsi/gomega
-  version: master
