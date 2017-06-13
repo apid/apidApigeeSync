@@ -301,10 +301,10 @@ func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri strin
 		// Bootstrap scope is a special case, that can occur only once. The tid is
 		// hardcoded to "bootstrap" to ensure there can be no clash of tid between
 		// bootstrap and subsequent data scopes.
-		if isBoot == false {
-			tid = r.Header.Get("Transicator-Snapshot-TXID")
-		} else {
+		if isBoot {
 			tid = "bootstrap"
+		} else {
+			tid = r.Header.Get("Transicator-Snapshot-TXID")
 		}
 		// Decode the Snapshot server response
 		err = processSnapshotResponse(tid, r.Body, snapshot)
