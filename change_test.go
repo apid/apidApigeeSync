@@ -197,6 +197,6 @@ func (s *dummySnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 
 }
 
-func (s *dummySnapshotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
+func (s *dummySnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
 	return nil
 }

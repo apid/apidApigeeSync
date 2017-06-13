@@ -80,7 +80,7 @@ func (s *simpleSnapShotManager) downloadBootSnapshot() {
 	scopes := []string{apidInfo.ClusterID}
 	snapshot := &common.Snapshot{}
 
-	err := s.downloadSnapshot(scopes, snapshot)
+	err := s.downloadSnapshot(true, scopes, snapshot)
 	if err != nil {
 		// this may happen during shutdown
 		if _, ok := err.(quitSignalError); ok {
@@ -121,7 +121,7 @@ func (s *simpleSnapShotManager) downloadDataSnapshot() {
 	scopes := findScopesForId(apidInfo.ClusterID)
 	scopes = append(scopes, apidInfo.ClusterID)
 	snapshot := &common.Snapshot{}
-	err := s.downloadSnapshot(scopes, snapshot)
+	err := s.downloadSnapshot(false, scopes, snapshot)
 	if err != nil {
 		// this may happen during shutdown
 		if _, ok := err.(quitSignalError); ok {
@@ -232,7 +232,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 // a blocking method
 // will keep retrying with backoff until success
 
-func (s *simpleSnapShotManager) downloadSnapshot(scopes []string, snapshot *common.Snapshot) error {
+func (s *simpleSnapShotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
 	// if closed
 	if atomic.LoadInt32(s.isClosed) == int32(1) {
 		log.Warn("Trying to download snapshot with a closed snapShotManager")
@@ -258,13 +258,15 @@ func (s *simpleSnapShotManager) downloadSnapshot(scopes []string, snapshot *comm
 
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accommodate functions which need more parameters, wrap them in closures
-	attemptDownload := getAttemptDownloadClosure(snapshot, uri)
+	attemptDownload := getAttemptDownloadClosure(isBoot, snapshot, uri)
 	pollWithBackoff(s.quitChan, attemptDownload, handleSnapshotServerError)
 	return nil
 }
 
-func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan bool) error {
+func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri string) func(chan bool) error {
 	return func(_ chan bool) error {
+
+		var tid string
 		req, err := http.NewRequest("GET", uri, nil)
 		if err != nil {
 			// should never happen, but if it does, it's unrecoverable anyway
@@ -296,8 +298,16 @@ func getAttemptDownloadClosure(snapshot *common.Snapshot, uri string) func(chan 
 			return expected200Error{}
 		}
 
+		// Bootstrap scope is a special case, that can occur only once. The tid is
+		// hardcoded to "bootstrap" to ensure there can be no clash of tid between
+		// bootstrap and subsequent data scopes.
+		if isBoot {
+			tid = "bootstrap"
+		} else {
+			tid = r.Header.Get("Transicator-Snapshot-TXID")
+		}
 		// Decode the Snapshot server response
-		err = processSnapshotResponse(r.Header.Get("Transicator-Snapshot-TXID"), r.Body, snapshot)
+		err = processSnapshotResponse(tid, r.Body, snapshot)
 		if err != nil {
 			log.Errorf("Snapshot server response Data not parsable: %v", err)
 			return err

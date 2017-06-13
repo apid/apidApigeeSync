@@ -20,7 +20,7 @@ type snapShotManager interface {
 	storeBootSnapshot(snapshot *common.Snapshot)
 	downloadDataSnapshot()
 	storeDataSnapshot(snapshot *common.Snapshot)
-	downloadSnapshot(scopes []string, snapshot *common.Snapshot) error
+	downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error
 }
 
 type changeManager interface {
