@@ -1,13 +1,16 @@
 package dockertests
 
 import (
-	"github.com/30x/apidApigeeSync"
+	_ "github.com/30x/apidApigeeSync"
 	"github.com/30x/apid-core"
 	. "github.com/onsi/ginkgo"
-	"net/http/httptest"
+	. "github.com/onsi/gomega"
 	"os"
 	"github.com/30x/apid-core/factory"
-	"github.com/Sirupsen/logrus"
+	"testing"
+	"fmt"
+	"time"
+	"net/http/httptest"
 )
 
 const (
@@ -43,38 +46,33 @@ var (
  * This test suite acts like a dummy plugin. It listens to events emitted by
  * apidApigeeSync and runs tests.
  */
+var _ = BeforeSuite(func() {
+	hostname := os.Getenv("APIGEE_SYNC_DOCKER_IP")
+	os.Setenv("APID_CONFIG_FILE", "./apid_config.yaml")
+
+	fmt.Println("Run BeforeSuite")
+
+	apid.Initialize(factory.DefaultServicesFactory())
+	config = apid.Config()
+
+	// Auth Server
+	config.Set(configName, "dockerIT")
+	config.Set(configConsumerKey, "dummyKey")
+	config.Set(configConsumerSecret, "dummySecret")
+	config.Set(configApidClusterId, "testClusterId")
+	//testServer := initDummyAuthServer()
+
+	// Setup dependencies
+	config.Set(configChangeServerBaseURI, hostname+":"+dockerCsPort)
+	config.Set(configSnapServerBaseURI, hostname+":"+dockerSsPort)
+	//config.Set(configProxyServerBaseURI, testServer.URL)
+
+	// init plugin
+	apid.RegisterPlugin(initPlugin)
+	apid.InitializePlugins("dockerTest")
+})
 
 var _ = Describe("dockerIT", func() {
-
-
-
-	BeforeSuite(func() {
-		hostname := os.Getenv("APIGEE_SYNC_DOCKER_IP")
-
-		apid.Initialize(factory.DefaultServicesFactory())
-		config = apid.Config()
-
-		// Set log level
-		config.Set(configLogLevel, logrus.DebugLevel.String())
-
-		// Auth Server
-		config.Set(configName, "dockerIT")
-		config.Set(configConsumerKey, "dummyKey")
-		config.Set(configConsumerSecret, "dummySecret")
-		config.Set(configApidClusterId, "testClusterId")
-		testServer := initDummyAuthServer()
-
-		// Setup dependencies
-		config.Set(configChangeServerBaseURI, hostname+":"+dockerCsPort)
-		config.Set(configSnapServerBaseURI, hostname+":"+dockerSsPort)
-		config.Set(configProxyServerBaseURI, testServer.URL)
-
-		// init plugin
-		apid.RegisterPlugin(initPlugin)
-		apid.InitializePlugins("dockerTest")
-	})
-
-
 
 	Context("Generic Replication", func() {
 		var _ = BeforeEach(func() {
@@ -85,24 +83,18 @@ var _ = Describe("dockerIT", func() {
 			log.Debug("CS: " + config.GetString(configChangeServerBaseURI))
 			log.Debug("SS: " + config.GetString(configSnapServerBaseURI))
 			log.Debug("Auth: " + config.GetString(configProxyServerBaseURI))
-		})
+
+			time.Sleep(5 * time.Second)
+			Expect(1).To(Equal(1))
+		}, 30)
 	})
 })
 
 func initDummyAuthServer() (testServer *httptest.Server) {
 	testRouter := apid.API().Router()
 	testServer = httptest.NewServer(testRouter)
-	// set up mock server
-	mockParms := apidApigeeSync.MockParms{
-		ReliableAPI:  true,
-		ClusterID:    config.GetString(configApidClusterId),
-		TokenKey:     config.GetString(configConsumerKey),
-		TokenSecret:  config.GetString(configConsumerSecret),
-		Scope:        "dockerTest",
-		Organization: "dockerTest",
-		Environment:  "prod",
-	}
-	apidApigeeSync.Mock(mockParms, testRouter)
+	mockAuthServer := &MockAuthServer{}
+	mockAuthServer.Start(testRouter)
 	return
 }
 
@@ -122,4 +114,9 @@ func initPlugin(s apid.Services) (apid.PluginData, error) {
 
 	log.Info(pluginName + " initialized.")
 	return pluginData, nil
+}
+
+func TestDockerApigeeSync(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "ApigeeSync Docker Suite")
 }

@@ -47,7 +47,7 @@ func createSimpleTokenManager() *simpleTokenManager {
 		closed:              make(chan bool),
 		getTokenChan:        make(chan bool),
 		invalidateTokenChan: make(chan bool),
-		returnTokenChan:     make(chan *oauthToken),
+		returnTokenChan:     make(chan *OauthToken),
 		invalidateDone:      make(chan bool),
 		isClosed:            &isClosedInt,
 	}
@@ -55,14 +55,14 @@ func createSimpleTokenManager() *simpleTokenManager {
 }
 
 type simpleTokenManager struct {
-	token               *oauthToken
+	token               *OauthToken
 	isClosed            *int32
 	quitPollingForToken chan bool
 	closed              chan bool
 	getTokenChan        chan bool
 	invalidateTokenChan chan bool
 	refreshTimer        <-chan time.Time
-	returnTokenChan     chan *oauthToken
+	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
 }
 
@@ -109,7 +109,7 @@ func (t *simpleTokenManager) invalidateToken() error {
 	return nil
 }
 
-func (t *simpleTokenManager) getToken() *oauthToken {
+func (t *simpleTokenManager) getToken() *OauthToken {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: getToken() called on closed tokenManager")
@@ -190,7 +190,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 			return expected200Error{}
 		}
 
-		var token oauthToken
+		var token OauthToken
 		err = json.Unmarshal(body, &token)
 		if err != nil {
 			log.Errorf("unable to unmarshal JSON response '%s': %v", string(body), err)
@@ -222,7 +222,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 	}
 }
 
-type oauthToken struct {
+type OauthToken struct {
 	IssuedAt    int64    `json:"issuedAt"`
 	AppName     string   `json:"applicationName"`
 	Scope       string   `json:"scope"`
@@ -241,21 +241,21 @@ type oauthToken struct {
 
 var noTime time.Time
 
-func (t *oauthToken) isValid() bool {
+func (t *OauthToken) isValid() bool {
 	if t == nil || t.AccessToken == "" {
 		return false
 	}
 	return t.AccessToken != "" && time.Now().Before(t.ExpiresAt)
 }
 
-func (t *oauthToken) refreshIn() time.Duration {
+func (t *OauthToken) refreshIn() time.Duration {
 	if t == nil || t.ExpiresAt == noTime {
 		return time.Duration(0)
 	}
 	return t.ExpiresAt.Sub(time.Now()) - refreshFloatTime
 }
 
-func (t *oauthToken) needsRefresh() bool {
+func (t *OauthToken) needsRefresh() bool {
 	if t == nil || t.ExpiresAt == noTime {
 		return true
 	}

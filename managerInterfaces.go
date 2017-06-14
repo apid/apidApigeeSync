@@ -22,7 +22,7 @@ import (
 type tokenManager interface {
 	getBearerToken() string
 	invalidateToken() error
-	getToken() *oauthToken
+	getToken() *OauthToken
 	close()
 	getRetrieveNewTokenClosure(*url.URL) func(chan bool) error
 	start()
