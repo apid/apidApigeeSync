@@ -1,0 +1,1 @@
+ALTER USER postgres SET search_path = edgex;
