@@ -55,6 +55,28 @@ psql -f ${WORK_DIR}/dockertests/user-setup.sql ${TEST_PG_URL}
 docker run --name ${ssname} -d -p 9001:9001 apigeelabs/transicator-snapshot -p 9001 -u ${TEST_PG_URL}
 docker run --name ${csname} -d -p 9000:9000 apigeelabs/transicator-changeserver -p 9000 -u ${TEST_PG_URL} -s testslot
 
+# Wait for SS to be up
+while `true`
+do
+  sleep 1
+  response=$(curl -i http://${DOCKER_IP}:9001/snapshots?selector=foo | head -n 1)
+  if [[ $response == *303* ]]
+  then
+    break
+  fi
+done
+
+# Wait for CS to be up
+while `true`
+do
+  sleep 1
+  response=$(curl -i http://${DOCKER_IP}:9000/changes | head -n 1)
+  if [[ $response == *200* ]]
+  then
+    break
+  fi
+done
+
 apid_config=`cat <<EOF
 apigeesync_instance_name: SQLLITAPID
 apigeesync_snapshot_server_base: http://${DOCKER_IP}:9001/
@@ -68,3 +90,5 @@ EOF
 `
 rm -f ${WORK_DIR}/dockertests/apid_config.yaml
 echo "$apid_config" >> ${WORK_DIR}/dockertests/apid_config.yaml
+
+#go test dockertests/*.go

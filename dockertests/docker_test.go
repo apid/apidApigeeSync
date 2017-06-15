@@ -28,7 +28,7 @@ var (
  * This test suite acts like a dummy plugin. It listens to events emitted by
  * apidApigeeSync and runs tests.
  */
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
 	defer GinkgoRecover()
 	//hostname := "http://" + os.Getenv("APIGEE_SYNC_DOCKER_IP")
 	pgUrl = os.Getenv("APIGEE_SYNC_DOCKER_PG_URL") + "?sslmode=disable"
@@ -49,30 +49,26 @@ var _ = BeforeSuite(func(done Done) {
 	config.Set(configName, "dockerIT")
 	config.Set(configConsumerKey, "dummyKey")
 	config.Set(configConsumerSecret, "dummySecret")
-	//config.Set(configApidClusterId, "testClusterId")
 	testServer := initDummyAuthServer()
 
-	// hang until snapshot received
-	apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event){
-		if _, ok := event.(*common.Snapshot); ok {
-			close(done)
-		}
-	})
+	initDone := make(chan bool)
+	handler := &waitSnapshotHandler{initDone}
 
-	// Setup dependencies
-	//config.Set(configChangeServerBaseURI, hostname+":"+dockerCsPort+"/")
-	//config.Set(configSnapServerBaseURI, hostname+":"+dockerSsPort+"/")
+
+	// hang until snapshot received
+	apid.Events().Listen(ApigeeSyncEventSelector, handler)
+
 	config.Set(configProxyServerBaseURI, testServer.URL)
 
 	// init plugin
 	apid.RegisterPlugin(initPlugin)
 	apid.InitializePlugins("dockerTest")
 
-
+	<- initDone
 }, 5)
 
 var _ = AfterSuite(func() {
-	pgManager.CleanupAll()
+	//pgManager.CleanupAll()
 })
 
 var _ = Describe("dockerIT", func() {
@@ -83,7 +79,7 @@ var _ = Describe("dockerIT", func() {
 		})
 
 		var _ = AfterEach(func() {
-			pgManager.CleanupTest()
+			//pgManager.CleanupTest()
 		})
 
 		It("should succesfully download new table from pg", func(done Done) {
@@ -91,13 +87,15 @@ var _ = Describe("dockerIT", func() {
 			//log.Debug("SS: " + config.GetString(configSnapServerBaseURI))
 			//log.Debug("Auth: " + config.GetString(configProxyServerBaseURI))
 			tableName := "docker_test"
+			targetTablename := "edgex_" + tableName
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event){
 				if s, ok := event.(*common.Snapshot); ok {
 					go func() {
 						defer GinkgoRecover()
 						sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
 						Expect(err).Should(Succeed())
-						Expect(verifyTestTable(tableName, sqliteDb)).To(BeTrue())
+						Expect(verifyTestTable(targetTablename, sqliteDb)).To(BeTrue())
+						dropTestTable(targetTablename, sqliteDb)
 						close(done)
 					}()
 				}
@@ -106,7 +104,7 @@ var _ = Describe("dockerIT", func() {
 			createTestTable(tableName);
 
 
-		}, 5)
+		}, 1)
 	})
 })
 
@@ -135,11 +133,19 @@ func verifyTestTable(targetTableName string, sqliteDb apid.DB) bool {
 		var tableName string
 		err = rows.Scan(&tableName)
 		Expect(err).Should(Succeed())
+
 		if tableName==targetTableName {
 			return true
 		}
 	}
 	return false
+}
+
+func dropTestTable(targetTableName string, sqliteDb apid.DB) {
+	tx, err := pgManager.BeginTransaction()
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("DROP TABLE IF EXISTS edgex." + targetTableName + ";")
+	Expect(err).Should(Succeed())
 }
 
 func initDummyAuthServer() (testServer *httptest.Server) {
@@ -245,8 +251,8 @@ func initPgData() {
 	}
 
 	tx, err := pgManager.BeginTransaction()
-	defer tx.Rollback()
 	Expect(err).Should(Succeed())
+	defer tx.Rollback()
 	err = pgManager.InsertApidCluster(tx, cluster)
 	Expect(err).Should(Succeed())
 	err = pgManager.InsertDataScope(tx, ds)
@@ -257,6 +263,17 @@ func initPgData() {
 	Expect(err).Should(Succeed())
 	err = tx.Commit()
 	Expect(err).Should(Succeed())
+}
+
+type waitSnapshotHandler struct {
+	initDone chan bool
+}
+
+func (w *waitSnapshotHandler) Handle(event apid.Event) {
+	if _, ok := event.(*common.Snapshot); ok {
+		apid.Events().StopListening(ApigeeSyncEventSelector, w)
+		w.initDone <- true
+	}
 }
 
 func TestDockerApigeeSync(t *testing.T) {
