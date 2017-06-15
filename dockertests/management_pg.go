@@ -135,7 +135,7 @@ func (m *ManagementPg) InsertDeployment(tx *sql.Tx, d *deploymentRow) error {
 			created_by,
 			updated,
 			updated_by,
-			_change_selector,
+			_change_selector
 			)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`)
 	if err != nil {
@@ -165,8 +165,14 @@ func (m *ManagementPg) BeginTransaction() (*sql.Tx, error) {
 	return tx, err
 }
 
-func (m *ManagementPg) Cleanup() error {
+func (m *ManagementPg) CleanupTest() error {
 	cleanupSql := "DELETE FROM edgex.apid_cluster WHERE created_by!='" + testInitUser + "';"
+	_, err := m.pg.Exec(cleanupSql)
+	return err
+}
+
+func (m *ManagementPg) CleanupAll() error {
+	cleanupSql := "DELETE FROM edgex.apid_cluster;"
 	_, err := m.pg.Exec(cleanupSql)
 	return err
 }

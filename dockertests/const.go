@@ -4,6 +4,7 @@ const (
 	dockerCsPort              string = "9000"
 	dockerSsPort              string = "9001"
 	pluginName                       = "apigeeSyncDockerTest"
+	configApidClusterId       = "apigeesync_cluster_id"
 	configProxyServerBaseURI         = "apigeesync_proxy_server_base"
 	configSnapServerBaseURI          = "apigeesync_snapshot_server_base"
 	configChangeServerBaseURI        = "apigeesync_change_server_base"
