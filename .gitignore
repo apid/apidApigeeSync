@@ -5,4 +5,5 @@ vendor
 *.iml
 .idea
 *.lock
+*.sqlite3
 cmd/mockServer/mockServer
