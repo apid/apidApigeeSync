@@ -1,6 +1,5 @@
 package dockertests
 
-
 const (
 	dockerCsPort              string = "9000"
 	dockerSsPort              string = "9001"
@@ -12,4 +11,7 @@ const (
 	configConsumerSecret             = "apigeesync_consumer_secret"
 	configName                       = "apigeesync_instance_name"
 	ApigeeSyncEventSelector          = "ApigeeSync"
+	testInitUser = "dockerTestInit"
 )
+
+
