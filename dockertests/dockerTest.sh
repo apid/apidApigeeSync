@@ -14,9 +14,9 @@ echo ${TEST_PG_URL}
 export APIGEE_SYNC_DOCKER_PG_URL=${TEST_PG_URL}
 export APIGEE_SYNC_DOCKER_IP=${DOCKER_IP}
 
-pgnum=$(docker images --filter "reference=apigeelabs/transicator-postgres" | wc -l)
-ssnum=$(docker images --filter "reference=apigeelabs/transicator-snapshot" | wc -l)
-csnum=$(docker images --filter "reference=apigeelabs/transicator-changeserver" | wc -l)
+pgnum=$(docker images "apigeelabs/transicator-postgres" | wc -l)
+ssnum=$(docker images "apigeelabs/transicator-snapshot" | wc -l)
+csnum=$(docker images "apigeelabs/transicator-changeserver" | wc -l)
 
 
 if (( !(pgnum>1 && ssnum>1 && csnum>1) ))
