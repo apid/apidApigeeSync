@@ -1,20 +1,18 @@
 package dockertests
 
-
 import (
-	"github.com/30x/apidApigeeSync"
-	"github.com/30x/apid-core"
 	"encoding/json"
+	"github.com/30x/apid-core"
+	"github.com/30x/apidApigeeSync"
 	"net/http"
 )
 
 const oauthExpiresIn = 2 * 60
 
 type MockAuthServer struct {
-
 }
 
-func (m *MockAuthServer) sendToken (w http.ResponseWriter, req *http.Request) {
+func (m *MockAuthServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	oauthToken := apidApigeeSync.GenerateUUID()
 	res := apidApigeeSync.OauthToken{
 		AccessToken: oauthToken,
@@ -27,7 +25,6 @@ func (m *MockAuthServer) sendToken (w http.ResponseWriter, req *http.Request) {
 	w.Write(body)
 }
 
-func (m *MockAuthServer) Start (router apid.Router) {
+func (m *MockAuthServer) Start(router apid.Router) {
 	router.HandleFunc("/accesstoken", m.sendToken).Methods("POST")
 }
-

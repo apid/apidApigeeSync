@@ -11,6 +11,7 @@ TEST_PG_BASE=postgres://postgres:changeme@$DOCKER_IP:5432
 TEST_PG_URL=postgres://postgres:changeme@$DOCKER_IP:5432/edgex
 echo ${TEST_PG_URL}
 
+export APIGEE_SYNC_DOCKER_PG_URL=${TEST_PG_URL}
 export APIGEE_SYNC_DOCKER_IP=${DOCKER_IP}
 
 pgnum=$(docker images --filter "reference=apigeelabs/transicator-postgres" | wc -l)
@@ -54,3 +55,16 @@ psql -f ${WORK_DIR}/dockertests/user-setup.sql ${TEST_PG_URL}
 docker run --name ${ssname} -d -p 9001:9001 apigeelabs/transicator-snapshot -p 9001 -u ${TEST_PG_URL}
 docker run --name ${csname} -d -p 9000:9000 apigeelabs/transicator-changeserver -p 9000 -u ${TEST_PG_URL} -s testslot
 
+apid_config=`cat <<EOF
+apigeesync_instance_name: SQLLITAPID
+apigeesync_snapshot_server_base: http://${DOCKER_IP}:9001/
+apigeesync_change_server_base: http://${DOCKER_IP}:9000/
+apigeesync_snapshot_proto: sqlite
+log_level: Debug
+apigeesync_consumer_key: 33f39JNLosF1mDOXJoCfbauchVzPrGrl
+apigeesync_consumer_secret: LAolGShAx6H3vfNF
+apigeesync_cluster_id: 4c6bb536-0d64-43ca-abae-17c08f1a7e58
+EOF
+`
+rm -f ${WORK_DIR}/dockertests/apid_config.yaml
+echo "$apid_config" >> ${WORK_DIR}/dockertests/apid_config.yaml
