@@ -16,7 +16,6 @@ package dockertests
 
 import (
 	"database/sql"
-	"fmt"
 	_ "github.com/lib/pq"
 )
 
@@ -215,7 +214,6 @@ func (m *ManagementPg) CleanupTest() error {
 	}
 
 	for _, tableName := range tablesToDelete {
-		fmt.Println("Drop table: " + tableName)
 		cleanupSql := "DROP TABLE edgex." + tableName + ";"
 		_, err := m.pg.Exec(cleanupSql)
 		if err != nil {

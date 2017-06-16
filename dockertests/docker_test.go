@@ -106,7 +106,7 @@ var _ = Describe("dockerIT", func() {
 		})
 
 		It("should succesfully download new table from pg", func(done Done) {
-			tableName := "docker_test"
+			tableName := "docker_test_a"
 			targetTablename := "edgex_" + tableName
 			handler := &newTableHandler{
 				targetTablename: targetTablename,
@@ -118,10 +118,33 @@ var _ = Describe("dockerIT", func() {
 
 		}, 1)
 
+		It("should get data according to data scope", func(done Done) {
+			tableName := "docker_test_b"
+			targetTablename := "edgex_" + tableName
+			handler := &newTableHandler{
+				targetTablename: targetTablename,
+				done:            done,
+			}
+
+			apid.Events().Listen(ApigeeSyncEventSelector, handler)
+			createTestTableWithData(tableName)
+
+		}, 1)
 	})
 })
 
 func createTestTable(tableName string) {
+	tx, err := pgManager.BeginTransaction()
+	Expect(err).Should(Succeed())
+	defer tx.Rollback()
+	_, err = tx.Exec("CREATE TABLE edgex." + tableName + " (id varchar primary key, val integer, _change_selector varchar);")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("ALTER TABLE edgex." + tableName + " replica identity full;")
+	Expect(err).Should(Succeed())
+	tx.Commit()
+}
+
+func createTestTableWithData(tableName string) {
 	tx, err := pgManager.BeginTransaction()
 	Expect(err).Should(Succeed())
 	defer tx.Rollback()
@@ -136,22 +159,6 @@ func createTestTable(tableName string) {
 	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('three', 3, '" + clusterIdFromConfig + "');")
 	Expect(err).Should(Succeed())
 	tx.Commit()
-}
-
-func verifyTestTable(targetTableName string, sqliteDb apid.DB) bool {
-	rows, err := sqliteDb.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
-	Expect(err).Should(Succeed())
-	defer rows.Close()
-	for rows.Next() {
-		var tableName string
-		err = rows.Scan(&tableName)
-		Expect(err).Should(Succeed())
-
-		if tableName == targetTableName {
-			return true
-		}
-	}
-	return false
 }
 
 func dropTestTable(targetTableName string, sqliteDb apid.DB) {
@@ -295,15 +302,58 @@ type newTableHandler struct {
 
 func (n *newTableHandler) Handle(event apid.Event) {
 	if s, ok := event.(*common.Snapshot); ok {
-		go func() {
-			defer GinkgoRecover()
-			sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
-			Expect(err).Should(Succeed())
-			Expect(verifyTestTable(n.targetTablename, sqliteDb)).To(BeTrue())
-			apid.Events().StopListening(ApigeeSyncEventSelector, n)
-			close(n.done)
-		}()
+		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
+		Expect(err).Should(Succeed())
+		Expect(verifyTestTableExist(n.targetTablename, sqliteDb)).To(BeTrue())
+		apid.Events().StopListening(ApigeeSyncEventSelector, n)
+		close(n.done)
 	}
+}
+
+func verifyTestTableExist(targetTableName string, sqliteDb apid.DB) bool {
+	rows, err := sqliteDb.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
+	Expect(err).Should(Succeed())
+	defer rows.Close()
+	for rows.Next() {
+		var tableName string
+		err = rows.Scan(&tableName)
+		Expect(err).Should(Succeed())
+
+		if tableName == targetTableName {
+			return true
+		}
+	}
+	return false
+}
+
+type newTableScopeHandler struct {
+	targetTablename string
+	done            Done
+}
+
+func (n *newTableScopeHandler) Handle(event apid.Event) {
+	if s, ok := event.(*common.Snapshot); ok {
+		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
+		Expect(err).Should(Succeed())
+		verifyTestTableData(n.targetTablename, sqliteDb)
+		apid.Events().StopListening(ApigeeSyncEventSelector, n)
+		close(n.done)
+	}
+}
+
+func verifyTestTableData(targetTableName string, sqliteDb apid.DB) {
+	rows, err := sqliteDb.Query("SELECT id FROM " + targetTableName + ";")
+	Expect(err).Should(Succeed())
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var id string
+		err = rows.Scan(&id)
+		Expect(err).Should(Succeed())
+		Expect(id).To(Equal("three"))
+		count += 1
+	}
+	Expect(count).To(Equal(1))
 }
 
 func TestDockerApigeeSync(t *testing.T) {
