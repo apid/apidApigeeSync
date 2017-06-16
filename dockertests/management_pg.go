@@ -16,8 +16,19 @@ package dockertests
 
 import (
 	"database/sql"
-	_ "github.com/lib/pq"
 	"fmt"
+	_ "github.com/lib/pq"
+)
+
+var (
+	basicTables = map[string]bool{
+		"deployment_history": true,
+		"deployment":         true,
+		"bundle_config":      true,
+		"configuration":      true,
+		"apid_cluster":       true,
+		"data_scope":         true,
+	}
 )
 
 type ManagementPg struct {

@@ -24,12 +24,4 @@ const (
 	configName               = "apigeesync_instance_name"
 	ApigeeSyncEventSelector  = "ApigeeSync"
 	testInitUser             = "dockerTestInit"
-	basicTables              = map[string]bool{
-		"deployment_history": true,
-		"deployment":         true,
-		"bundle_config":      true,
-		"configuration":      true,
-		"apid_cluster":       true,
-		"data_scope":         true,
-	}
 )
