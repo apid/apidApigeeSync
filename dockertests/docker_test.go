@@ -34,15 +34,16 @@ var _ = BeforeSuite(func() {
 	pgUrl = os.Getenv("APIGEE_SYNC_DOCKER_PG_URL") + "?sslmode=disable"
 	os.Setenv("APID_CONFIG_FILE", "./apid_config.yaml")
 
+
+
+	apid.Initialize(factory.DefaultServicesFactory())
+	config = apid.Config()
+
 	localStorage := config.GetString(configLocalStoragePath)
 	err := os.RemoveAll(localStorage)
 	Expect(err).Should(Succeed())
 	err = os.MkdirAll(localStorage, 0700)
 	Expect(err).Should(Succeed())
-
-
-	apid.Initialize(factory.DefaultServicesFactory())
-	config = apid.Config()
 
 	// init pg driver and data
 	pgManager, err = InitDb(pgUrl)
