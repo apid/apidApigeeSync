@@ -121,7 +121,7 @@ var _ = Describe("dockerIT", func() {
 		It("should get data according to data scope", func(done Done) {
 			tableName := "docker_test_b"
 			targetTablename := "edgex_" + tableName
-			handler := &newTableHandler{
+			handler := &newTableScopeHandler{
 				targetTablename: targetTablename,
 				done:            done,
 			}
@@ -140,6 +140,8 @@ func createTestTable(tableName string) {
 	_, err = tx.Exec("CREATE TABLE edgex." + tableName + " (id varchar primary key, val integer, _change_selector varchar);")
 	Expect(err).Should(Succeed())
 	_, err = tx.Exec("ALTER TABLE edgex." + tableName + " replica identity full;")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('three', 3, '" + clusterIdFromConfig + "');")
 	Expect(err).Should(Succeed())
 	tx.Commit()
 }
@@ -302,6 +304,7 @@ type newTableHandler struct {
 
 func (n *newTableHandler) Handle(event apid.Event) {
 	if s, ok := event.(*common.Snapshot); ok {
+		defer GinkgoRecover()
 		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
 		Expect(err).Should(Succeed())
 		Expect(verifyTestTableExist(n.targetTablename, sqliteDb)).To(BeTrue())
@@ -333,6 +336,7 @@ type newTableScopeHandler struct {
 
 func (n *newTableScopeHandler) Handle(event apid.Event) {
 	if s, ok := event.(*common.Snapshot); ok {
+		defer GinkgoRecover()
 		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
 		Expect(err).Should(Succeed())
 		verifyTestTableData(n.targetTablename, sqliteDb)
