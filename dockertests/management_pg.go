@@ -17,6 +17,7 @@ package dockertests
 import (
 	"database/sql"
 	_ "github.com/lib/pq"
+	"fmt"
 )
 
 type ManagementPg struct {
@@ -179,9 +180,39 @@ func (m *ManagementPg) BeginTransaction() (*sql.Tx, error) {
 	return tx, err
 }
 
+/*
+ * Delete all new tables or rows created by a test from pg.
+ * Only test data for the whole suite will remain in the pg.
+ */
 func (m *ManagementPg) CleanupTest() error {
+	tablesToDelete := make([]string, 0)
+	rows, err := m.pg.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='edgex';")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tableName string
+		err = rows.Scan(&tableName)
+		if err != nil {
+			return err
+		}
+
+		if !basicTables[tableName] {
+			tablesToDelete = append(tablesToDelete, tableName)
+		}
+	}
+
+	for _, tableName := range tablesToDelete {
+		fmt.Println("Drop table: " + tableName)
+		cleanupSql := "DROP TABLE edgex." + tableName + ";"
+		_, err := m.pg.Exec(cleanupSql)
+		if err != nil {
+			return err
+		}
+	}
 	cleanupSql := "DELETE FROM edgex.apid_cluster WHERE created_by!='" + testInitUser + "';"
-	_, err := m.pg.Exec(cleanupSql)
+	_, err = m.pg.Exec(cleanupSql)
 	return err
 }
 

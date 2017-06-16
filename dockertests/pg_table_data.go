@@ -78,13 +78,12 @@ type deploymentRow struct {
 	changeSelector   string
 }
 
-
 type bundleConfigData struct {
-	Id string `json:"id"`
-	Created string `json:"created"`
+	Id        string `json:"id"`
+	Created   string `json:"created"`
 	CreatedBy string `json:"createdBy"`
-	Updated string `json:"updated"`
+	Updated   string `json:"updated"`
 	UpdatedBy string `json:"updatedBy"`
-	Name string `json:"name"`
-	Uri string `json:"uri"`
+	Name      string `json:"name"`
+	Uri       string `json:"uri"`
 }

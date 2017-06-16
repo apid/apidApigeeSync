@@ -15,26 +15,26 @@
 package dockertests
 
 import (
+	"encoding/json"
 	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/factory"
 	_ "github.com/30x/apidApigeeSync"
+	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
-	"encoding/json"
-	"github.com/apigee-labs/transicator/common"
 )
 
 var (
-	services  apid.Services
-	log       apid.LogService
-	dataService     apid.DataService
-	config    apid.ConfigService
-	pgUrl     string
-	pgManager *ManagementPg
+	services            apid.Services
+	log                 apid.LogService
+	dataService         apid.DataService
+	config              apid.ConfigService
+	pgUrl               string
+	pgManager           *ManagementPg
 	clusterIdFromConfig string
 )
 
@@ -47,8 +47,6 @@ var _ = BeforeSuite(func() {
 	//hostname := "http://" + os.Getenv("APIGEE_SYNC_DOCKER_IP")
 	pgUrl = os.Getenv("APIGEE_SYNC_DOCKER_PG_URL") + "?sslmode=disable"
 	os.Setenv("APID_CONFIG_FILE", "./apid_config.yaml")
-
-
 
 	apid.Initialize(factory.DefaultServicesFactory())
 	config = apid.Config()
@@ -73,7 +71,6 @@ var _ = BeforeSuite(func() {
 	initDone := make(chan bool)
 	handler := &waitSnapshotHandler{initDone}
 
-
 	// hang until snapshot received
 	apid.Events().Listen(ApigeeSyncEventSelector, handler)
 
@@ -83,47 +80,44 @@ var _ = BeforeSuite(func() {
 	apid.RegisterPlugin(initPlugin)
 	apid.InitializePlugins("dockerTest")
 
-	<- initDone
+	<-initDone
 }, 5)
 
 var _ = AfterSuite(func() {
-	//pgManager.CleanupAll()
+	err := pgManager.CleanupAll()
+	Expect(err).Should(Succeed())
 })
 
 var _ = Describe("dockerIT", func() {
 
+	/*
+	 * Isolation between tests is not perfect.
+	 * If in a test you listen to any event, please make sure you stop listening to it,
+	 * and don't let it mess up later tests.
+	 */
 	Context("Generic Replication", func() {
 		var _ = BeforeEach(func() {
 
 		})
 
 		var _ = AfterEach(func() {
-			//pgManager.CleanupTest()
+			err := pgManager.CleanupTest()
+			Expect(err).Should(Succeed())
 		})
 
 		It("should succesfully download new table from pg", func(done Done) {
-			//log.Debug("CS: " + config.GetString(configChangeServerBaseURI))
-			//log.Debug("SS: " + config.GetString(configSnapServerBaseURI))
-			//log.Debug("Auth: " + config.GetString(configProxyServerBaseURI))
 			tableName := "docker_test"
 			targetTablename := "edgex_" + tableName
-			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event){
-				if s, ok := event.(*common.Snapshot); ok {
-					go func() {
-						defer GinkgoRecover()
-						sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
-						Expect(err).Should(Succeed())
-						Expect(verifyTestTable(targetTablename, sqliteDb)).To(BeTrue())
-						dropTestTable(tableName, sqliteDb)
-						close(done)
-					}()
-				}
-			})
+			handler := &newTableHandler{
+				targetTablename: targetTablename,
+				done:            done,
+			}
 
-			createTestTable(tableName);
-
+			apid.Events().Listen(ApigeeSyncEventSelector, handler)
+			createTestTable(tableName)
 
 		}, 1)
+
 	})
 })
 
@@ -153,7 +147,7 @@ func verifyTestTable(targetTableName string, sqliteDb apid.DB) bool {
 		err = rows.Scan(&tableName)
 		Expect(err).Should(Succeed())
 
-		if tableName==targetTableName {
+		if tableName == targetTableName {
 			return true
 		}
 	}
@@ -193,7 +187,7 @@ func initPlugin(s apid.Services) (apid.PluginData, error) {
 }
 
 func initPgData() {
-	clusterIdFromConfig = config.GetString(configApidClusterId)//"4c6bb536-0d64-43ca-abae-17c08f1a7e58"
+	clusterIdFromConfig = config.GetString(configApidClusterId) //"4c6bb536-0d64-43ca-abae-17c08f1a7e58"
 	clusterId := clusterIdFromConfig
 	scopeId := "ae418890-2c22-4c6a-b218-69e261034b96"
 	deploymentId := "633af126-ee79-4a53-bef7-7ba30da8aad6"
@@ -228,45 +222,44 @@ func initPgData() {
 	}
 
 	bf := bundleConfigData{
-		Id: bundleConfigId,
-		Created: t.Format(time.RFC3339),
+		Id:        bundleConfigId,
+		Created:   t.Format(time.RFC3339),
 		CreatedBy: testInitUser,
-		Updated: t.Format(time.RFC3339),
+		Updated:   t.Format(time.RFC3339),
 		UpdatedBy: testInitUser,
-		Name: bundleConfigName,
-		Uri: bundleUri,
+		Name:      bundleConfigName,
+		Uri:       bundleUri,
 	}
 
 	jsonBytes, err := json.Marshal(bf)
 	Expect(err).Should(Succeed())
 
-
 	bfr := &bundleConfigRow{
-		id: bf.Id,
-		scopeId: scopeId,
-		name: bf.Name,
-		uri: bf.Uri,
+		id:           bf.Id,
+		scopeId:      scopeId,
+		name:         bf.Name,
+		uri:          bf.Uri,
 		checksumType: "",
-		checksum: "",
-		created: t,
-		createdBy: bf.CreatedBy,
-		updated: t,
-		updatedBy: bf.UpdatedBy,
+		checksum:     "",
+		created:      t,
+		createdBy:    bf.CreatedBy,
+		updated:      t,
+		updatedBy:    bf.UpdatedBy,
 	}
 
 	d := &deploymentRow{
-		id: deploymentId,
-		configId: bundleConfigId,
-		clusterId: clusterId,
-		scopeId: scopeId,
+		id:               deploymentId,
+		configId:         bundleConfigId,
+		clusterId:        clusterId,
+		scopeId:          scopeId,
 		bundleConfigName: bundleConfigName,
 		bundleConfigJson: string(jsonBytes),
-		configJson: "{}",
-		created: t,
-		createdBy: testInitUser,
-		updated: t,
-		updatedBy: testInitUser,
-		changeSelector: clusterId,
+		configJson:       "{}",
+		created:          t,
+		createdBy:        testInitUser,
+		updated:          t,
+		updatedBy:        testInitUser,
+		changeSelector:   clusterId,
 	}
 
 	tx, err := pgManager.BeginTransaction()
@@ -292,6 +285,24 @@ func (w *waitSnapshotHandler) Handle(event apid.Event) {
 	if _, ok := event.(*common.Snapshot); ok {
 		apid.Events().StopListening(ApigeeSyncEventSelector, w)
 		w.initDone <- true
+	}
+}
+
+type newTableHandler struct {
+	targetTablename string
+	done            Done
+}
+
+func (n *newTableHandler) Handle(event apid.Event) {
+	if s, ok := event.(*common.Snapshot); ok {
+		go func() {
+			defer GinkgoRecover()
+			sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
+			Expect(err).Should(Succeed())
+			Expect(verifyTestTable(n.targetTablename, sqliteDb)).To(BeTrue())
+			apid.Events().StopListening(ApigeeSyncEventSelector, n)
+			close(n.done)
+		}()
 	}
 }
 
