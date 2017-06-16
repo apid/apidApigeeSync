@@ -86,6 +86,7 @@ log_level: Debug
 apigeesync_consumer_key: 33f39JNLosF1mDOXJoCfbauchVzPrGrl
 apigeesync_consumer_secret: LAolGShAx6H3vfNF
 apigeesync_cluster_id: 4c6bb536-0d64-43ca-abae-17c08f1a7e58
+local_storage_path: ${WORK_DIR}/tmp/sqlite
 EOF
 `
 rm -f ${WORK_DIR}/dockertests/apid_config.yaml
