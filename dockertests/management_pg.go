@@ -195,6 +195,8 @@ func (m *ManagementPg) BeginTransaction() (*sql.Tx, error) {
  * Only test data for the whole suite will remain in the pg.
  */
 func (m *ManagementPg) CleanupTest() error {
+
+	// clean tables
 	tablesToDelete := make([]string, 0)
 	rows, err := m.pg.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='edgex';")
 	if err != nil {
@@ -222,7 +224,34 @@ func (m *ManagementPg) CleanupTest() error {
 	}
 	cleanupSql := "DELETE FROM edgex.apid_cluster WHERE created_by!='" + testInitUser + "';"
 	_, err = m.pg.Exec(cleanupSql)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// clean enum types
+	typesToDelete := make([]string, 0)
+	typeRows, err := m.pg.Query("SELECT DISTINCT pg_type.typname AS enumtype FROM pg_type JOIN pg_enum ON pg_enum.enumtypid = pg_type.oid;")
+	if err != nil {
+		return err
+	}
+	defer typeRows.Close()
+	for typeRows.Next() {
+		var typeName string
+		err = typeRows.Scan(&typeName)
+		if err != nil {
+			return err
+		}
+		typesToDelete = append(typesToDelete, typeName)
+	}
+
+	for _, typeName := range typesToDelete {
+		cleanupSql := "DROP TYPE edgex." + typeName + ";"
+		_, err := m.pg.Exec(cleanupSql)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *ManagementPg) CleanupAll() error {

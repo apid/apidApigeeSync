@@ -106,11 +106,12 @@ var _ = Describe("dockerIT", func() {
 		})
 
 		It("should succesfully download new table from pg", func(done Done) {
-			tableName := "docker_test_a"
+			tableName := "docker_test_download"
 			targetTablename := "edgex_" + tableName
 			handler := &newTableHandler{
 				targetTablename: targetTablename,
 				done:            done,
+				verifyFunc:      verifyTestTableExist,
 			}
 
 			apid.Events().Listen(ApigeeSyncEventSelector, handler)
@@ -119,15 +120,30 @@ var _ = Describe("dockerIT", func() {
 		}, 1)
 
 		It("should get data according to data scope", func(done Done) {
-			tableName := "docker_test_b"
+			tableName := "docker_test_scope"
 			targetTablename := "edgex_" + tableName
-			handler := &newTableScopeHandler{
+			handler := &newTableHandler{
 				targetTablename: targetTablename,
 				done:            done,
+				verifyFunc:      verifyTestTableData,
 			}
 
 			apid.Events().Listen(ApigeeSyncEventSelector, handler)
 			createTestTableWithData(tableName)
+
+		}, 1)
+
+		It("should replicate ENUM type of pg correctly", func(done Done) {
+			tableName := "docker_test_enum"
+			targetTablename := "edgex_" + tableName
+			handler := &newTableHandler{
+				targetTablename: targetTablename,
+				done:            done,
+				verifyFunc:      verifyTestTableEnum,
+			}
+
+			apid.Events().Listen(ApigeeSyncEventSelector, handler)
+			createTestTableWithEnum(tableName)
 
 		}, 1)
 	})
@@ -159,6 +175,25 @@ func createTestTableWithData(tableName string) {
 	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('two', 2, 'bar');")
 	Expect(err).Should(Succeed())
 	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('three', 3, '" + clusterIdFromConfig + "');")
+	Expect(err).Should(Succeed())
+	tx.Commit()
+}
+
+func createTestTableWithEnum(tableName string) {
+	tx, err := pgManager.BeginTransaction()
+	Expect(err).Should(Succeed())
+	defer tx.Rollback()
+	_, err = tx.Exec("CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("CREATE TABLE edgex." + tableName + " (id varchar primary key, val mood, _change_selector varchar);")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("ALTER TABLE edgex." + tableName + " replica identity full;")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('one', 'sad', 'foo');")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('two', 'ok', 'bar');")
+	Expect(err).Should(Succeed())
+	_, err = tx.Exec("INSERT INTO edgex." + tableName + " values ('three', 'happy', '" + clusterIdFromConfig + "');")
 	Expect(err).Should(Succeed())
 	tx.Commit()
 }
@@ -300,6 +335,7 @@ func (w *waitSnapshotHandler) Handle(event apid.Event) {
 type newTableHandler struct {
 	targetTablename string
 	done            Done
+	verifyFunc      func (string, apid.DB)
 }
 
 func (n *newTableHandler) Handle(event apid.Event) {
@@ -307,13 +343,13 @@ func (n *newTableHandler) Handle(event apid.Event) {
 		defer GinkgoRecover()
 		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
 		Expect(err).Should(Succeed())
-		Expect(verifyTestTableExist(n.targetTablename, sqliteDb)).To(BeTrue())
+		n.verifyFunc(n.targetTablename, sqliteDb)
 		apid.Events().StopListening(ApigeeSyncEventSelector, n)
 		close(n.done)
 	}
 }
 
-func verifyTestTableExist(targetTableName string, sqliteDb apid.DB) bool {
+func verifyTestTableExist(targetTableName string, sqliteDb apid.DB) {
 	rows, err := sqliteDb.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
 	Expect(err).Should(Succeed())
 	defer rows.Close()
@@ -323,26 +359,10 @@ func verifyTestTableExist(targetTableName string, sqliteDb apid.DB) bool {
 		Expect(err).Should(Succeed())
 
 		if tableName == targetTableName {
-			return true
+			return
 		}
 	}
-	return false
-}
-
-type newTableScopeHandler struct {
-	targetTablename string
-	done            Done
-}
-
-func (n *newTableScopeHandler) Handle(event apid.Event) {
-	if s, ok := event.(*common.Snapshot); ok {
-		defer GinkgoRecover()
-		sqliteDb, err := dataService.DBVersion(s.SnapshotInfo)
-		Expect(err).Should(Succeed())
-		verifyTestTableData(n.targetTablename, sqliteDb)
-		apid.Events().StopListening(ApigeeSyncEventSelector, n)
-		close(n.done)
-	}
+	Fail("Table " + targetTableName + " doesn'r exist!")
 }
 
 func verifyTestTableData(targetTableName string, sqliteDb apid.DB) {
@@ -355,6 +375,21 @@ func verifyTestTableData(targetTableName string, sqliteDb apid.DB) {
 		err = rows.Scan(&id)
 		Expect(err).Should(Succeed())
 		Expect(id).To(Equal("three"))
+		count += 1
+	}
+	Expect(count).To(Equal(1))
+}
+
+func verifyTestTableEnum(targetTableName string, sqliteDb apid.DB) {
+	rows, err := sqliteDb.Query("SELECT val FROM " + targetTableName + ";")
+	Expect(err).Should(Succeed())
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var val string
+		err = rows.Scan(&val)
+		Expect(err).Should(Succeed())
+		Expect(val).To(Equal("happy"))
 		count += 1
 	}
 	Expect(count).To(Equal(1))
