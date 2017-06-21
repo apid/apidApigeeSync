@@ -109,3 +109,16 @@ Example plugin code:
       setDB(db)
       log.Debug("Snapshot processed")
     }
+
+### Docker Test:
+Make sure you have transicator in your $GOPATH/src/github.com/apigee-labs/transicator before you run docker tests.
+
+    make dockertest
+
+This docker test assumes:
+
+If you're running it on Macbook, your docker host is localhost.
+If you're running it on Goobuntu, your docker ip is 192.168.9.1 (if you follow go/installdocker).
+
+
+

@@ -453,7 +453,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			// first start - no row, generate a UUID and store it
 			err = nil
 			newInstanceID = true
-			info.InstanceID = generateUUID()
+			info.InstanceID = GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
 			db.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
@@ -463,7 +463,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
 		err = nil
 		newInstanceID = true
-		info.InstanceID = generateUUID()
+		info.InstanceID = GenerateUUID()
 
 		db.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
 			info.InstanceID, info.ClusterID, "")
@@ -501,7 +501,7 @@ func updateApidInstanceInfo() error {
  */
 
 //TODO: Change to https://tools.ietf.org/html/rfc4122 based implementation such as https://github.com/google/uuid
-func generateUUID() string {
+func GenerateUUID() string {
 
 	buff := make([]byte, 16)
 	numRead, err := rand.Read(buff)

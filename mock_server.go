@@ -248,8 +248,8 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	err = json.Unmarshal(plInfo, &plugInfo)
 	Expect(err).NotTo(HaveOccurred())
 
-	m.oauthToken = generateUUID()
-	res := oauthToken{
+	m.oauthToken = GenerateUUID()
+	res := OauthToken{
 		AccessToken: m.oauthToken,
 		ExpiresIn:   oauthExpiresIn,
 	}
@@ -266,7 +266,7 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
 
-	w.Header().Set("Transicator-Snapshot-TXID", generateUUID())
+	w.Header().Set("Transicator-Snapshot-TXID", GenerateUUID())
 
 	if len(scopes) == 1 {
 		//send bootstrap db
@@ -405,7 +405,7 @@ func (m *MockServer) stringColumnVal(v string) *common.ColumnVal {
 func (m *MockServer) createDeployment() tableRowMap {
 
 	deploymentID := m.nextDeploymentID()
-	bundleID := generateUUID()
+	bundleID := GenerateUUID()
 
 	listen := apid.Config().GetString("api_listen")
 	_, port, err := net.SplitHostPort(listen)

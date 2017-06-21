@@ -36,7 +36,7 @@ var _ = Describe("token", func() {
 		It("should calculate valid token", func() {
 			log.Info("Starting token tests...")
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
 				ExpiresIn:   120,
 				ExpiresAt:   time.Now().Add(2 * time.Minute),
@@ -48,7 +48,7 @@ var _ = Describe("token", func() {
 
 		It("should calculate expired token", func() {
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
 				ExpiresIn:   0,
 				ExpiresAt:   time.Now(),
@@ -60,7 +60,7 @@ var _ = Describe("token", func() {
 
 		It("should calculate token needing refresh", func() {
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
 				ExpiresIn:   59,
 				ExpiresAt:   time.Now().Add(time.Minute - time.Second),
@@ -72,7 +72,7 @@ var _ = Describe("token", func() {
 
 		It("should calculate on empty token", func() {
 
-			t := &oauthToken{}
+			t := &OauthToken{}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<=", 0))
 			Expect(t.needsRefresh()).To(BeTrue())
 			Expect(t.isValid()).To(BeFalse())
@@ -85,7 +85,7 @@ var _ = Describe("token", func() {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
 
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: "ABCD",
 					ExpiresIn:   1,
 				}
@@ -113,8 +113,8 @@ var _ = Describe("token", func() {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
 
-				res := oauthToken{
-					AccessToken: generateUUID(),
+				res := OauthToken{
+					AccessToken: GenerateUUID(),
 					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
@@ -153,7 +153,7 @@ var _ = Describe("token", func() {
 					finished <- true
 				}
 
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: string(count),
 					ExpiresIn:   1,
 				}
@@ -194,7 +194,7 @@ var _ = Describe("token", func() {
 					Expect(r.Header.Get("updated_at_apid")).NotTo(BeEmpty())
 					finished <- true
 				}
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: string(count),
 					ExpiresIn:   200,
 				}

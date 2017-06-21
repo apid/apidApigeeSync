@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#
 # Copyright 2017 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package: github.com/30x/apidApigeeSync
-import:
-- package: github.com/30x/apid-core
-  version: master
-testImport:
-- package: github.com/onsi/ginkgo/ginkgo
-- package: github.com/onsi/gomega
-- package: github.com/lib/pq
+source ./dockertests/dockerSetup.sh
+go test ./dockertests/*.go -v
+./dockertests/dockerCleanup.sh

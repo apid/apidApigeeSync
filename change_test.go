@@ -166,7 +166,7 @@ func (t *dummyTokenManager) invalidateToken() error {
 	return nil
 }
 
-func (t *dummyTokenManager) getToken() *oauthToken {
+func (t *dummyTokenManager) getToken() *OauthToken {
 	return nil
 }
 

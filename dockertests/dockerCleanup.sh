@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#
 # Copyright 2017 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,12 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-package: github.com/30x/apidApigeeSync
-import:
-- package: github.com/30x/apid-core
-  version: master
-testImport:
-- package: github.com/onsi/ginkgo/ginkgo
-- package: github.com/onsi/gomega
-- package: github.com/lib/pq
+pgname=apidSync_test_pg
+ssname=apidSync_test_ss
+csname=apidSync_test_cs
+docker kill ${pgname} ${csname} ${ssname}
+docker rm -f ${pgname} ${csname} ${ssname}
