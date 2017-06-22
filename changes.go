@@ -252,6 +252,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	/* If valid data present, Emit to plugins */
 	if len(resp.Changes) > 0 {
+		processChangeList(&resp)
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")

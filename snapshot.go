@@ -154,6 +154,7 @@ func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 		log.Panicf("Database inaccessible: %v", err)
 	}
 
+	processSnapshot(snapshot)
 	log.Info("Emitting Snapshot to plugins")
 
 	select {

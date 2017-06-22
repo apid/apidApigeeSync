@@ -27,7 +27,6 @@ import (
 var _ = Describe("Change Agent", func() {
 
 	Context("Change Agent Unit Tests", func() {
-		handler := handler{}
 
 		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 			initDb(sqlfile, "./mockdb_change.sqlite3")
@@ -46,7 +45,7 @@ var _ = Describe("Change Agent", func() {
 
 		BeforeEach(func() {
 			event := createTestDb("./sql/init_mock_db.sql", "test_change")
-			handler.Handle(&event)
+			processSnapshot(&event)
 			knownTables = extractTablesFromDB(getDB())
 		})
 

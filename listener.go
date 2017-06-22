@@ -24,24 +24,6 @@ const (
 	LISTENER_TABLE_DATA_SCOPE   = "edgex.data_scope"
 )
 
-type handler struct {
-}
-
-func (h *handler) String() string {
-	return "ApigeeSync"
-}
-
-func (h *handler) Handle(e apid.Event) {
-
-	if changeSet, ok := e.(*common.ChangeList); ok {
-		processChangeList(changeSet)
-	} else if snapShot, ok := e.(*common.Snapshot); ok {
-		processSnapshot(snapShot)
-	} else {
-		log.Debugf("Received invalid event. Ignoring. %v", e)
-	}
-}
-
 func processSnapshot(snapshot *common.Snapshot) {
 	log.Debugf("Snapshot received. Switching to DB version: %s", snapshot.SnapshotInfo)
 
