@@ -24,8 +24,6 @@ import (
 
 var _ = Describe("listener", func() {
 
-
-
 	var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 		initDb(sqlfile, "./mockdb.sqlite3")
 		file, err := os.Open("./mockdb.sqlite3")
@@ -174,7 +172,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func(){processChangeList(&csEvent)}).To(Panic())
+				Expect(func() { processChangeList(&csEvent) }).To(Panic())
 			}, 3)
 
 			It("update event should panic", func() {
@@ -191,7 +189,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func(){processChangeList(&event)}).To(Panic())
+				Expect(func() { processChangeList(&event) }).To(Panic())
 				//restore the last snapshot
 			}, 3)
 
