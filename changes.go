@@ -317,6 +317,27 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 }
 
 /*
+ * Determine if any columns added/dropped in any table
+ */
+func changesHavecolumnsChanged(a map[string]bool, changes []common.Change) bool {
+
+	//nil maps should not be passed in.  Making the distinction between nil map and empty map
+	if a == nil {
+		log.Warn("Nil map passed to function changesHaveNewTables, may be bug")
+		return true
+	}
+
+	for _, change := range changes {
+		if !a[normalizeTableName(change.Table)] {
+			log.Infof("Unable to find %s table in current known tables", change.Table)
+			return true
+		}
+	}
+
+	return false
+}
+
+/*
  * seqCurr.Compare() will return 1, if its newer than seqPrev,
  * else will return 0, if same, or -1 if older.
  */

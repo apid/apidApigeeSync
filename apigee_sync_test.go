@@ -84,7 +84,7 @@ var _ = Describe("Sync", func() {
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 				if s, ok := event.(*common.Snapshot); ok {
 
-					Expect(16).To(Equal(len(knownTables)))
+					Expect(12).To(Equal(len(knownTables)))
 					Expect(changesRequireDDLSync(expectedSnapshotTables)).To(BeFalse())
 
 					lastSnapshot = s

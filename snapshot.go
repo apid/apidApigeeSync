@@ -201,6 +201,46 @@ func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]boo
 
 }
 
+func extractTableColumnsFromSnapshot(snapshot *common.Snapshot) (map[string][]string) {
+
+	columns := make(map[string][]string)
+	tables := make([]string, 0)
+
+	log.Debug("Extracting table names from snapshot")
+	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
+	if err != nil {
+		log.Panicf("Database inaccessible: %v", err)
+	}
+	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
+	if err != nil {
+		log.Panicf("Unable to read in known snapshot tables from sqlite file")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tableName string
+		rows.Scan(&tableName)
+		if err != nil {
+			log.Panic("Error scaning tableNames from _transicator_tables")
+		}
+		tables = append(tables, tableName)
+	}
+
+	for _, tableName := range tables {
+
+		dummyRows, err := db.Query("SELECT * FROM " + tableName + " LIMIT 0;")
+		if err != nil {
+			log.Panicf("Get table info failed: %v", err)
+		}
+		defer dummyRows.Close()
+		cols, err := dummyRows.Columns()
+		if err != nil {
+			log.Panicf("Get table columns failed: %v", err)
+		}
+		columns[tableName] = cols
+	}
+	return columns
+}
+
 func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 
 	tables = make(map[string]bool)
