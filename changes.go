@@ -98,8 +98,8 @@ func (c *pollChangeManager) pollChangeWithBackoff() {
 		return
 	}
 
-	go pollWithBackoff(c.quitChan, c.pollChangeAgent, c.handleChangeServerError)
 	log.Debug("pollChangeManager: pollChangeWithBackoff() started pollWithBackoff")
+	go pollWithBackoff(c.quitChan, c.pollChangeAgent, c.handleChangeServerError)
 
 }
 
