@@ -306,7 +306,7 @@ var _ = Describe("Sync", func() {
 			apidTokenManager = createSimpleTokenManager()
 			apidTokenManager.start()
 			apidSnapshotManager = createSnapShotManager()
-			events.Listen(ApigeeSyncEventSelector, &handler{})
+			//events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}

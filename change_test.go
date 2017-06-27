@@ -27,7 +27,6 @@ import (
 var _ = Describe("Change Agent", func() {
 
 	Context("Change Agent Unit Tests", func() {
-		handler := handler{}
 
 		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 			initDb(sqlfile, "./mockdb_change.sqlite3")
@@ -46,7 +45,7 @@ var _ = Describe("Change Agent", func() {
 
 		BeforeEach(func() {
 			event := createTestDb("./sql/init_mock_db.sql", "test_change")
-			handler.Handle(&event)
+			processSnapshot(&event)
 			knownTables = extractTablesFromDB(getDB())
 		})
 
@@ -81,6 +80,10 @@ var _ = Describe("Change Agent", func() {
 			config.Set(configPollInterval, 10*time.Millisecond)
 		}
 
+		AfterEach(func() {
+			restoreContext()
+		})
+
 		It("test change agent with authorization failure", func() {
 			log.Debug("test change agent with authorization failure")
 			testTokenManager := &dummyTokenManager{make(chan bool)}
@@ -95,7 +98,6 @@ var _ = Describe("Change Agent", func() {
 			<-testTokenManager.invalidateChan
 			log.Debug("closing")
 			<-apidChangeManager.close()
-			restoreContext()
 		})
 
 		It("test change agent with too old snapshot", func() {
@@ -114,7 +116,6 @@ var _ = Describe("Change Agent", func() {
 			<-testSnapshotManager.downloadCalledChan
 			log.Debug("closing")
 			<-apidChangeManager.close()
-			restoreContext()
 		})
 
 		It("change agent should retry with authorization failure", func(done Done) {
@@ -136,7 +137,6 @@ var _ = Describe("Change Agent", func() {
 					go func() {
 						// when close done, all handlers for the first snapshot have been executed
 						<-closeDone
-						restoreContext()
 						close(done)
 					}()
 
@@ -146,7 +146,7 @@ var _ = Describe("Change Agent", func() {
 			apidChangeManager.pollChangeWithBackoff()
 			// auth check fails
 			<-testTokenManager.invalidateChan
-		})
+		}, 2)
 
 	})
 })

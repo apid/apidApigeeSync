@@ -228,7 +228,6 @@ func postInitPlugins(event apid.Event) {
 		apidTokenManager.start()
 		go bootstrap()
 
-		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")
 	}
 }

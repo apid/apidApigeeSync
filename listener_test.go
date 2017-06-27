@@ -24,8 +24,6 @@ import (
 
 var _ = Describe("listener", func() {
 
-	handler := handler{}
-
 	var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 		initDb(sqlfile, "./mockdb.sqlite3")
 		file, err := os.Open("./mockdb.sqlite3")
@@ -41,7 +39,7 @@ var _ = Describe("listener", func() {
 
 		It("should fail if more than one apid_cluster rows", func() {
 			event := createTestDb("./sql/init_listener_test_duplicate_apids.sql", "test_snapshot_fail_multiple_clusters")
-			Expect(func() { handler.Handle(&event) }).To(Panic())
+			Expect(func() { processSnapshot(&event) }).To(Panic())
 		}, 3)
 
 		It("should fail if more than one apid_cluster rows", func() {
@@ -64,7 +62,7 @@ var _ = Describe("listener", func() {
 
 			event := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_snapshot_valid")
 
-			handler.Handle(&event)
+			processSnapshot(&event)
 
 			info, err := getApidInstanceInfo()
 			Expect(err).NotTo(HaveOccurred())
@@ -160,7 +158,7 @@ var _ = Describe("listener", func() {
 
 			It("insert event should panic", func() {
 				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_changes_insert_panic")
-				handler.Handle(&ssEvent)
+				processSnapshot(&ssEvent)
 
 				//save the last snapshot, so we can restore it at the end of this context
 
@@ -174,12 +172,12 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func() { handler.Handle(&csEvent) }).To(Panic())
+				Expect(func() { processChangeList(&csEvent) }).To(Panic())
 			}, 3)
 
 			It("update event should panic", func() {
 				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_changes_update_panic")
-				handler.Handle(&ssEvent)
+				processSnapshot(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -191,7 +189,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func() { handler.Handle(&event) }).To(Panic())
+				Expect(func() { processChangeList(&event) }).To(Panic())
 				//restore the last snapshot
 			}, 3)
 
@@ -201,7 +199,7 @@ var _ = Describe("listener", func() {
 
 			It("insert event should add", func() {
 				ssEvent := createTestDb("./sql/init_listener_test_no_datascopes.sql", "test_changes_insert")
-				handler.Handle(&ssEvent)
+				processSnapshot(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -241,7 +239,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				handler.Handle(&event)
+				processChangeList(&event)
 
 				var dds []dataDataScope
 
@@ -286,7 +284,7 @@ var _ = Describe("listener", func() {
 
 			It("delete event should delete", func() {
 				ssEvent := createTestDb("./sql/init_listener_test_no_datascopes.sql", "test_changes_delete")
-				handler.Handle(&ssEvent)
+				processSnapshot(&ssEvent)
 				insert := common.ChangeList{
 					LastSequence: "test",
 					Changes: []common.Change{
@@ -309,7 +307,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				handler.Handle(&insert)
+				processChangeList(&insert)
 
 				delete := common.ChangeList{
 					LastSequence: "test",
@@ -322,7 +320,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				handler.Handle(&delete)
+				processChangeList(&delete)
 
 				var nRows int
 				err := getDB().QueryRow("SELECT count(id) FROM EDGEX_DATA_SCOPE").Scan(&nRows)
@@ -333,7 +331,7 @@ var _ = Describe("listener", func() {
 
 			It("update event should panic for data scopes table", func() {
 				ssEvent := createTestDb("./sql/init_listener_test_valid_snapshot.sql", "test_update_panic")
-				handler.Handle(&ssEvent)
+				processSnapshot(&ssEvent)
 
 				event := common.ChangeList{
 					LastSequence: "test",
@@ -345,7 +343,7 @@ var _ = Describe("listener", func() {
 					},
 				}
 
-				Expect(func() { handler.Handle(&event) }).To(Panic())
+				Expect(func() { processChangeList(&event) }).To(Panic())
 				//restore the last snapshot
 			}, 3)
 
