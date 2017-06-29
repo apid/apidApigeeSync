@@ -35,7 +35,12 @@ module.exports.init = function(config, logger, stats) {
     testprobe: function() { return analytics },
 
     onrequest: function(req, res, next) {
-      middleware(req, res, next);
+      try {
+          middleware(req, res, next);
+      } catch (e) {
+        console.error("Error encountered when attempting to push analytics to Apigee cloud.  Continuing request ", e);
+        next();
+      }
     }
 
   };
