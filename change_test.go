@@ -155,6 +155,10 @@ type dummyTokenManager struct {
 	invalidateChan chan bool
 }
 
+func (t *dummyTokenManager) getTokenReadyChannel() chan bool {
+	return make(chan bool)
+}
+
 func (t *dummyTokenManager) getBearerToken() string {
 	return ""
 }

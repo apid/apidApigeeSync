@@ -49,6 +49,7 @@ func createSimpleTokenManager() *simpleTokenManager {
 		invalidateTokenChan: make(chan bool),
 		returnTokenChan:     make(chan *OauthToken),
 		invalidateDone:      make(chan bool),
+		tokenUpdatedChan:    make(chan bool, 1),
 		isClosed:            &isClosedInt,
 	}
 	return t
@@ -64,6 +65,7 @@ type simpleTokenManager struct {
 	refreshTimer        <-chan time.Time
 	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
+	tokenUpdatedChan    chan bool
 }
 
 func (t *simpleTokenManager) start() {
@@ -218,8 +220,19 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
 
+		//don't block on the buffered channel.  that means there is already a signal to serve new token
+		select {
+		case t.tokenUpdatedChan <- true:
+		default:
+			log.Debug("Token refresh notification already sent")
+		}
+
 		return nil
 	}
+}
+
+func (t *simpleTokenManager) getTokenReadyChannel() chan bool {
+	return t.tokenUpdatedChan
 }
 
 type OauthToken struct {
