@@ -26,7 +26,7 @@ const (
 	maxIdleConnsPerHost = 10
 )
 
-var knownTables = make(map[string]bool)
+var knownTables = make(map[string]map[string]bool)
 
 /*
  *  Start from existing snapshot if possible

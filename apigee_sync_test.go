@@ -235,38 +235,39 @@ var _ = Describe("Sync", func() {
 
 		It("should correctly identify non-proper subsets with respect to maps", func() {
 
+			testMap := map[string]map[string]bool{"a": make(map[string]bool), "b": make(map[string]bool)}
 			//test b proper subset of a
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			Expect(changesHaveNewTables(testMap,
 				[]common.Change{common.Change{Table: "b"}},
 			)).To(BeFalse())
 
 			//test a == b
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			Expect(changesHaveNewTables(testMap,
 				[]common.Change{common.Change{Table: "a"}, common.Change{Table: "b"}},
 			)).To(BeFalse())
 
 			//test b superset of a
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			Expect(changesHaveNewTables(testMap,
 				[]common.Change{common.Change{Table: "a"}, common.Change{Table: "b"}, common.Change{Table: "c"}},
 			)).To(BeTrue())
 
 			//test b not subset of a
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			Expect(changesHaveNewTables(testMap,
 				[]common.Change{common.Change{Table: "c"}},
 			)).To(BeTrue())
 
 			//test a empty
-			Expect(changesHaveNewTables(map[string]bool{},
+			Expect(changesHaveNewTables(map[string]map[string]bool{},
 				[]common.Change{common.Change{Table: "a"}},
 			)).To(BeTrue())
 
 			//test b empty
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true},
+			Expect(changesHaveNewTables(testMap,
 				[]common.Change{},
 			)).To(BeFalse())
 
 			//test b nil
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeFalse())
+			Expect(changesHaveNewTables(testMap, nil)).To(BeFalse())
 
 			//test a nil
 			Expect(changesHaveNewTables(nil,

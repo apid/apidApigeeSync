@@ -147,7 +147,7 @@ func (s *simpleSnapShotManager) downloadDataSnapshot() {
 }
 
 func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
-	knownTables = extractTablesFromSnapshot(snapshot)
+	knownTables = extractTableColumnsFromSnapshot(snapshot)
 
 	_, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
@@ -167,50 +167,20 @@ func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
 
 }
 
-func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]bool) {
-
-	tables = make(map[string]bool)
-
-	log.Debug("Extracting table names from snapshot")
-	if snapshot.Tables == nil {
-		//if this panic ever fires, it's a bug
-		db, err := dataService.DBVersion(snapshot.SnapshotInfo)
-		if err != nil {
-			log.Panicf("Database inaccessible: %v", err)
-		}
-		rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
-		if err != nil {
-			log.Panicf("Unable to read in known snapshot tables from sqlite file")
-		}
-		for rows.Next() {
-			var tableName string
-			rows.Scan(&tableName)
-			if err != nil {
-				log.Panic("Error scaning tableNames from _transicator_tables")
-			}
-			tables[tableName] = true
-		}
-
-	} else {
-
-		for _, table := range snapshot.Tables {
-			tables[table.Name] = true
-		}
-	}
-	return tables
-
-}
-
-func extractTableColumnsFromSnapshot(snapshot *common.Snapshot) (map[string][]string) {
-
-	columns := make(map[string][]string)
-	tables := make([]string, 0)
-
+func extractTableColumnsFromSnapshot(snapshot *common.Snapshot) map[string]map[string]bool {
 	log.Debug("Extracting table names from snapshot")
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
+
+	return extractTableColsFromDB(db)
+}
+
+func extractTableColsFromDB(db apid.DB) map[string]map[string]bool {
+
+	columns := make(map[string]map[string]bool)
+	tables := make([]string, 0)
 	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
 	if err != nil {
 		log.Panicf("Unable to read in known snapshot tables from sqlite file")
@@ -226,7 +196,7 @@ func extractTableColumnsFromSnapshot(snapshot *common.Snapshot) (map[string][]st
 	}
 
 	for _, tableName := range tables {
-
+		columns[tableName] = make(map[string]bool)
 		dummyRows, err := db.Query("SELECT * FROM " + tableName + " LIMIT 0;")
 		if err != nil {
 			log.Panicf("Get table info failed: %v", err)
@@ -236,33 +206,12 @@ func extractTableColumnsFromSnapshot(snapshot *common.Snapshot) (map[string][]st
 		if err != nil {
 			log.Panicf("Get table columns failed: %v", err)
 		}
-		columns[tableName] = cols
+		for _, col := range cols {
+			columns[tableName][col] = true
+		}
+
 	}
 	return columns
-}
-
-func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
-
-	tables = make(map[string]bool)
-
-	log.Debug("Extracting table names from existing DB")
-	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
-	defer rows.Close()
-
-	if err != nil {
-		log.Panicf("Error reading current set of tables: %v", err)
-	}
-
-	for rows.Next() {
-		var table string
-		if err := rows.Scan(&table); err != nil {
-			log.Panicf("Error reading current set of tables: %v", err)
-		}
-		log.Debugf("Table %s found in existing db", table)
-
-		tables[table] = true
-	}
-	return tables
 }
 
 // Skip Downloading snapshot if there is already a snapshot available from previous run
@@ -275,7 +224,7 @@ func startOnLocalSnapshot(snapshot string) *common.Snapshot {
 		log.Panicf("Database inaccessible: %v", err)
 	}
 
-	knownTables = extractTablesFromDB(db)
+	knownTables = extractTableColsFromDB(db)
 
 	// allow plugins (including this one) to start immediately on existing database
 	// Note: this MUST have no tables as that is used as an indicator

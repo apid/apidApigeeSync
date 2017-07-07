@@ -46,7 +46,7 @@ var _ = Describe("Change Agent", func() {
 		BeforeEach(func() {
 			event := createTestDb("./sql/init_mock_db.sql", "test_change")
 			processSnapshot(&event)
-			knownTables = extractTablesFromDB(getDB())
+			knownTables = extractTableColsFromDB(getDB())
 		})
 
 		var initializeContext = func() {

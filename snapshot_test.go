@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 package apidApigeeSync
+
 import (
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
@@ -24,7 +25,6 @@ var _ = Describe("Change Agent", func() {
 	const testDbId = "test_snapshot"
 
 	Context("Change Agent Unit Tests", func() {
-		testHandler := handler{}
 
 		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 			initDb(sqlfile, "./mockdb_snapshot.sqlite3")
@@ -43,8 +43,8 @@ var _ = Describe("Change Agent", func() {
 
 		BeforeEach(func() {
 			event := createTestDb("./sql/init_mock_db.sql", testDbId)
-			testHandler.Handle(&event)
-			knownTables = extractTablesFromDB(getDB())
+			processSnapshot(&event)
+			knownTables = extractTableColsFromDB(getDB())
 		})
 
 		It("test extract table columns", func() {
@@ -52,7 +52,11 @@ var _ = Describe("Change Agent", func() {
 				SnapshotInfo: testDbId,
 			}
 			columns := extractTableColumnsFromSnapshot(s)
-			for table, cols := range columns {
+			for table, colMap := range columns {
+				cols := []string{}
+				for col := range colMap {
+					cols = append(cols, col)
+				}
 				log.Error("snapshot TABLE: " + table + " COLUMN: " + strings.Join(cols, "|"))
 			}
 		})
