@@ -172,33 +172,12 @@ func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]boo
 	tables = make(map[string]bool)
 
 	log.Debug("Extracting table names from snapshot")
-	if snapshot.Tables == nil {
-		//if this panic ever fires, it's a bug
-		db, err := dataService.DBVersion(snapshot.SnapshotInfo)
-		if err != nil {
-			log.Panicf("Database inaccessible: %v", err)
-		}
-		rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
-		if err != nil {
-			log.Panicf("Unable to read in known snapshot tables from sqlite file")
-		}
-		for rows.Next() {
-			var tableName string
-			rows.Scan(&tableName)
-			if err != nil {
-				log.Panic("Error scaning tableNames from _transicator_tables")
-			}
-			tables[tableName] = true
-		}
-
-	} else {
-
-		for _, table := range snapshot.Tables {
-			tables[table.Name] = true
-		}
+	//if this panic ever fires, it's a bug
+	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
+	if err != nil {
+		log.Panicf("Database inaccessible: %v", err)
 	}
-	return tables
-
+	return extractTablesFromDB(db)
 }
 
 func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
