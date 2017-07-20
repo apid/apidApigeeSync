@@ -303,7 +303,7 @@ var _ = Describe("Sync", func() {
 		 */
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
-			apidTokenManager = createSimpleTokenManager()
+			apidTokenManager = createTokenManager()
 			apidTokenManager.start()
 			apidSnapshotManager = createSnapShotManager()
 			//events.Listen(ApigeeSyncEventSelector, &handler{})

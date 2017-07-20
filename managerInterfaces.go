@@ -15,11 +15,13 @@
 package apidApigeeSync
 
 import (
+	"database/sql"
+	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	"net/url"
 )
 
-type tokenManager interface {
+type TokenManagerInterface interface {
 	getBearerToken() string
 	invalidateToken() error
 	getToken() *OauthToken
@@ -28,7 +30,7 @@ type tokenManager interface {
 	start()
 }
 
-type snapShotManager interface {
+type snapShotManagerInterface interface {
 	close() <-chan bool
 	downloadBootSnapshot()
 	storeBootSnapshot(snapshot *common.Snapshot)
@@ -37,7 +39,29 @@ type snapShotManager interface {
 	downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error
 }
 
-type changeManager interface {
+type changeManagerInterface interface {
 	close() <-chan bool
 	pollChangeWithBackoff()
+}
+
+type dbManagerInterface interface {
+	initDefaultDb() error
+	setDb(apid.DB)
+	getDb() apid.DB
+	insert(tableName string, rows []common.Row, txn *sql.Tx) bool
+	deleteRowsFromTable(tableName string, rows []common.Row, txn *sql.Tx) bool
+	update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool
+	getPkeysForTable(tableName string) ([]string, error)
+	findScopesForId(configId string) (scopes []string)
+	getDefaultDb() (apid.DB, error)
+	updateApidInstanceInfo() error
+	getApidInstanceInfo() (info apidInstanceInfo, err error)
+	getLastSequence() string
+	updateLastSequence(lastSequence string) error
+}
+
+type listenerManagerInterface interface {
+	processSnapshot(snapshot *common.Snapshot)
+	processSqliteSnapshot(db apid.DB)
+	processChangeList(changes *common.ChangeList) bool
 }

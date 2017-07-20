@@ -28,8 +28,7 @@ import (
 )
 
 var (
-	unsafeDB apid.DB
-	dbMux    sync.RWMutex
+	dbMux sync.RWMutex
 )
 
 type dataApidCluster struct {
@@ -48,8 +47,12 @@ This plugin uses 2 databases:
 2. The versioned DB is used for APID_CLUSTER & DATA_SCOPE
 (Currently, the snapshot never changes, but this is future-proof)
 */
-func initDB(db apid.DB) error {
-	_, err := db.Exec(`
+func (dbc *dbManager) initDefaultDb() error {
+	db, err := dbc.getDefaultDb()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
 	    apid_cluster_id text,
@@ -65,21 +68,30 @@ func initDB(db apid.DB) error {
 	return nil
 }
 
-func getDB() apid.DB {
-	dbMux.RLock()
-	db := unsafeDB
-	dbMux.RUnlock()
-	return db
+type dbManager struct {
+	db    apid.DB
+	dbMux sync.RWMutex
 }
 
-func setDB(db apid.DB) {
+func (dbc *dbManager) getDb() apid.DB {
+	dbc.dbMux.RLock()
+	defer dbc.dbMux.RUnlock()
+	return dbc.db
+}
+
+func (dbc *dbManager) getDefaultDb() (apid.DB, error) {
+	db, err := dataService.DB()
+	return db, err
+}
+
+func (dbc *dbManager) setDb(db apid.DB) {
 	dbMux.Lock()
-	unsafeDB = db
-	dbMux.Unlock()
+	defer dbMux.Unlock()
+	dbc.db = db
 }
 
 //TODO if len(rows) > 1000, chunk it up and exec multiple inserts in the txn
-func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
+func (dbc *dbManager) insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 
 	if len(rows) == 0 {
 		return false
@@ -133,8 +145,8 @@ func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
 	return values
 }
 
-func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
-	pkeys, err := getPkeysForTable(tableName)
+func (dbc *dbManager) deleteRowsFromTable(tableName string, rows []common.Row, txn *sql.Tx) bool {
+	pkeys, err := dbc.getPkeysForTable(tableName)
 	sort.Strings(pkeys)
 	if len(pkeys) == 0 || err != nil {
 		log.Errorf("DELETE No primary keys found for table. %s", tableName)
@@ -200,8 +212,8 @@ func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
 
 }
 
-func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
-	pkeys, err := getPkeysForTable(tableName)
+func (dbc *dbManager) update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
+	pkeys, err := dbc.getPkeysForTable(tableName)
 	if len(pkeys) == 0 || err != nil {
 		log.Errorf("UPDATE No primary keys found for table.", tableName)
 		return false
@@ -333,8 +345,8 @@ func buildInsertSql(tableName string, orderedColumns []string, rows []common.Row
 	return sql
 }
 
-func getPkeysForTable(tableName string) ([]string, error) {
-	db := getDB()
+func (dbc *dbManager) getPkeysForTable(tableName string) ([]string, error) {
+	db := dbc.getDb()
 	normalizedTableName := normalizeTableName(tableName)
 	sql := "SELECT columnName FROM _transicator_tables WHERE tableName=$1 AND primaryKey ORDER BY columnName;"
 	rows, err := db.Query(sql, normalizedTableName)
@@ -367,12 +379,12 @@ func normalizeTableName(tableName string) string {
  * For the given apidConfigId, this function will retrieve all the distinch scopes
  * associated with it. Distinct, because scope is already a collection of the tenants.
  */
-func findScopesForId(configId string) (scopes []string) {
+func (dbc *dbManager) findScopesForId(configId string) (scopes []string) {
 
 	log.Debugf("findScopesForId: %s", configId)
 
 	var scope sql.NullString
-	db := getDB()
+	db := dbc.getDb()
 
 	query := `
 		SELECT scope FROM edgex_data_scope WHERE apid_cluster_id = $1
@@ -402,9 +414,9 @@ func findScopesForId(configId string) (scopes []string) {
 /*
  * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
  */
-func getLastSequence() (lastSequence string) {
+func (dbc *dbManager) getLastSequence() (lastSequence string) {
 
-	err := getDB().QueryRow("select last_sequence from EDGEX_APID_CLUSTER LIMIT 1").Scan(&lastSequence)
+	err := dbc.getDb().QueryRow("select last_sequence from EDGEX_APID_CLUSTER LIMIT 1").Scan(&lastSequence)
 	if err != nil && err != sql.ErrNoRows {
 		log.Panicf("Failed to query EDGEX_APID_CLUSTER: %v", err)
 		return
@@ -418,11 +430,11 @@ func getLastSequence() (lastSequence string) {
  * Persist the last change Id each time a change has been successfully
  * processed by the plugin(s)
  */
-func updateLastSequence(lastSequence string) error {
+func (dbc *dbManager) updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	stmt, err := getDB().Prepare("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;")
+	stmt, err := dbc.getDb().Prepare("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;")
 	if err != nil {
 		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
 		return err
@@ -440,7 +452,7 @@ func updateLastSequence(lastSequence string) error {
 	return nil
 }
 
-func getApidInstanceInfo() (info apidInstanceInfo, err error) {
+func (dbc *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	info.InstanceName = config.GetString(configName)
 	info.ClusterID = config.GetString(configApidClusterId)
 
@@ -482,10 +494,10 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	return
 }
 
-func updateApidInstanceInfo() error {
+func (dbc *dbManager) updateApidInstanceInfo() error {
 
 	// always use default database for this
-	db, err := dataService.DB()
+	db, err := dbc.getDefaultDb()
 	if err != nil {
 		return err
 	}

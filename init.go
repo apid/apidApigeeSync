@@ -50,11 +50,12 @@ var (
 	events              apid.EventsService
 	apidInfo            apidInstanceInfo
 	newInstanceID       bool
-	apidTokenManager    tokenManager
-	apidChangeManager   changeManager
-	apidSnapshotManager snapShotManager
+	apidTokenManager    TokenManagerInterface
+	apidChangeManager   changeManagerInterface
+	apidSnapshotManager snapShotManagerInterface
 	httpclient          *http.Client
-
+	dbMan               dbManagerInterface
+	listenerMan         listenerManagerInterface
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
 	 */
@@ -102,18 +103,22 @@ func initVariables(services apid.Services) error {
 		},
 	}
 
-	// set up default database
-	db, err := dataService.DB()
-	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
-	}
-	err = initDB(db)
-	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
-	}
-	setDB(db)
+	dbMan = &dbManager{}
 
-	apidInfo, err = getApidInstanceInfo()
+	// set up default database
+	err := dbMan.initDefaultDb()
+	if err != nil {
+		return fmt.Errorf("Unable to access DB: %v", err)
+	}
+
+	db, err := dbMan.getDefaultDb()
+	if err != nil {
+		return fmt.Errorf("Unable to access DB: %v", err)
+	}
+
+	dbMan.setDb(db)
+
+	apidInfo, err = dbMan.getApidInstanceInfo()
 	if err != nil {
 		return fmt.Errorf("Unable to get apid instance info: %v", err)
 	}
@@ -127,9 +132,12 @@ func initVariables(services apid.Services) error {
 }
 
 func createManagers() {
-	apidSnapshotManager = createSnapShotManager()
-	apidChangeManager = createChangeManager()
-	apidTokenManager = createSimpleTokenManager()
+	listenerMan = &listenerManager{
+		dbm: dbMan,
+	}
+	apidSnapshotManager = createSnapShotManager(dbMan, listenerMan)
+	apidChangeManager = createChangeManager(dbMan, listenerMan, apidSnapshotManager)
+	apidTokenManager = createTokenManager(dbMan)
 }
 
 func checkForRequiredValues() error {

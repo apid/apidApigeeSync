@@ -39,10 +39,10 @@ Usage:
    man.close()
 */
 
-func createSimpleTokenManager() *simpleTokenManager {
+func createTokenManager(dbm dbManagerInterface) *tokenManager {
 	isClosedInt := int32(0)
 
-	t := &simpleTokenManager{
+	t := &tokenManager{
 		quitPollingForToken: make(chan bool, 1),
 		closed:              make(chan bool),
 		getTokenChan:        make(chan bool),
@@ -50,11 +50,12 @@ func createSimpleTokenManager() *simpleTokenManager {
 		returnTokenChan:     make(chan *OauthToken),
 		invalidateDone:      make(chan bool),
 		isClosed:            &isClosedInt,
+		dbm:                 dbm,
 	}
 	return t
 }
 
-type simpleTokenManager struct {
+type tokenManager struct {
 	token               *OauthToken
 	isClosed            *int32
 	quitPollingForToken chan bool
@@ -64,19 +65,20 @@ type simpleTokenManager struct {
 	refreshTimer        <-chan time.Time
 	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
+	dbm                 dbManagerInterface
 }
 
-func (t *simpleTokenManager) start() {
+func (t *tokenManager) start() {
 	t.retrieveNewToken()
 	t.refreshTimer = time.After(t.token.refreshIn())
 	go t.maintainToken()
 }
 
-func (t *simpleTokenManager) getBearerToken() string {
+func (t *tokenManager) getBearerToken() string {
 	return t.getToken().AccessToken
 }
 
-func (t *simpleTokenManager) maintainToken() {
+func (t *tokenManager) maintainToken() {
 	for {
 		select {
 		case <-t.closed:
@@ -97,7 +99,7 @@ func (t *simpleTokenManager) maintainToken() {
 }
 
 // will block until valid
-func (t *simpleTokenManager) invalidateToken() error {
+func (t *tokenManager) invalidateToken() error {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: invalidateToken() called on closed tokenManager")
@@ -109,7 +111,7 @@ func (t *simpleTokenManager) invalidateToken() error {
 	return nil
 }
 
-func (t *simpleTokenManager) getToken() *OauthToken {
+func (t *tokenManager) getToken() *OauthToken {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: getToken() called on closed tokenManager")
@@ -123,7 +125,7 @@ func (t *simpleTokenManager) getToken() *OauthToken {
  * blocking close() of tokenMan
  */
 
-func (t *simpleTokenManager) close() {
+func (t *tokenManager) close() {
 	//has been closed
 	if atomic.SwapInt32(t.isClosed, 1) == int32(1) {
 		log.Panic("TokenManager: close() has been called before!")
@@ -138,7 +140,7 @@ func (t *simpleTokenManager) close() {
 }
 
 // don't call externally. will block until success.
-func (t *simpleTokenManager) retrieveNewToken() {
+func (t *tokenManager) retrieveNewToken() {
 
 	log.Debug("Getting OAuth token...")
 	uriString := config.GetString(configProxyServerBaseURI)
@@ -151,7 +153,7 @@ func (t *simpleTokenManager) retrieveNewToken() {
 	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : ", err) })
 }
 
-func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
+func (t *tokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
 	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
@@ -208,7 +210,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 
 		if newInstanceID {
 			newInstanceID = false
-			err = updateApidInstanceInfo()
+			err = t.dbm.updateApidInstanceInfo()
 			if err != nil {
 				log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
 				return err

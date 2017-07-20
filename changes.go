@@ -35,15 +35,21 @@ type pollChangeManager struct {
 	// 0 for pollChangeWithBackoff() not launched, 1 for launched
 	isLaunched *int32
 	quitChan   chan bool
+	dbm        dbManagerInterface
+	lm         listenerManagerInterface
+	sm         snapShotManagerInterface
 }
 
-func createChangeManager() *pollChangeManager {
+func createChangeManager(dbm dbManagerInterface, lm listenerManagerInterface, sm snapShotManagerInterface) *pollChangeManager {
 	isClosedInt := int32(0)
 	isLaunchedInt := int32(0)
 	return &pollChangeManager{
 		isClosed:   &isClosedInt,
 		quitChan:   make(chan bool),
 		isLaunched: &isLaunchedInt,
+		dbm:        dbm,
+		lm:         lm,
+		sm:         sm,
 	}
 }
 
@@ -69,7 +75,7 @@ func (c *pollChangeManager) close() <-chan bool {
 		go func() {
 			c.quitChan <- true
 			apidTokenManager.close()
-			<-apidSnapshotManager.close()
+			<-c.sm.close()
 			log.Debug("change manager closed")
 			finishChan <- false
 		}()
@@ -80,7 +86,7 @@ func (c *pollChangeManager) close() <-chan bool {
 	go func() {
 		c.quitChan <- true
 		apidTokenManager.close()
-		<-apidSnapshotManager.close()
+		<-c.sm.close()
 		log.Debug("change manager closed")
 		finishChan <- true
 	}()
@@ -120,7 +126,7 @@ func (c *pollChangeManager) pollChangeAgent(dummyQuit chan bool) error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = getLastSequence()
+	lastSequence = c.dbm.getLastSequence()
 
 	for {
 		select {
@@ -150,7 +156,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debug("polling...")
 
 	/* Find the scopes associated with the config id */
-	scopes := findScopesForId(apidInfo.ClusterID)
+	scopes := c.dbm.findScopesForId(apidInfo.ClusterID)
 	v := url.Values{}
 
 	/* Sequence added to the query if available */
@@ -252,7 +258,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	/* If valid data present, Emit to plugins */
 	if len(resp.Changes) > 0 {
-		processChangeList(&resp)
+		c.lm.processChangeList(&resp)
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
@@ -262,13 +268,17 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		log.Debugf("No Changes detected for Scopes: %s", scopes)
 	}
 
-	updateSequence(resp.LastSequence)
+	lastSequence = resp.LastSequence
+	err = c.dbm.updateLastSequence(resp.LastSequence)
+	if err != nil {
+		log.Panic("Unable to update Sequence in DB")
+	}
 
 	/*
 	 * Check to see if there was any change in scope. If found, handle it
 	 * by getting a new snapshot
 	 */
-	newScopes := findScopesForId(apidInfo.ClusterID)
+	newScopes := c.dbm.findScopesForId(apidInfo.ClusterID)
 	cs := scopeChanged(newScopes, scopes)
 	if cs != nil {
 		return cs
@@ -287,9 +297,9 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 		log.Debugf("handleChangeServerError: changeManager has been closed")
 		return
 	}
-	if c, ok := err.(changeServerError); ok {
-		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
-		apidSnapshotManager.downloadDataSnapshot()
+	if ce, ok := err.(changeServerError); ok {
+		log.Debugf("%s. Fetch a new snapshot to sync...", ce.Code)
+		c.sm.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}
@@ -330,15 +340,6 @@ func getChangeStatus(lastSeq string, currSeq string) int {
 		log.Panic("Unable to parse current sequence string")
 	}
 	return seqCurr.Compare(seqPrev)
-}
-
-func updateSequence(seq string) {
-	lastSequence = seq
-	err := updateLastSequence(seq)
-	if err != nil {
-		log.Panic("Unable to update Sequence in DB")
-	}
-
 }
 
 /*
