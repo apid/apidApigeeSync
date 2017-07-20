@@ -371,10 +371,18 @@ func findScopesForId(configId string) (scopes []string) {
 
 	log.Debugf("findScopesForId: %s", configId)
 
-	var scope string
+	var scope sql.NullString
 	db := getDB()
 
-	rows, err := db.Query("select DISTINCT scope from EDGEX_DATA_SCOPE where apid_cluster_id = $1", configId)
+	query := `
+		SELECT scope FROM edgex_data_scope WHERE apid_cluster_id = $1
+		UNION
+		SELECT org_scope FROM edgex_data_scope WHERE apid_cluster_id = $2
+		UNION
+		SELECT env_scope FROM edgex_data_scope WHERE apid_cluster_id = $3
+	`
+
+	rows, err := db.Query(query, configId, configId, configId)
 	if err != nil {
 		log.Errorf("Failed to query EDGEX_DATA_SCOPE: %v", err)
 		return
@@ -382,7 +390,9 @@ func findScopesForId(configId string) (scopes []string) {
 	defer rows.Close()
 	for rows.Next() {
 		rows.Scan(&scope)
-		scopes = append(scopes, scope)
+		if scope.Valid {
+			scopes = append(scopes, scope.String)
+		}
 	}
 
 	log.Debugf("scopes: %v", scopes)
