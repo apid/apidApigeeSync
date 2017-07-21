@@ -389,8 +389,12 @@ func findScopesForId(configId string) (scopes []string) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		rows.Scan(&scope)
-		if scope.Valid {
+		err = rows.Scan(&scope)
+		if err != nil {
+			log.Errorf("Failed to get scopes from EDGEX_DATA_SCOPE: %v", err)
+			return
+		}
+		if scope.Valid && scope.String != "" {
 			scopes = append(scopes, scope.String)
 		}
 	}
