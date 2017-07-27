@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
@@ -8,6 +22,9 @@ import (
 	"sync"
 
 	"github.com/30x/apid-core"
+	"github.com/apigee-labs/transicator/common"
+	"sort"
+	"strings"
 )
 
 var (
@@ -35,32 +52,9 @@ func initDB(db apid.DB) error {
 	_, err := db.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
+	    apid_cluster_id text,
 	    last_snapshot_info text,
 	    PRIMARY KEY (instance_id)
-	);
-	CREATE TABLE IF NOT EXISTS APID_CLUSTER (
-	    id text,
-	    name text,
-	    description text,
-	    umbrella_org_app_name text,
-	    created text,
-	    created_by text,
-	    updated text,
-	    updated_by text,
-	    last_sequence text,
-	    PRIMARY KEY (id)
-	);
-	CREATE TABLE IF NOT EXISTS DATA_SCOPE (
-	    id text,
-	    apid_cluster_id text,
-	    scope text,
-	    org text,
-	    env text,
-	    created text,
-	    created_by text,
-	    updated text,
-	    updated_by text,
-	    PRIMARY KEY (id, apid_cluster_id)
 	);
 	`)
 	if err != nil {
@@ -84,86 +78,289 @@ func setDB(db apid.DB) {
 	dbMux.Unlock()
 }
 
-func insertApidCluster(dac dataApidCluster, txn *sql.Tx) error {
+//TODO if len(rows) > 1000, chunk it up and exec multiple inserts in the txn
+func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 
-	log.Debugf("inserting into APID_CLUSTER: %v", dac)
-
-	//replace to accomodate same snapshot txid
-	stmt, err := txn.Prepare(`
-	REPLACE INTO APID_CLUSTER
-		(id, description, name, umbrella_org_app_name,
-		created, created_by, updated, updated_by,
-		last_sequence)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-	`)
-	if err != nil {
-		log.Errorf("prepare insert into APID_CLUSTER transaction Failed: %v", err)
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
-		dac.ID, dac.Description, dac.Name, dac.OrgAppName,
-		dac.Created, dac.CreatedBy, dac.Updated, dac.UpdatedBy,
-		"")
-
-	if err != nil {
-		log.Errorf("insert APID_CLUSTER failed: %v", err)
+	if len(rows) == 0 {
+		return false
 	}
 
-	return err
+	var orderedColumns []string
+	for column := range rows[0] {
+		orderedColumns = append(orderedColumns, column)
+	}
+	sort.Strings(orderedColumns)
+
+	sql := buildInsertSql(tableName, orderedColumns, rows)
+
+	prep, err := txn.Prepare(sql)
+	if err != nil {
+		log.Errorf("INSERT Fail to prepare statement [%s] error=[%v]", sql, err)
+		return false
+	}
+	defer prep.Close()
+
+	var values []interface{}
+
+	for _, row := range rows {
+		for _, columnName := range orderedColumns {
+			//use Value so that stmt exec does not complain about common.ColumnVal being a struct
+			values = append(values, row[columnName].Value)
+		}
+	}
+
+	//create prepared statement from existing template statement
+	_, err = prep.Exec(values...)
+
+	if err != nil {
+		log.Errorf("INSERT Fail [%s] values=%v error=[%v]", sql, values, err)
+		return false
+	}
+	log.Debugf("INSERT Success [%s] values=%v", sql, values)
+
+	return true
 }
 
-func insertDataScope(ds dataDataScope, txn *sql.Tx) error {
-
-	log.Debugf("insert DATA_SCOPE: %v", ds)
-
-	//replace to accomodate same snapshot txid
-	stmt, err := txn.Prepare(`
-	REPLACE INTO DATA_SCOPE
-		(id, apid_cluster_id, scope, org,
-		env, created, created_by, updated,
-		updated_by)
-	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-	`)
-	if err != nil {
-		log.Errorf("insert DATA_SCOPE failed: %v", err)
-		return err
+func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
+	var values = make([]interface{}, len(pkeys))
+	for i, pkey := range pkeys {
+		if row[pkey] == nil {
+			values[i] = nil
+		} else {
+			values[i] = row[pkey].Value
+		}
 	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
-		ds.ID, ds.ClusterID, ds.Scope, ds.Org,
-		ds.Env, ds.Created, ds.CreatedBy, ds.Updated,
-		ds.UpdatedBy)
-
-	if err != nil {
-		log.Errorf("insert DATA_SCOPE failed: %v", err)
-		return err
-	}
-
-	return nil
+	return values
 }
 
-func deleteDataScope(ds dataDataScope, txn *sql.Tx) error {
-
-	log.Debugf("delete DATA_SCOPE: %v", ds)
-
-	stmt, err := txn.Prepare("DELETE FROM DATA_SCOPE WHERE id=$1 and apid_cluster_id=$2")
-	if err != nil {
-		log.Errorf("update DATA_SCOPE failed: %v", err)
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(ds.ID, ds.ClusterID)
-
-	if err != nil {
-		log.Errorf("delete DATA_SCOPE failed: %v", err)
-		return err
+func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
+	pkeys, err := getPkeysForTable(tableName)
+	sort.Strings(pkeys)
+	if len(pkeys) == 0 || err != nil {
+		log.Errorf("DELETE No primary keys found for table. %s", tableName)
+		return false
 	}
 
-	return nil
+	if len(rows) == 0 {
+		log.Errorf("No rows found for table.", tableName)
+		return false
+	}
+
+	sql := buildDeleteSql(tableName, rows[0], pkeys)
+	prep, err := txn.Prepare(sql)
+	if err != nil {
+		log.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
+		return false
+	}
+	defer prep.Close()
+	for _, row := range rows {
+		values := getValueListFromKeys(row, pkeys)
+		// delete prepared statement from existing template statement
+		res, err := txn.Stmt(prep).Exec(values...)
+		if err != nil {
+			log.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+		affected, err := res.RowsAffected()
+		if err == nil && affected != 0 {
+			log.Debugf("DELETE Success [%s] values=%v", sql, values)
+		} else if err == nil && affected == 0 {
+			log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
+			return false
+		} else {
+			log.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+
+	}
+	return true
+
+}
+
+// Syntax "DELETE FROM Obj WHERE key1=$1 AND key2=$2 ... ;"
+func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
+
+	var wherePlaceholders []string
+	i := 1
+	if row == nil {
+		return ""
+	}
+	normalizedTableName := normalizeTableName(tableName)
+
+	for _, pk := range pkeys {
+		wherePlaceholders = append(wherePlaceholders, fmt.Sprintf("%s=$%v", pk, i))
+		i++
+	}
+
+	sql := "DELETE FROM " + normalizedTableName
+	sql += " WHERE "
+	sql += strings.Join(wherePlaceholders, " AND ")
+
+	return sql
+
+}
+
+func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
+	pkeys, err := getPkeysForTable(tableName)
+	if len(pkeys) == 0 || err != nil {
+		log.Errorf("UPDATE No primary keys found for table.", tableName)
+		return false
+	}
+	if len(oldRows) == 0 || len(newRows) == 0 {
+		return false
+	}
+
+	var orderedColumns []string
+
+	//extract sorted orderedColumns
+	for columnName := range newRows[0] {
+		orderedColumns = append(orderedColumns, columnName)
+	}
+	sort.Strings(orderedColumns)
+
+	//build update statement, use arbitrary row as template
+	sql := buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
+	prep, err := txn.Prepare(sql)
+	if err != nil {
+		log.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
+		return false
+	}
+	defer prep.Close()
+
+	for i, row := range newRows {
+		var values []interface{}
+
+		for _, columnName := range orderedColumns {
+			//use Value so that stmt exec does not complain about common.ColumnVal being a struct
+			//TODO will need to convert the Value (which is a string) to the appropriate field, using type for mapping
+			//TODO right now this will only work when the column type is a string
+			if row[columnName] != nil {
+				values = append(values, row[columnName].Value)
+			} else {
+				values = append(values, nil)
+			}
+		}
+
+		//add values for where clause, use PKs of old row
+		for _, pk := range pkeys {
+			if oldRows[i][pk] != nil {
+				values = append(values, oldRows[i][pk].Value)
+			} else {
+				values = append(values, nil)
+			}
+
+		}
+
+		//create prepared statement from existing template statement
+		res, err := txn.Stmt(prep).Exec(values...)
+
+		if err != nil {
+			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+		numRowsAffected, err := res.RowsAffected()
+		if err != nil {
+			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return false
+		}
+		//delete this once we figure out why tests are failing/not updating
+		log.Debugf("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
+		log.Debugf("UPDATE Success [%s] values=%v", sql, values)
+
+	}
+
+	return true
+
+}
+
+func buildUpdateSql(tableName string, orderedColumns []string, row common.Row, pkeys []string) string {
+	if row == nil {
+		return ""
+	}
+	normalizedTableName := normalizeTableName(tableName)
+
+	var setPlaceholders, wherePlaceholders []string
+	i := 1
+
+	for _, columnName := range orderedColumns {
+		setPlaceholders = append(setPlaceholders, fmt.Sprintf("%s=$%v", columnName, i))
+		i++
+	}
+
+	for _, pk := range pkeys {
+		wherePlaceholders = append(wherePlaceholders, fmt.Sprintf("%s=$%v", pk, i))
+		i++
+	}
+
+	sql := "UPDATE " + normalizedTableName + " SET "
+	sql += strings.Join(setPlaceholders, ", ")
+	sql += " WHERE "
+	sql += strings.Join(wherePlaceholders, " AND ")
+
+	return sql
+}
+
+//precondition: rows.length > 1000, max number of entities for sqlite
+func buildInsertSql(tableName string, orderedColumns []string, rows []common.Row) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	normalizedTableName := normalizeTableName(tableName)
+	var values string = ""
+
+	var i, j int
+	k := 1
+	for i = 0; i < len(rows)-1; i++ {
+		values += "("
+		for j = 0; j < len(orderedColumns)-1; j++ {
+			values += fmt.Sprintf("$%d,", k)
+			k++
+		}
+		values += fmt.Sprintf("$%d),", k)
+		k++
+	}
+	values += "("
+	for j = 0; j < len(orderedColumns)-1; j++ {
+		values += fmt.Sprintf("$%d,", k)
+		k++
+	}
+	values += fmt.Sprintf("$%d)", k)
+
+	sql := "INSERT INTO " + normalizedTableName
+	sql += "(" + strings.Join(orderedColumns, ",") + ") "
+	sql += "VALUES " + values
+
+	return sql
+}
+
+func getPkeysForTable(tableName string) ([]string, error) {
+	db := getDB()
+	normalizedTableName := normalizeTableName(tableName)
+	sql := "SELECT columnName FROM _transicator_tables WHERE tableName=$1 AND primaryKey ORDER BY columnName;"
+	rows, err := db.Query(sql, normalizedTableName)
+	if err != nil {
+		log.Errorf("Failed [%s] values=[s%] Error: %v", sql, normalizedTableName, err)
+		return nil, err
+	}
+	var columnNames []string
+	defer rows.Close()
+	for rows.Next() {
+		var value string
+		err := rows.Scan(&value)
+		if err != nil {
+			log.Fatal(err)
+		}
+		columnNames = append(columnNames, value)
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return columnNames, nil
+}
+
+func normalizeTableName(tableName string) string {
+	return strings.Replace(tableName, ".", "_", 1)
 }
 
 /*
@@ -177,9 +374,9 @@ func findScopesForId(configId string) (scopes []string) {
 	var scope string
 	db := getDB()
 
-	rows, err := db.Query("select DISTINCT scope from DATA_SCOPE where apid_cluster_id = $1", configId)
+	rows, err := db.Query("select DISTINCT scope from EDGEX_DATA_SCOPE where apid_cluster_id = $1", configId)
 	if err != nil {
-		log.Errorf("Failed to query DATA_SCOPE: %v", err)
+		log.Errorf("Failed to query EDGEX_DATA_SCOPE: %v", err)
 		return
 	}
 	defer rows.Close()
@@ -197,9 +394,9 @@ func findScopesForId(configId string) (scopes []string) {
  */
 func getLastSequence() (lastSequence string) {
 
-	err := getDB().QueryRow("select last_sequence from APID_CLUSTER LIMIT 1").Scan(&lastSequence)
+	err := getDB().QueryRow("select last_sequence from EDGEX_APID_CLUSTER LIMIT 1").Scan(&lastSequence)
 	if err != nil && err != sql.ErrNoRows {
-		log.Panicf("Failed to query APID_CLUSTER: %v", err)
+		log.Panicf("Failed to query EDGEX_APID_CLUSTER: %v", err)
 		return
 	}
 
@@ -215,27 +412,29 @@ func updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	stmt, err := getDB().Prepare("UPDATE APID_CLUSTER SET last_sequence=$1;")
+	stmt, err := getDB().Prepare("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;")
 	if err != nil {
-		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
 		return err
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(lastSequence)
 	if err != nil {
-		log.Errorf("UPDATE APID_CLUSTER Failed: %v", err)
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
 		return err
 	}
 
-	log.Infof("UPDATE APID_CLUSTER Success: %s", lastSequence)
-
+	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
+	log.Infof("Replication lastSequence=%s", lastSequence)
 	return nil
 }
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	info.InstanceName = config.GetString(configName)
 	info.ClusterID = config.GetString(configApidClusterId)
+
+	var savedClusterId string
 
 	// always use default database for this
 	var db apid.DB
@@ -244,8 +443,8 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		return
 	}
 
-	err = db.QueryRow("SELECT instance_id, last_snapshot_info FROM APID LIMIT 1").
-		Scan(&info.InstanceID, &info.LastSnapshot)
+	err = db.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
+		Scan(&info.InstanceID, &savedClusterId, &info.LastSnapshot)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
@@ -254,12 +453,21 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			// first start - no row, generate a UUID and store it
 			err = nil
 			newInstanceID = true
-			info.InstanceID = generateUUID()
+			info.InstanceID = GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
-			db.Exec("INSERT INTO APID (instance_id, last_snapshot_info) VALUES (?,?)",
-				info.InstanceID, "")
+			db.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+				info.InstanceID, info.ClusterID, "")
 		}
+	} else if savedClusterId != info.ClusterID {
+		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
+		err = nil
+		newInstanceID = true
+		info.InstanceID = GenerateUUID()
+
+		db.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+			info.InstanceID, info.ClusterID, "")
+		info.LastSnapshot = ""
 	}
 	return
 }
@@ -273,10 +481,10 @@ func updateApidInstanceInfo() error {
 	}
 
 	rows, err := db.Exec(`
-		INSERT OR REPLACE
-		INTO APID (instance_id, last_snapshot_info)
-		VALUES (?, ?)`,
-		apidInfo.InstanceID, apidInfo.LastSnapshot)
+		REPLACE
+		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
+		VALUES (?,?,?)`,
+		apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
 	if err != nil {
 		return err
 	}
@@ -293,7 +501,7 @@ func updateApidInstanceInfo() error {
  */
 
 //TODO: Change to https://tools.ietf.org/html/rfc4122 based implementation such as https://github.com/google/uuid
-func generateUUID() string {
+func GenerateUUID() string {
 
 	buff := make([]byte, 16)
 	numRead, err := rand.Read(buff)

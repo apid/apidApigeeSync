@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
@@ -24,6 +38,7 @@ var (
 )
 
 const dummyConfigValue string = "placeholder"
+const expectedClusterId = "bootstrap"
 
 var _ = BeforeSuite(func() {
 	wipeDBAferTest = true
@@ -42,11 +57,11 @@ var _ = BeforeEach(func(done Done) {
 	config.Set(configProxyServerBaseURI, dummyConfigValue)
 	config.Set(configSnapServerBaseURI, dummyConfigValue)
 	config.Set(configChangeServerBaseURI, dummyConfigValue)
-	config.Set(configSnapshotProtocol, "json")
+	config.Set(configSnapshotProtocol, "sqlite")
 	config.Set(configPollInterval, 10*time.Millisecond)
 
 	config.Set(configName, "testhost")
-	config.Set(configApidClusterId, "bootstrap")
+	config.Set(configApidClusterId, expectedClusterId)
 	config.Set(configConsumerKey, "XXXXXXX")
 	config.Set(configConsumerSecret, "YYYYYYY")
 
@@ -54,6 +69,7 @@ var _ = BeforeEach(func(done Done) {
 	log = apid.Log()
 
 	_initPlugin(apid.AllServices())
+	createManagers()
 	close(done)
 }, 3)
 
@@ -63,11 +79,6 @@ var _ = AfterEach(func() {
 	lastSequence = ""
 
 	if wipeDBAferTest {
-		_, err := getDB().Exec("DELETE FROM APID_CLUSTER")
-		Expect(err).NotTo(HaveOccurred())
-		_, err = getDB().Exec("DELETE FROM DATA_SCOPE")
-		Expect(err).NotTo(HaveOccurred())
-
 		db, err := dataService.DB()
 		Expect(err).NotTo(HaveOccurred())
 		_, err = db.Exec("DELETE FROM APID")

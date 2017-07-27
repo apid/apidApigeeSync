@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
@@ -5,13 +19,16 @@ import (
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"net/http"
 	"net/http/httptest"
-	//"time"
 )
 
 var _ = Describe("Sync", func() {
 
 	Context("Sync", func() {
+
+		const expectedDataScopeId1 = "dataScope1"
+		const expectedDataScopeId2 = "dataScope2"
 
 		var initializeContext = func() {
 			testRouter = apid.API().Router()
@@ -53,57 +70,62 @@ var _ = Describe("Sync", func() {
 			var lastSnapshot *common.Snapshot
 
 			expectedSnapshotTables := common.ChangeList{
-				Changes: []common.Change{common.Change{Table: "kms.company"},
-					common.Change{Table: "edgex.apid_cluster"},
-					common.Change{Table: "edgex.data_scope"}},
+				Changes: []common.Change{common.Change{Table: "kms_company"},
+					common.Change{Table: "edgex_apid_cluster"},
+					common.Change{Table: "edgex_data_scope"},
+					common.Change{Table: "kms_app_credential"},
+					common.Change{Table: "kms_app_credential_apiproduct_mapper"},
+					common.Change{Table: "kms_developer"},
+					common.Change{Table: "kms_company_developer"},
+					common.Change{Table: "kms_api_product"},
+					common.Change{Table: "kms_app"}},
 			}
 
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 				if s, ok := event.(*common.Snapshot); ok {
 
+					Expect(16).To(Equal(len(knownTables)))
 					Expect(changesRequireDDLSync(expectedSnapshotTables)).To(BeFalse())
-
-					//add apid_cluster and data_scope since those would present if this were a real scenario
-					knownTables["kms.app_credential"] = true
-					knownTables["kms.app_credential_apiproduct_mapper"] = true
-					knownTables["kms.developer"] = true
-					knownTables["kms.company_developer"] = true
-					knownTables["kms.api_product"] = true
-					knownTables["kms.app"] = true
 
 					lastSnapshot = s
 
-					for _, t := range s.Tables {
-						switch t.Name {
+					db, _ := dataService.DBVersion(s.SnapshotInfo)
+					var rowCount int
+					var id string
 
-						case "edgex.apid_cluster":
-							Expect(t.Rows).To(HaveLen(1))
-							r := t.Rows[0]
-							var id string
-							r.Get("id", &id)
-							Expect(id).To(Equal("bootstrap"))
+					err := db.Ping()
+					Expect(err).NotTo(HaveOccurred())
+					numApidClusters, err := db.Query("select distinct count(*) from edgex_apid_cluster;")
+					if err != nil {
+						Fail("Failed to get correct DB")
+					}
+					Expect(true).To(Equal(numApidClusters.Next()))
+					numApidClusters.Scan(&rowCount)
+					Expect(1).To(Equal(rowCount))
+					apidClusters, _ := db.Query("select id from edgex_apid_cluster;")
+					apidClusters.Next()
+					apidClusters.Scan(&id)
+					Expect(id).To(Equal(expectedClusterId))
 
-						case "edgex.data_scope":
-							Expect(t.Rows).To(HaveLen(2))
-							r := t.Rows[1] // get the non-cluster row
+					numDataScopes, _ := db.Query("select distinct count(*) from edgex_data_scope;")
+					Expect(true).To(Equal(numDataScopes.Next()))
+					numDataScopes.Scan(&rowCount)
+					Expect(2).To(Equal(rowCount))
+					dataScopes, _ := db.Query("select id from edgex_data_scope;")
+					dataScopes.Next()
+					dataScopes.Scan(&id)
+					dataScopes.Next()
 
-							var id, clusterID, env, org, scope string
-							r.Get("id", &id)
-							r.Get("apid_cluster_id", &clusterID)
-							r.Get("env", &env)
-							r.Get("org", &org)
-							r.Get("scope", &scope)
-
-							Expect(id).To(Equal("ert452"))
-							Expect(scope).To(Equal("ert452"))
-							Expect(clusterID).To(Equal("bootstrap"))
-							Expect(env).To(Equal("prod"))
-							Expect(org).To(Equal("att"))
-						}
+					if id == expectedDataScopeId1 {
+						dataScopes.Scan(&id)
+						Expect(id).To(Equal(expectedDataScopeId2))
+					} else {
+						dataScopes.Scan(&id)
+						Expect(id).To(Equal(expectedDataScopeId1))
 					}
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
-					closeDone = changeManager.close()
+					closeDone = apidChangeManager.close()
 					// ensure that snapshot switched DB versions
 					Expect(apidInfo.LastSnapshot).To(Equal(lastSnapshot.SnapshotInfo))
 					expectedDB, err := dataService.DBVersion(lastSnapshot.SnapshotInfo)
@@ -122,12 +144,12 @@ var _ = Describe("Sync", func() {
 						Expect(tenantID).To(Equal("ert452"))
 					}
 
-					Expect(tables).To(ContainElement("kms.app_credential"))
-					Expect(tables).To(ContainElement("kms.app_credential_apiproduct_mapper"))
-					Expect(tables).To(ContainElement("kms.developer"))
-					Expect(tables).To(ContainElement("kms.company_developer"))
-					Expect(tables).To(ContainElement("kms.api_product"))
-					Expect(tables).To(ContainElement("kms.app"))
+					Expect(tables).To(ContainElement("kms_app_credential"))
+					Expect(tables).To(ContainElement("kms_app_credential_apiproduct_mapper"))
+					Expect(tables).To(ContainElement("kms_developer"))
+					Expect(tables).To(ContainElement("kms_company_developer"))
+					Expect(tables).To(ContainElement("kms_api_product"))
+					Expect(tables).To(ContainElement("kms_app"))
 
 					go func() {
 						// when close done, all handlers for the first changeList have been executed
@@ -135,10 +157,8 @@ var _ = Describe("Sync", func() {
 						defer GinkgoRecover()
 						// allow other handler to execute to insert last_sequence
 						var seq string
-						//for seq = ""; seq == ""; {
-						//	time.Sleep(50 * time.Millisecond)
-						err := getDB().
-							QueryRow("SELECT last_sequence FROM APID_CLUSTER LIMIT 1;").
+						err = getDB().
+							QueryRow("SELECT last_sequence FROM EDGEX_APID_CLUSTER LIMIT 1;").
 							Scan(&seq)
 						Expect(err).NotTo(HaveOccurred())
 						//}
@@ -163,9 +183,9 @@ var _ = Describe("Sync", func() {
 
 			initializeContext()
 			expectedTables := common.ChangeList{
-				Changes: []common.Change{common.Change{Table: "kms.company"},
-					common.Change{Table: "edgex.apid_cluster"},
-					common.Change{Table: "edgex.data_scope"}},
+				Changes: []common.Change{common.Change{Table: "kms_company"},
+					common.Change{Table: "edgex_apid_cluster"},
+					common.Change{Table: "edgex_data_scope"}},
 			}
 			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
 
@@ -174,7 +194,7 @@ var _ = Describe("Sync", func() {
 				if s, ok := event.(*common.Snapshot); ok {
 					// In this test, the changeManager.pollChangeWithBackoff() has not been launched when changeManager closed
 					// This is because the changeManager.pollChangeWithBackoff() in bootstrap() happened after this handler
-					closeDone = changeManager.close()
+					closeDone = apidChangeManager.close()
 					go func() {
 						// when close done, all handlers for the first snapshot have been executed
 						<-closeDone
@@ -197,6 +217,21 @@ var _ = Describe("Sync", func() {
 			postInitPlugins(pie)
 
 		}, 3)
+
+		It("should detect apid_cluster_id change in config yaml", func() {
+			Expect(apidInfo).ToNot(BeNil())
+			Expect(apidInfo.ClusterID).To(Equal("bootstrap"))
+			Expect(apidInfo.InstanceID).ToNot(BeEmpty())
+			previousInstanceId := apidInfo.InstanceID
+
+			config.Set(configApidClusterId, "new value")
+			apidInfo, err := getApidInstanceInfo()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apidInfo.LastSnapshot).To(BeEmpty())
+			Expect(apidInfo.InstanceID).ToNot(BeEmpty())
+			Expect(apidInfo.InstanceID).ToNot(Equal(previousInstanceId))
+			Expect(apidInfo.ClusterID).To(Equal("new value"))
+		})
 
 		It("should correctly identify non-proper subsets with respect to maps", func() {
 
@@ -231,7 +266,7 @@ var _ = Describe("Sync", func() {
 			)).To(BeFalse())
 
 			//test b nil
-			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeTrue())
+			Expect(changesHaveNewTables(map[string]bool{"a": true, "b": true}, nil)).To(BeFalse())
 
 			//test a nil
 			Expect(changesHaveNewTables(nil,
@@ -268,19 +303,55 @@ var _ = Describe("Sync", func() {
 		 */
 		It("Should be able to handle duplicate snapshot during bootstrap", func() {
 			initializeContext()
-
-			tokenManager = createTokenManager()
-			snapManager = createSnapShotManager()
-			events.Listen(ApigeeSyncEventSelector, &handler{})
+			apidTokenManager = createSimpleTokenManager()
+			apidTokenManager.start()
+			apidSnapshotManager = createSnapShotManager()
+			//events.Listen(ApigeeSyncEventSelector, &handler{})
 
 			scopes := []string{apidInfo.ClusterID}
 			snapshot := &common.Snapshot{}
-			snapManager.downloadSnapshot(scopes, snapshot)
-			snapManager.storeBootSnapshot(snapshot)
-			snapManager.storeDataSnapshot(snapshot)
+			apidSnapshotManager.downloadSnapshot(true, scopes, snapshot)
+			apidSnapshotManager.storeBootSnapshot(snapshot)
+			apidSnapshotManager.storeDataSnapshot(snapshot)
 			restoreContext()
-			<-snapManager.close()
-			tokenManager.close()
+			<-apidSnapshotManager.close()
+			apidTokenManager.close()
 		}, 3)
+
+		It("Reuse http.Client connection for multiple concurrent requests", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			}))
+			tr := &http.Transport{
+				MaxIdleConnsPerHost: maxIdleConnsPerHost,
+			}
+			var rspcnt int = 0
+			ch := make(chan *http.Response)
+			client := &http.Client{Transport: tr}
+			for i := 0; i < 2*maxIdleConnsPerHost; i++ {
+				go func(client *http.Client) {
+					req, err := http.NewRequest("GET", server.URL, nil)
+					resp, err := client.Do(req)
+					if err != nil {
+						Fail("Unable to process Client request")
+					}
+					ch <- resp
+					resp.Body.Close()
+
+				}(client)
+			}
+			for {
+				select {
+				case resp := <-ch:
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					if rspcnt >= 2*maxIdleConnsPerHost-1 {
+						return
+					}
+					rspcnt++
+				default:
+				}
+			}
+
+		}, 3)
+
 	})
 })

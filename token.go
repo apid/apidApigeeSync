@@ -1,8 +1,23 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -24,42 +39,44 @@ Usage:
    man.close()
 */
 
-func createTokenManager() *tokenMan {
+func createSimpleTokenManager() *simpleTokenManager {
 	isClosedInt := int32(0)
 
-	t := &tokenMan{
+	t := &simpleTokenManager{
 		quitPollingForToken: make(chan bool, 1),
 		closed:              make(chan bool),
 		getTokenChan:        make(chan bool),
 		invalidateTokenChan: make(chan bool),
-		returnTokenChan:     make(chan *oauthToken),
+		returnTokenChan:     make(chan *OauthToken),
 		invalidateDone:      make(chan bool),
 		isClosed:            &isClosedInt,
 	}
-
-	t.retrieveNewToken()
-	t.refreshTimer = time.After(t.token.refreshIn())
-	go t.maintainToken()
 	return t
 }
 
-type tokenMan struct {
-	token               *oauthToken
+type simpleTokenManager struct {
+	token               *OauthToken
 	isClosed            *int32
 	quitPollingForToken chan bool
 	closed              chan bool
 	getTokenChan        chan bool
 	invalidateTokenChan chan bool
 	refreshTimer        <-chan time.Time
-	returnTokenChan     chan *oauthToken
+	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
 }
 
-func (t *tokenMan) getBearerToken() string {
+func (t *simpleTokenManager) start() {
+	t.retrieveNewToken()
+	t.refreshTimer = time.After(t.token.refreshIn())
+	go t.maintainToken()
+}
+
+func (t *simpleTokenManager) getBearerToken() string {
 	return t.getToken().AccessToken
 }
 
-func (t *tokenMan) maintainToken() {
+func (t *simpleTokenManager) maintainToken() {
 	for {
 		select {
 		case <-t.closed:
@@ -80,18 +97,19 @@ func (t *tokenMan) maintainToken() {
 }
 
 // will block until valid
-func (t *tokenMan) invalidateToken() {
+func (t *simpleTokenManager) invalidateToken() error {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: invalidateToken() called on closed tokenManager")
-		return
+		return errors.New("invalidateToken() called on closed tokenManager")
 	}
 	log.Debug("invalidating token")
 	t.invalidateTokenChan <- true
 	<-t.invalidateDone
+	return nil
 }
 
-func (t *tokenMan) getToken() *oauthToken {
+func (t *simpleTokenManager) getToken() *OauthToken {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: getToken() called on closed tokenManager")
@@ -105,7 +123,7 @@ func (t *tokenMan) getToken() *oauthToken {
  * blocking close() of tokenMan
  */
 
-func (t *tokenMan) close() {
+func (t *simpleTokenManager) close() {
 	//has been closed
 	if atomic.SwapInt32(t.isClosed, 1) == int32(1) {
 		log.Panic("TokenManager: close() has been called before!")
@@ -120,7 +138,7 @@ func (t *tokenMan) close() {
 }
 
 // don't call externally. will block until success.
-func (t *tokenMan) retrieveNewToken() {
+func (t *simpleTokenManager) retrieveNewToken() {
 
 	log.Debug("Getting OAuth token...")
 	uriString := config.GetString(configProxyServerBaseURI)
@@ -133,7 +151,7 @@ func (t *tokenMan) retrieveNewToken() {
 	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : ", err) })
 }
 
-func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
+func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
 	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
@@ -172,7 +190,7 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 			return expected200Error{}
 		}
 
-		var token oauthToken
+		var token OauthToken
 		err = json.Unmarshal(body, &token)
 		if err != nil {
 			log.Errorf("unable to unmarshal JSON response '%s': %v", string(body), err)
@@ -180,7 +198,7 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 		}
 
 		if token.ExpiresIn > 0 {
-			token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Millisecond)
+			token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 		} else {
 			// no expiration, arbitrarily expire about a year from now
 			token.ExpiresAt = time.Now().Add(365 * 24 * time.Hour)
@@ -204,39 +222,40 @@ func (t *tokenMan) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) erro
 	}
 }
 
-type oauthToken struct {
-	IssuedAt       int64    `json:"issuedAt"`
-	AppName        string   `json:"applicationName"`
-	Scope          string   `json:"scope"`
-	Status         string   `json:"status"`
-	ApiProdList    []string `json:"apiProductList"`
-	ExpiresIn      int64    `json:"expiresIn"`
-	DeveloperEmail string   `json:"developerEmail"`
-	TokenType      string   `json:"tokenType"`
-	ClientId       string   `json:"clientId"`
-	AccessToken    string   `json:"accessToken"`
-	RefreshExpIn   int64    `json:"refreshTokenExpiresIn"`
-	RefreshCount   int64    `json:"refreshCount"`
+type OauthToken struct {
+	IssuedAt    int64    `json:"issuedAt"`
+	AppName     string   `json:"applicationName"`
+	Scope       string   `json:"scope"`
+	Status      string   `json:"status"`
+	ApiProdList []string `json:"apiProductList"`
+	// in seconds
+	ExpiresIn      int64  `json:"expiresIn"`
+	DeveloperEmail string `json:"developerEmail"`
+	TokenType      string `json:"tokenType"`
+	ClientId       string `json:"clientId"`
+	AccessToken    string `json:"accessToken"`
+	RefreshExpIn   int64  `json:"refreshTokenExpiresIn"`
+	RefreshCount   int64  `json:"refreshCount"`
 	ExpiresAt      time.Time
 }
 
 var noTime time.Time
 
-func (t *oauthToken) isValid() bool {
+func (t *OauthToken) isValid() bool {
 	if t == nil || t.AccessToken == "" {
 		return false
 	}
 	return t.AccessToken != "" && time.Now().Before(t.ExpiresAt)
 }
 
-func (t *oauthToken) refreshIn() time.Duration {
+func (t *OauthToken) refreshIn() time.Duration {
 	if t == nil || t.ExpiresAt == noTime {
 		return time.Duration(0)
 	}
 	return t.ExpiresAt.Sub(time.Now()) - refreshFloatTime
 }
 
-func (t *oauthToken) needsRefresh() bool {
+func (t *OauthToken) needsRefresh() bool {
 	if t == nil || t.ExpiresAt == noTime {
 		return true
 	}

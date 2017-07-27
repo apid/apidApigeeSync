@@ -1,10 +1,24 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
-
 	"time"
 
 	"github.com/30x/apid-core"
@@ -30,15 +44,16 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log           apid.LogService
-	config        apid.ConfigService
-	dataService   apid.DataService
-	events        apid.EventsService
-	apidInfo      apidInstanceInfo
-	newInstanceID bool
-	tokenManager  *tokenMan
-	changeManager *pollChangeManager
-	snapManager   *snapShotManager
+	log                 apid.LogService
+	config              apid.ConfigService
+	dataService         apid.DataService
+	events              apid.EventsService
+	apidInfo            apidInstanceInfo
+	newInstanceID       bool
+	apidTokenManager    tokenManager
+	apidChangeManager   changeManager
+	apidSnapshotManager snapShotManager
+	httpclient          *http.Client
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -61,7 +76,7 @@ func init() {
 
 func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
-	config.SetDefault(configSnapshotProtocol, "json")
+	config.SetDefault(configSnapshotProtocol, "sqlite")
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -74,10 +89,18 @@ func initConfigDefaults() {
 func initVariables(services apid.Services) error {
 	dataService = services.Data()
 	events = services.Events()
-	//TODO listen for arbitrary commands, these channels can be used to kill polling goroutines
-	//also useful for testing
-	snapManager = createSnapShotManager()
-	changeManager = createChangeManager()
+
+	tr := &http.Transport{
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+	}
+	httpclient = &http.Client{
+		Transport: tr,
+		Timeout:   httpTimeout,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
+			return nil
+		},
+	}
 
 	// set up default database
 	db, err := dataService.DB()
@@ -103,6 +126,12 @@ func initVariables(services apid.Services) error {
 	return nil
 }
 
+func createManagers() {
+	apidSnapshotManager = createSnapShotManager()
+	apidChangeManager = createChangeManager()
+	apidTokenManager = createSimpleTokenManager()
+}
+
 func checkForRequiredValues() error {
 	// check for required values
 	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
@@ -112,8 +141,8 @@ func checkForRequiredValues() error {
 		}
 	}
 	proto := config.GetString(configSnapshotProtocol)
-	if proto != "json" && proto != "proto" {
-		return fmt.Errorf("Illegal value for %s. Must be: 'json' or 'proto'", configSnapshotProtocol)
+	if proto != "sqlite" {
+		return fmt.Errorf("Illegal value for %s. Only currently supported snashot protocol is sqlite", configSnapshotProtocol)
 	}
 
 	return nil
@@ -123,18 +152,18 @@ func SetLogger(logger apid.LogService) {
 	log = logger
 }
 
-/* Idempotent state initialization */
+/* initialization */
 func _initPlugin(services apid.Services) error {
 	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
 
 	config = services.Config()
+	initConfigDefaults()
+
 	err := checkForRequiredValues()
 	if err != nil {
 		return err
 	}
-
-	initConfigDefaults()
 
 	err = initVariables(services)
 	if err != nil {
@@ -150,6 +179,8 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	if err != nil {
 		return pluginData, err
 	}
+
+	createManagers()
 
 	/* This callback function will get called once all the plugins are
 	 * initialized (not just this plugin). This is needed because,
@@ -194,11 +225,9 @@ func postInitPlugins(event apid.Event) {
 
 		log.Debug("start post plugin init")
 
-		tokenManager = createTokenManager()
-
+		apidTokenManager.start()
 		go bootstrap()
 
-		events.Listen(ApigeeSyncEventSelector, &handler{})
 		log.Debug("Done post plugin init")
 	}
 }

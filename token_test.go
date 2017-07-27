@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 /*
@@ -22,9 +36,9 @@ var _ = Describe("token", func() {
 		It("should calculate valid token", func() {
 			log.Info("Starting token tests...")
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
-				ExpiresIn:   120000,
+				ExpiresIn:   120,
 				ExpiresAt:   time.Now().Add(2 * time.Minute),
 			}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically(">", 0))
@@ -34,7 +48,7 @@ var _ = Describe("token", func() {
 
 		It("should calculate expired token", func() {
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
 				ExpiresIn:   0,
 				ExpiresAt:   time.Now(),
@@ -46,9 +60,9 @@ var _ = Describe("token", func() {
 
 		It("should calculate token needing refresh", func() {
 
-			t := &oauthToken{
+			t := &OauthToken{
 				AccessToken: "x",
-				ExpiresIn:   59000,
+				ExpiresIn:   59,
 				ExpiresAt:   time.Now().Add(time.Minute - time.Second),
 			}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<", 0))
@@ -58,7 +72,7 @@ var _ = Describe("token", func() {
 
 		It("should calculate on empty token", func() {
 
-			t := &oauthToken{}
+			t := &OauthToken{}
 			Expect(t.refreshIn().Seconds()).To(BeNumerically("<=", 0))
 			Expect(t.needsRefresh()).To(BeTrue())
 			Expect(t.isValid()).To(BeFalse())
@@ -71,16 +85,17 @@ var _ = Describe("token", func() {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
 
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: "ABCD",
-					ExpiresIn:   1000,
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
 				w.Write(body)
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 
 			Expect(token.AccessToken).ToNot(BeEmpty())
@@ -98,9 +113,9 @@ var _ = Describe("token", func() {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer GinkgoRecover()
 
-				res := oauthToken{
-					AccessToken: generateUUID(),
-					ExpiresIn:   1000,
+				res := OauthToken{
+					AccessToken: GenerateUUID(),
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -108,7 +123,8 @@ var _ = Describe("token", func() {
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
 
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
 
@@ -137,9 +153,9 @@ var _ = Describe("token", func() {
 					finished <- true
 				}
 
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: string(count),
-					ExpiresIn:   1000,
+					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -147,8 +163,8 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
-
+			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager.start()
 			testedTokenManager.getToken()
 
 			<-finished
@@ -178,9 +194,9 @@ var _ = Describe("token", func() {
 					Expect(r.Header.Get("updated_at_apid")).NotTo(BeEmpty())
 					finished <- true
 				}
-				res := oauthToken{
+				res := OauthToken{
 					AccessToken: string(count),
-					ExpiresIn:   200000,
+					ExpiresIn:   200,
 				}
 				body, err := json.Marshal(res)
 				Expect(err).NotTo(HaveOccurred())
@@ -188,8 +204,8 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
-
+			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager.start()
 			testedTokenManager.getToken()
 			testedTokenManager.invalidateToken()
 			testedTokenManager.getToken()

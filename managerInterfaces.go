@@ -14,12 +14,30 @@
 
 package apidApigeeSync
 
-import "github.com/30x/apid-core"
+import (
+	"github.com/apigee-labs/transicator/common"
+	"net/url"
+)
 
-var pluginData = apid.PluginData{
-	Name:    "apidApigeeSync",
-	Version: "0.0.3",
-	ExtraData: map[string]interface{}{
-		"schemaVersion": "0.0.2",
-	},
+type tokenManager interface {
+	getBearerToken() string
+	invalidateToken() error
+	getToken() *OauthToken
+	close()
+	getRetrieveNewTokenClosure(*url.URL) func(chan bool) error
+	start()
+}
+
+type snapShotManager interface {
+	close() <-chan bool
+	downloadBootSnapshot()
+	storeBootSnapshot(snapshot *common.Snapshot)
+	downloadDataSnapshot()
+	storeDataSnapshot(snapshot *common.Snapshot)
+	downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error
+}
+
+type changeManager interface {
+	close() <-chan bool
+	pollChangeWithBackoff()
 }

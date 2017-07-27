@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
@@ -7,8 +21,9 @@ import (
 )
 
 const (
-	httpTimeout   = time.Minute
-	pluginTimeout = time.Minute
+	httpTimeout         = time.Minute
+	pluginTimeout       = time.Minute
+	maxIdleConnsPerHost = 10
 )
 
 var knownTables = make(map[string]bool)
@@ -24,19 +39,19 @@ func bootstrap() {
 
 	if apidInfo.LastSnapshot != "" {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
-
+		processSnapshot(snapshot)
 		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
-			changeManager.pollChangeWithBackoff()
+			apidChangeManager.pollChangeWithBackoff()
 		})
 
 		log.Infof("Started on local snapshot: %s", snapshot.SnapshotInfo)
 		return
 	}
 
-	snapManager.downloadBootSnapshot()
-	snapManager.downloadDataSnapshot()
+	apidSnapshotManager.downloadBootSnapshot()
+	apidSnapshotManager.downloadDataSnapshot()
 
-	changeManager.pollChangeWithBackoff()
+	apidChangeManager.pollChangeWithBackoff()
 
 }
 
@@ -86,14 +101,8 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	}
 }
 
-func Redirect(req *http.Request, _ []*http.Request) error {
-	req.Header.Add("Authorization", "Bearer "+tokenManager.getBearerToken())
-	req.Header.Add("org", apidInfo.ClusterID) // todo: this is strange.. is it needed?
-	return nil
-}
-
 func addHeaders(req *http.Request) {
-	req.Header.Set("Authorization", "Bearer "+tokenManager.getBearerToken())
+	req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
@@ -109,6 +118,9 @@ type quitSignalError struct {
 type expected200Error struct {
 }
 
+type authFailError struct {
+}
+
 func (an expected200Error) Error() string {
 	return "Did not recieve OK response"
 }
@@ -119,4 +131,8 @@ func (a quitSignalError) Error() string {
 
 func (a changeServerError) Error() string {
 	return a.Code
+}
+
+func (a authFailError) Error() string {
+	return "Authorization failed"
 }

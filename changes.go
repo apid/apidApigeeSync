@@ -1,15 +1,29 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apidApigeeSync
 
 import (
 	"encoding/json"
+	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-	"time"
-
-	"github.com/apigee-labs/transicator/common"
+	"sort"
 	"sync/atomic"
+	"time"
 )
 
 var lastSequence string
@@ -51,12 +65,11 @@ func (c *pollChangeManager) close() <-chan bool {
 	}
 	// not launched
 	if atomic.LoadInt32(c.isLaunched) == int32(0) {
-		log.Debug("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
-		log.Warn("Attempt to close unstarted change manager")
+		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
 		go func() {
 			c.quitChan <- true
-			tokenManager.close()
-			<-snapManager.close()
+			apidTokenManager.close()
+			<-apidSnapshotManager.close()
 			log.Debug("change manager closed")
 			finishChan <- false
 		}()
@@ -66,8 +79,8 @@ func (c *pollChangeManager) close() <-chan bool {
 	log.Debug("pollChangeManager: close pollChangeWithBackoff and token manager")
 	go func() {
 		c.quitChan <- true
-		tokenManager.close()
-		<-snapManager.close()
+		apidTokenManager.close()
+		<-apidSnapshotManager.close()
 		log.Debug("change manager closed")
 		finishChan <- true
 	}()
@@ -85,8 +98,8 @@ func (c *pollChangeManager) pollChangeWithBackoff() {
 		return
 	}
 
-	go pollWithBackoff(c.quitChan, c.pollChangeAgent, c.handleChangeServerError)
 	log.Debug("pollChangeManager: pollChangeWithBackoff() started pollWithBackoff")
+	go pollWithBackoff(c.quitChan, c.pollChangeAgent, c.handleChangeServerError)
 
 }
 
@@ -161,11 +174,9 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	log.Debugf("Fetching changes: %s", uri)
 
 	/* If error, break the loop, and retry after interval */
-	client := &http.Client{Timeout: httpTimeout} // must be greater than block value
 	req, err := http.NewRequest("GET", uri, nil)
 	addHeaders(req)
-
-	r, err := client.Do(req)
+	r, err := httpclient.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
 		// if closed
@@ -186,8 +197,11 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 		switch r.StatusCode {
 		case http.StatusUnauthorized:
-			tokenManager.invalidateToken()
-			return nil
+			err = apidTokenManager.invalidateToken()
+			if err != nil {
+				return err
+			}
+			return authFailError{}
 
 		case http.StatusNotModified:
 			return nil
@@ -209,7 +223,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
 				err = apiErr
 			}
-			return nil
+			return err
 		}
 		return nil
 	}
@@ -227,9 +241,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	 */
 	if lastSequence != "" &&
 		getChangeStatus(lastSequence, resp.LastSequence) != 1 {
-		return changeServerError{
-			Code: "Ignore change, already have newer changes",
-		}
+		return nil
 	}
 
 	if changesRequireDDLSync(resp) {
@@ -240,6 +252,7 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	/* If valid data present, Emit to plugins */
 	if len(resp.Changes) > 0 {
+		processChangeList(&resp)
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
@@ -250,6 +263,16 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	}
 
 	updateSequence(resp.LastSequence)
+
+	/*
+	 * Check to see if there was any change in scope. If found, handle it
+	 * by getting a new snapshot
+	 */
+	newScopes := findScopesForId(apidInfo.ClusterID)
+	cs := scopeChanged(newScopes, scopes)
+	if cs != nil {
+		return cs
+	}
 
 	return nil
 }
@@ -264,9 +287,9 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 		log.Debugf("handleChangeServerError: changeManager has been closed")
 		return
 	}
-	if _, ok := err.(changeServerError); ok {
-		log.Info("Detected DDL changes, going to fetch a new snapshot to sync...")
-		snapManager.downloadDataSnapshot()
+	if c, ok := err.(changeServerError); ok {
+		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
+		apidSnapshotManager.downloadDataSnapshot()
 	} else {
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}
@@ -278,12 +301,13 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
-	if a == nil || changes == nil {
+	if a == nil {
+		log.Warn("Nil map passed to function changesHaveNewTables, may be bug")
 		return true
 	}
 
 	for _, change := range changes {
-		if !a[change.Table] {
+		if !a[normalizeTableName(change.Table)] {
 			log.Infof("Unable to find %s table in current known tables", change.Table)
 			return true
 		}
@@ -315,4 +339,26 @@ func updateSequence(seq string) {
 		log.Panic("Unable to update Sequence in DB")
 	}
 
+}
+
+/*
+ * Returns nil if the two arrays have matching contents
+ */
+func scopeChanged(a, b []string) error {
+
+	if len(a) != len(b) {
+		return changeServerError{
+			Code: "Scope changes detected; must get new snapshot",
+		}
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	for i, v := range a {
+		if v != b[i] {
+			return changeServerError{
+				Code: "Scope changes detected; must get new snapshot",
+			}
+		}
+	}
+	return nil
 }

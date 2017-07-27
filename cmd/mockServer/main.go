@@ -1,3 +1,17 @@
+// Copyright 2017 Google Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -5,7 +19,6 @@ import (
 
 	"os"
 
-	"time"
 
 	"github.com/30x/apid-core"
 	"github.com/30x/apid-core/factory"
@@ -22,11 +35,8 @@ func main() {
 	reliable := f.Bool("reliable", true, "if false, server will often send 500 errors")
 
 	numDevs := f.Int("numDevs", 2, "number of developers in snapshot")
-	addDevEach := f.Duration("addDevEach", 0*time.Second, "add a developer each duration (default 0s)")
-	upDevEach := f.Duration("upDevEach", 0*time.Second, "update a developer each duration (default 0s)")
 
 	numDeps := f.Int("numDeps", 2, "number of deployments in snapshot")
-	upDepEach := f.Duration("upDepEach", 0*time.Second, "update (replace) a deployment each duration (default 0s)")
 
 	f.Parse(os.Args[1:])
 
@@ -51,10 +61,7 @@ func main() {
 		Organization:           "org",
 		Environment:            "test",
 		NumDevelopers:          *numDevs,
-		AddDeveloperEvery:      *addDevEach,
-		UpdateDeveloperEvery:   *upDevEach,
 		NumDeployments:         *numDeps,
-		ReplaceDeploymentEvery: *upDepEach,
 		BundleURI:              *bundleURI,
 	}
 

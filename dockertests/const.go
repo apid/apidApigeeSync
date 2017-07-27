@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package apidApigeeSync
+package dockertests
 
-import "github.com/30x/apid-core"
-
-var pluginData = apid.PluginData{
-	Name:    "apidApigeeSync",
-	Version: "0.0.3",
-	ExtraData: map[string]interface{}{
-		"schemaVersion": "0.0.2",
-	},
-}
+const (
+	pluginName               = "apigeeSyncDockerTest"
+	configApidClusterId      = "apigeesync_cluster_id"
+	configProxyServerBaseURI = "apigeesync_proxy_server_base"
+	configLocalStoragePath   = "local_storage_path"
+	configConsumerKey        = "apigeesync_consumer_key"
+	configConsumerSecret     = "apigeesync_consumer_secret"
+	configName               = "apigeesync_instance_name"
+	ApigeeSyncEventSelector  = "ApigeeSync"
+	testInitUser             = "dockerTestInit"
+)
