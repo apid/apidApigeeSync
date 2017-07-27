@@ -66,6 +66,7 @@ type tokenManager struct {
 	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
 	dbm                 dbManagerInterface
+	notNewInstanceId    bool
 }
 
 func (t *tokenManager) start() {
@@ -167,7 +168,7 @@ func (t *tokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) 
 		req.Header.Set("status", "ONLINE")
 		req.Header.Set("plugin_details", apidPluginDetails)
 
-		if newInstanceID {
+		if !t.notNewInstanceId {
 			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
 		} else {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
@@ -208,8 +209,8 @@ func (t *tokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) 
 
 		log.Debugf("Got new token: %#v", token)
 
-		if newInstanceID {
-			newInstanceID = false
+		if !t.notNewInstanceId {
+			t.notNewInstanceId = true
 			err = t.dbm.updateApidInstanceInfo()
 			if err != nil {
 				log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)

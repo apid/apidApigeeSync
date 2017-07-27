@@ -49,7 +49,6 @@ var (
 	dataService         apid.DataService
 	events              apid.EventsService
 	apidInfo            apidInstanceInfo
-	newInstanceID       bool
 	apidTokenManager    TokenManagerInterface
 	apidChangeManager   changeManagerInterface
 	apidSnapshotManager snapShotManagerInterface

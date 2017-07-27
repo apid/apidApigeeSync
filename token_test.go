@@ -25,6 +25,9 @@ import (
 
 	"encoding/json"
 
+	"database/sql"
+	"github.com/30x/apid-core"
+	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -94,7 +97,7 @@ var _ = Describe("token", func() {
 				w.Write(body)
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createTokenManager(&dummyDbMan{})
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 
@@ -123,7 +126,7 @@ var _ = Describe("token", func() {
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
 
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createTokenManager(&dummyDbMan{})
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
@@ -163,7 +166,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createTokenManager(&dummyDbMan{})
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 
@@ -179,17 +182,13 @@ var _ = Describe("token", func() {
 			finished := make(chan bool, 1)
 			count := 0
 
-			newInstanceID = true
-
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 				count++
 				if count == 1 {
-					Expect(newInstanceID).To(BeTrue())
 					Expect(r.Header.Get("created_at_apid")).NotTo(BeEmpty())
 					Expect(r.Header.Get("updated_at_apid")).To(BeEmpty())
 				} else {
-					Expect(newInstanceID).To(BeFalse())
 					Expect(r.Header.Get("created_at_apid")).To(BeEmpty())
 					Expect(r.Header.Get("updated_at_apid")).NotTo(BeEmpty())
 					finished <- true
@@ -204,7 +203,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createTokenManager()
+			testedTokenManager := createTokenManager(&dummyDbMan{})
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 			testedTokenManager.invalidateToken()
@@ -216,3 +215,43 @@ var _ = Describe("token", func() {
 		}, 3)
 	})
 })
+
+type dummyDbMan struct{}
+
+func (d *dummyDbMan) initDefaultDb() error {
+	return nil
+}
+func (d *dummyDbMan) setDb(apid.DB) {}
+func (d *dummyDbMan) getDb() apid.DB {
+	return nil
+}
+func (d *dummyDbMan) insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
+	return true
+}
+func (d *dummyDbMan) deleteRowsFromTable(tableName string, rows []common.Row, txn *sql.Tx) bool {
+	return true
+}
+func (d *dummyDbMan) update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
+	return true
+}
+func (d *dummyDbMan) getPkeysForTable(tableName string) ([]string, error) {
+	return nil, nil
+}
+func (d *dummyDbMan) findScopesForId(configId string) []string {
+	return nil
+}
+func (d *dummyDbMan) getDefaultDb() (apid.DB, error) {
+	return nil, nil
+}
+func (d *dummyDbMan) updateApidInstanceInfo() error {
+	return nil
+}
+func (d *dummyDbMan) getApidInstanceInfo() (info apidInstanceInfo, err error) {
+	return
+}
+func (d *dummyDbMan) getLastSequence() string {
+	return ""
+}
+func (d *dummyDbMan) updateLastSequence(lastSequence string) error {
+	return nil
+}

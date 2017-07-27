@@ -474,7 +474,6 @@ func (dbc *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		} else {
 			// first start - no row, generate a UUID and store it
 			err = nil
-			newInstanceID = true
 			info.InstanceID = GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
@@ -484,7 +483,6 @@ func (dbc *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	} else if savedClusterId != info.ClusterID {
 		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
 		err = nil
-		newInstanceID = true
 		info.InstanceID = GenerateUUID()
 
 		db.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
