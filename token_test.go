@@ -221,37 +221,57 @@ type dummyDbMan struct{}
 func (d *dummyDbMan) initDefaultDb() error {
 	return nil
 }
+
 func (d *dummyDbMan) setDb(apid.DB) {}
+
 func (d *dummyDbMan) getDb() apid.DB {
 	return nil
 }
+
 func (d *dummyDbMan) insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	return true
 }
+
 func (d *dummyDbMan) deleteRowsFromTable(tableName string, rows []common.Row, txn *sql.Tx) bool {
 	return true
 }
+
 func (d *dummyDbMan) update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
 	return true
 }
+
 func (d *dummyDbMan) getPkeysForTable(tableName string) ([]string, error) {
 	return nil, nil
 }
+
 func (d *dummyDbMan) findScopesForId(configId string) []string {
 	return nil
 }
+
 func (d *dummyDbMan) getDefaultDb() (apid.DB, error) {
 	return nil, nil
 }
+
 func (d *dummyDbMan) updateApidInstanceInfo() error {
 	return nil
 }
+
 func (d *dummyDbMan) getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	return
 }
+
 func (d *dummyDbMan) getLastSequence() string {
 	return ""
 }
+
 func (d *dummyDbMan) updateLastSequence(lastSequence string) error {
+	return nil
+}
+
+func (d *dummyDbMan) getClusterCount() (int, error) {
+	return 1, nil
+}
+
+func (d *dummyDbMan) alterClusterTable() error {
 	return nil
 }

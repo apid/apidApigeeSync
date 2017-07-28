@@ -19,37 +19,44 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sort"
+	"sync"
 )
 
 var _ = Describe("data access tests", func() {
-
+	var testCount int
+	var testDbMan *dbManager
 	BeforeEach(func() {
-		db := getDB()
+		testCount += 1
+		testDbMan = &dbManager{
+			dbMux: sync.RWMutex{},
+		}
+
+		db := testDbMan.getDb()
 
 		//all tests in this file operate on the api_product table.  Create the necessary tables for this here
-		getDB().Exec("CREATE TABLE _transicator_tables " +
+		db.Exec("CREATE TABLE _transicator_tables " +
 			"(tableName varchar not null, columnName varchar not null, " +
 			"typid integer, primaryKey bool);")
-		getDB().Exec("DELETE from _transicator_tables")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','id',2950,1)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','tenant_id',1043,1)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','description',1043,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','api_resources',1015,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','approval_type',1043,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','scopes',1015,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','proxies',1015,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','environments',1015,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_at',1114,1)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_by',1043,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_at',1114,1)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_by',1043,0)")
-		getDB().Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','_change_selector',1043,0)")
+		db.Exec("DELETE from _transicator_tables")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','id',2950,1)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','tenant_id',1043,1)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','description',1043,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','api_resources',1015,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','approval_type',1043,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','scopes',1015,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','proxies',1015,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','environments',1015,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_at',1114,1)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_by',1043,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_at',1114,1)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_by',1043,0)")
+		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','_change_selector',1043,0)")
 
-		getDB().Exec("CREATE TABLE kms_api_product (id text,tenant_id text,name text, description text, " +
+		db.Exec("CREATE TABLE kms_api_product (id text,tenant_id text,name text, description text, " +
 			"api_resources text,approval_type text,scopes text,proxies text, environments text," +
 			"created_at blob, created_by text,updated_at blob,updated_by text,_change_selector text, " +
 			"primary key (id,tenant_id,created_at,updated_at));")
-		getDB().Exec("DELETE from kms_api_product")
+		db.Exec("DELETE from kms_api_product")
 
 		setDB(db)
 		initDB(db)

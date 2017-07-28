@@ -52,42 +52,16 @@ func (lm *listenerManager) processSnapshot(snapshot *common.Snapshot) {
 
 func (lm *listenerManager) processSqliteSnapshot(db apid.DB) {
 
-	var numApidClusters int
-	apidClusters, err := db.Query("SELECT COUNT(*) FROM edgex_apid_cluster")
-	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
-	}
-	apidClusters.Next()
-	err = apidClusters.Scan(&numApidClusters)
-	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
+	if count, err := lm.dbm.getClusterCount(); err != nil || count != 1 {
+		log.Panicf("Illegal state for apid_cluster. Must be a single row. %v", err)
 	}
 
-	if numApidClusters != 1 {
-		log.Panic("Illegal state for apid_cluster. Must be a single row.")
-	}
-
-	_, err = db.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
-	if err != nil {
-		if err.Error() == "duplicate column name: last_sequence" {
-			return
-		} else {
-			log.Error("[[" + err.Error() + "]]")
-			log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error ", err)
-		}
+	if err := lm.dbm.alterClusterTable(); err != nil {
+		log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error %v", err)
 	}
 }
 
 func (lm *listenerManager) processChangeList(changes *common.ChangeList) bool {
-
-	ok := false
-
-	tx, err := lm.dbm.getDb().Begin()
-	if err != nil {
-		log.Panicf("Error processing ChangeList: %v", err)
-		return ok
-	}
-	defer tx.Rollback()
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
 
@@ -95,28 +69,10 @@ func (lm *listenerManager) processChangeList(changes *common.ChangeList) bool {
 		if change.Table == LISTENER_TABLE_APID_CLUSTER {
 			log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
 		}
-		switch change.Operation {
-		case common.Insert:
-			ok = lm.dbm.insert(change.Table, []common.Row{change.NewRow}, tx)
-		case common.Update:
-			if change.Table == LISTENER_TABLE_DATA_SCOPE {
-				log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
-			}
-			ok = lm.dbm.update(change.Table, []common.Row{change.OldRow}, []common.Row{change.NewRow}, tx)
-		case common.Delete:
-			ok = lm.dbm.deleteRowsFromTable(change.Table, []common.Row{change.OldRow}, tx)
-		}
-		if !ok {
-			log.Error("Sql Operation error. Operation rollbacked")
-			return ok
+		if change.Operation == common.Update && change.Table == LISTENER_TABLE_DATA_SCOPE {
+			log.Panicf("illegal operation: %s for %s", change.Operation, change.Table)
 		}
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		log.Panicf("Error processing ChangeList: %v", err)
-		return false
-	}
-
-	return ok
+	return lm.dbm.writeTransaction(changes)
 }

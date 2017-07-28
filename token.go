@@ -51,6 +51,9 @@ func createTokenManager(dbm dbManagerInterface) *tokenManager {
 		invalidateDone:      make(chan bool),
 		isClosed:            &isClosedInt,
 		dbm:                 dbm,
+		proxyServerBaseUri:  config.GetString(configProxyServerBaseURI),
+		clientId:            config.GetString(configConsumerKey),
+		clientSecret:        config.GetString(configConsumerSecret),
 	}
 	return t
 }
@@ -67,6 +70,9 @@ type tokenManager struct {
 	invalidateDone      chan bool
 	dbm                 dbManagerInterface
 	notNewInstanceId    bool
+	proxyServerBaseUri  string
+	clientId            string
+	clientSecret        string
 }
 
 func (t *tokenManager) start() {
@@ -144,10 +150,10 @@ func (t *tokenManager) close() {
 func (t *tokenManager) retrieveNewToken() {
 
 	log.Debug("Getting OAuth token...")
-	uriString := config.GetString(configProxyServerBaseURI)
+	uriString := t.proxyServerBaseUri
 	uri, err := url.Parse(uriString)
 	if err != nil {
-		log.Panicf("unable to parse uri config '%s' value: '%s': %v", configProxyServerBaseURI, uriString, err)
+		log.Panicf("unable to parse uri value: '%s': %v", uriString, err)
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
@@ -158,8 +164,8 @@ func (t *tokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) 
 	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
-		form.Add("client_id", config.GetString(configConsumerKey))
-		form.Add("client_secret", config.GetString(configConsumerSecret))
+		form.Add("client_id", t.clientId)
+		form.Add("client_secret", t.clientSecret)
 		req, err := http.NewRequest("POST", uri.String(), bytes.NewBufferString(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; param=value")
 		req.Header.Set("display_name", apidInfo.InstanceName)
@@ -219,7 +225,6 @@ func (t *tokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) 
 			}
 		}
 		t.token = &token
-		config.Set(configBearerToken, token.AccessToken)
 
 		return nil
 	}

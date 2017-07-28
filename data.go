@@ -516,6 +516,54 @@ func (dbc *dbManager) updateApidInstanceInfo() error {
 	return err
 }
 
+func (dbc *dbManager) getClusterCount() (numApidClusters int, err error) {
+	rows, err := dbc.db.Query("SELECT COUNT(*) FROM edgex_apid_cluster")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	rows.Next()
+	err = rows.Scan(&numApidClusters)
+	return
+}
+
+func (dbc *dbManager) alterClusterTable() (err error) {
+	_, err = dbc.db.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
+	if err.Error() == "duplicate column name: last_sequence" {
+		return nil
+	}
+	return
+}
+
+func (dbc *dbManager) writeTransaction(changes *common.ChangeList) bool {
+	tx, err := dbc.getDb().Begin()
+	if err != nil {
+		log.Panicf("Error processing ChangeList: %v", err)
+	}
+	defer tx.Rollback()
+	var ok bool
+	for _, change := range changes.Changes {
+		switch change.Operation {
+		case common.Insert:
+			ok = dbc.insert(change.Table, []common.Row{change.NewRow}, tx)
+		case common.Update:
+			ok = dbc.update(change.Table, []common.Row{change.OldRow}, []common.Row{change.NewRow}, tx)
+		case common.Delete:
+			ok = dbc.deleteRowsFromTable(change.Table, []common.Row{change.OldRow}, tx)
+		}
+		if !ok {
+			log.Error("Sql Operation error. Operation rollbacked")
+			return ok
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		log.Errorf("Error processing ChangeList: %v", err)
+		return false
+	}
+	return ok
+}
+
 /*
  * generates a random uuid (mix of timestamp & crypto random string)
  */

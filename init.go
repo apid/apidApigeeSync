@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/30x/apid-core"
+	"sync"
 )
 
 const (
@@ -102,7 +103,9 @@ func initVariables(services apid.Services) error {
 		},
 	}
 
-	dbMan = &dbManager{}
+	dbMan = &dbManager{
+		dbMux: sync.RWMutex{},
+	}
 
 	// set up default database
 	err := dbMan.initDefaultDb()

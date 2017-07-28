@@ -58,6 +58,9 @@ type dbManagerInterface interface {
 	getApidInstanceInfo() (info apidInstanceInfo, err error)
 	getLastSequence() string
 	updateLastSequence(lastSequence string) error
+	getClusterCount() (numApidClusters int, err error)
+	alterClusterTable() (err error)
+	writeTransaction(*common.ChangeList) bool
 }
 
 type listenerManagerInterface interface {
