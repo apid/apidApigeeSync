@@ -216,10 +216,13 @@ var _ = Describe("token", func() {
 	})
 })
 
-type dummyDbMan struct{}
+type dummyDbMan struct {
+	clusterCount int
+	err          error
+}
 
 func (d *dummyDbMan) initDefaultDb() error {
-	return nil
+	return d.err
 }
 
 func (d *dummyDbMan) setDb(apid.DB) {}
@@ -241,7 +244,7 @@ func (d *dummyDbMan) update(tableName string, oldRows, newRows []common.Row, txn
 }
 
 func (d *dummyDbMan) getPkeysForTable(tableName string) ([]string, error) {
-	return nil, nil
+	return nil, d.err
 }
 
 func (d *dummyDbMan) findScopesForId(configId string) []string {
@@ -249,15 +252,15 @@ func (d *dummyDbMan) findScopesForId(configId string) []string {
 }
 
 func (d *dummyDbMan) getDefaultDb() (apid.DB, error) {
-	return nil, nil
+	return nil, d.err
 }
 
 func (d *dummyDbMan) updateApidInstanceInfo() error {
-	return nil
+	return d.err
 }
 
-func (d *dummyDbMan) getApidInstanceInfo() (info apidInstanceInfo, err error) {
-	return
+func (d *dummyDbMan) getApidInstanceInfo() (apidInstanceInfo, error) {
+	return apidInstanceInfo{}, d.err
 }
 
 func (d *dummyDbMan) getLastSequence() string {
@@ -265,13 +268,20 @@ func (d *dummyDbMan) getLastSequence() string {
 }
 
 func (d *dummyDbMan) updateLastSequence(lastSequence string) error {
-	return nil
+	return d.err
 }
 
 func (d *dummyDbMan) getClusterCount() (int, error) {
-	return 1, nil
+	return d.clusterCount, d.err
 }
 
 func (d *dummyDbMan) alterClusterTable() error {
-	return nil
+	return d.err
+}
+func (d *dummyDbMan) writeTransaction(_ *common.ChangeList) bool {
+	return true
+}
+
+func (d *dummyDbMan) setDbVersion(version string) {
+
 }

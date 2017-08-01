@@ -105,6 +105,7 @@ func initVariables(services apid.Services) error {
 
 	dbMan = &dbManager{
 		dbMux: sync.RWMutex{},
+		data:  services.Data(),
 	}
 
 	// set up default database

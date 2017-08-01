@@ -71,6 +71,17 @@ func (dbc *dbManager) initDefaultDb() error {
 type dbManager struct {
 	db    apid.DB
 	dbMux sync.RWMutex
+	data  apid.DataService
+}
+
+func (dbc *dbManager) setDbVersion(version string) {
+	db, err := dbc.data.DBVersion(version)
+	if err != nil {
+		log.Panicf("Unable to access database: %v", err)
+	}
+	dbc.dbMux.Lock()
+	dbc.db = db
+	dbc.dbMux.Unlock()
 }
 
 func (dbc *dbManager) getDb() apid.DB {

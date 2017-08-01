@@ -15,7 +15,6 @@
 package apidApigeeSync
 
 import (
-	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
 
@@ -31,26 +30,21 @@ type listenerManager struct {
 func (lm *listenerManager) processSnapshot(snapshot *common.Snapshot) {
 	log.Debugf("Snapshot received. Switching to DB version: %s", snapshot.SnapshotInfo)
 
-	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
-	if err != nil {
-		log.Panicf("Unable to access database: %v", err)
-	}
-
-	lm.processSqliteSnapshot(db)
+	lm.dbm.setDbVersion(snapshot.SnapshotInfo)
+	lm.processSqliteSnapshot()
 
 	//update apid instance info
 	apidInfo.LastSnapshot = snapshot.SnapshotInfo
-	err = lm.dbm.updateApidInstanceInfo()
+	err := lm.dbm.updateApidInstanceInfo()
 	if err != nil {
 		log.Panicf("Unable to update instance info: %v", err)
 	}
 
-	lm.dbm.setDb(db)
 	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
 
 }
 
-func (lm *listenerManager) processSqliteSnapshot(db apid.DB) {
+func (lm *listenerManager) processSqliteSnapshot() {
 
 	if count, err := lm.dbm.getClusterCount(); err != nil || count != 1 {
 		log.Panicf("Illegal state for apid_cluster. Must be a single row. %v", err)

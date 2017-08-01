@@ -61,10 +61,11 @@ type dbManagerInterface interface {
 	getClusterCount() (numApidClusters int, err error)
 	alterClusterTable() (err error)
 	writeTransaction(*common.ChangeList) bool
+	setDbVersion(version string)
 }
 
 type listenerManagerInterface interface {
 	processSnapshot(snapshot *common.Snapshot)
-	processSqliteSnapshot(db apid.DB)
+	processSqliteSnapshot()
 	processChangeList(changes *common.ChangeList) bool
 }
