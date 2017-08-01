@@ -12,6 +12,8 @@ CREATE TABLE apid_cluster (
     updated timestamp without time zone,
     updated_by text,
     _change_selector text,
+    org_scope character varying(36),
+    env_scope character varying(36),
     CONSTRAINT apid_cluster_pkey PRIMARY KEY (id)
 );
 

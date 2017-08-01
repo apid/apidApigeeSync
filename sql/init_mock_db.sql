@@ -127,6 +127,8 @@ INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','apid_cluster_id',10
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','scope',25,0);
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','org',25,1);
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','env',25,1);
+INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','org_scope',1043,0);
+INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','env_scope',1043,0);
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','created',1114,0);
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','created_by',25,0);
 INSERT INTO "_transicator_tables" VALUES('edgex_data_scope','updated',1114,0);
@@ -230,9 +232,9 @@ CREATE TABLE "kms_organization" (id text,name text,display_name text,type text,t
 INSERT INTO "kms_organization" VALUES('ff0b5496-c674-4531-9443-ace334504f59','edgex_gcp1','edgex_gcp1','paid','43aef41d','307eadd7-c6d7-4ec1-b433-59bcd22cd06d','','2017-02-25 00:17:58.159+00:00','vbhangale@apigee.com','2017-02-25 00:18:14.729+00:00','vbhangale@apigee.com','43aef41d');
 CREATE TABLE "edgex_apid_cluster" (id text,name text,description text,umbrella_org_app_name text,created blob,created_by text,updated blob,updated_by text,_change_selector text, primary key (id,created_by,created_by,created_by,created_by,_change_selector));
 INSERT INTO "edgex_apid_cluster" VALUES('bootstrap','mitch-gcp-cluster','','X-5NF3iDkQLtQt6uPp4ELYhuOkzL5BbSMgf3Gx','2017-02-27 07:39:22.179+00:00','fierrom@google.com','2017-02-27 07:39:22.179+00:00','fierrom@google.com','bootstrap');
-CREATE TABLE "edgex_data_scope" (id text,apid_cluster_id text,scope text,org text,env text,created blob,created_by text,updated blob,updated_by text,_change_selector text, primary key (id,apid_cluster_id,apid_cluster_id,org,env,_change_selector));
-INSERT INTO "edgex_data_scope" VALUES('dataScope1','bootstrap','43aef41d','edgex_gcp1','test','2017-02-27 07:40:25.094+00:00','fierrom@google.com','2017-02-27 07:40:25.094+00:00','fierrom@google.com','bootstrap');
-INSERT INTO "edgex_data_scope" VALUES('dataScope2','bootstrap','43aef41d','edgex_gcp1','test','2017-02-27 07:40:25.094+00:00','fierrom@google.com','2017-02-27 07:40:25.094+00:00','sendtofierro@gmail.com','bootstrap');
+CREATE TABLE "edgex_data_scope" (id text,apid_cluster_id text,scope text,org text,env text,org_scope text,env_scope text,created blob,created_by text,updated blob,updated_by text,_change_selector text, primary key (id,apid_cluster_id,apid_cluster_id,org,env,_change_selector));
+INSERT INTO "edgex_data_scope" VALUES('dataScope1','bootstrap','43aef41d','edgex_gcp1','test','org_scope_1','env_scope_1','2017-02-27 07:40:25.094+00:00','fierrom@google.com','2017-02-27 07:40:25.094+00:00','fierrom@google.com','bootstrap');
+INSERT INTO "edgex_data_scope" VALUES('dataScope2','bootstrap','43aef41d','edgex_gcp1','test','org_scope_1','env_scope_2','2017-02-27 07:40:25.094+00:00','fierrom@google.com','2017-02-27 07:40:25.094+00:00','sendtofierro@gmail.com','bootstrap');
 CREATE TABLE "kms_app_credential" (id text,tenant_id text,consumer_secret text,app_id text,method_type text,status text,issued_at blob,expires_at blob,app_status text,scopes text,created_at blob,created_by text,updated_at blob,updated_by text,_change_selector text, primary key (id,tenant_id,app_id,issued_at,expires_at));
 INSERT INTO "kms_app_credential" VALUES('xA9QylNTGQxKGYtHXwvmx8ldDaIJMAEx','43aef41d','lscGO3lfs3zh8iQ','87c20a31-a504-4ed5-89a5-700adfbb0142','','APPROVED','2017-02-27 07:45:22.774+00:00','','','{}','2017-02-27 07:45:22.774+00:00','-NA-','2017-02-27 07:45:22.877+00:00','-NA-','43aef41d');
 INSERT INTO "kms_app_credential" VALUES('ds986MejQqoWRSSeC0UTIPSJ3rtaG2xv','43aef41d','5EBOSSQrLOLO9siN','8f5c9b86-0783-439c-b8e6-7ab9549e30e8','','APPROVED','2017-02-27 07:43:23.263+00:00','','','{}','2017-02-27 07:43:23.263+00:00','-NA-','2017-02-27 07:48:16.717+00:00','-NA-','43aef41d');

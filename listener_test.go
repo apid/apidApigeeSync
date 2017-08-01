@@ -20,6 +20,8 @@ import (
 
 	"github.com/apigee-labs/transicator/common"
 	"os"
+	"reflect"
+	"sort"
 )
 
 var _ = Describe("listener", func() {
@@ -144,11 +146,11 @@ var _ = Describe("listener", func() {
 			Expect(ds.Scope).To(Equal("s2"))
 
 			scopes := findScopesForId("a")
-			Expect(len(scopes)).To(Equal(2))
-			Expect(scopes[0]).To(Equal("s1"))
-			Expect(scopes[1]).To(Equal("s2"))
-
-			//restore the last snapshot
+			Expect(len(scopes)).To(Equal(6))
+			expectedScopes := []string{"s1", "s2", "org_scope_1", "env_scope_1", "env_scope_2", "env_scope_3"}
+			sort.Strings(scopes)
+			sort.Strings(expectedScopes)
+			Expect(reflect.DeepEqual(scopes, expectedScopes)).To(BeTrue())
 		}, 3)
 	})
 
