@@ -231,7 +231,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 	}
 }
 
-func (t *simpleTokenManager) getTokenReadyChannel() chan bool {
+func (t *simpleTokenManager) getTokenReadyChannel() <-chan bool {
 	return t.tokenUpdatedChan
 }
 

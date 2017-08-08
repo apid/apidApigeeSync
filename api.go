@@ -1,9 +1,9 @@
 package apidApigeeSync
 
 import (
+	"encoding/json"
 	"github.com/30x/apid-core"
 	"net/http"
-	"encoding/json"
 	"strconv"
 	"time"
 )
