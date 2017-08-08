@@ -26,6 +26,7 @@ type tokenManager interface {
 	close()
 	getRetrieveNewTokenClosure(*url.URL) func(chan bool) error
 	start()
+	getTokenReadyChannel() <-chan bool
 }
 
 type snapShotManager interface {

@@ -189,6 +189,7 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	 */
 	events.ListenOnceFunc(apid.SystemEventsSelector, postInitPlugins)
 
+	InitAPI(services)
 	log.Debug("end init")
 
 	return pluginData, nil
