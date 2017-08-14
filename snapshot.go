@@ -343,3 +343,24 @@ func processSnapshotServerFileResponse(dbId string, body io.Reader, snapshot *co
 func handleSnapshotServerError(err error) {
 	log.Debugf("Error connecting to snapshot server: %v", err)
 }
+
+type offlineSnapshotManager struct {
+}
+
+func (o *offlineSnapshotManager) close() <-chan bool {
+	c := make(chan bool, 1)
+	c <- true
+	return c
+}
+
+func (o *offlineSnapshotManager) downloadBootSnapshot() {}
+
+func (o *offlineSnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {}
+
+func (o *offlineSnapshotManager) downloadDataSnapshot() {}
+
+func (o *offlineSnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {}
+
+func (o *offlineSnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
+	return nil
+}

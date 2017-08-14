@@ -36,6 +36,9 @@ var knownTables = make(map[string]bool)
  *  Then, poll for changes
  */
 func bootstrap() {
+	if isOfflineMode && apidInfo.LastSnapshot == "" {
+		log.Panic("Offline mode requires existent snapshot info in default DB.")
+	}
 
 	if apidInfo.LastSnapshot != "" {
 		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)

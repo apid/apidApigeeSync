@@ -362,3 +362,14 @@ func scopeChanged(a, b []string) error {
 	}
 	return nil
 }
+
+type offlineChangeManager struct {
+}
+
+func (o *offlineChangeManager) close() <-chan bool {
+	c := make(chan bool, 1)
+	c <- true
+	return c
+}
+
+func (o *offlineChangeManager) pollChangeWithBackoff() {}
