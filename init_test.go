@@ -15,11 +15,15 @@
 package apidApigeeSync
 
 import (
+	"github.com/30x/apid-core"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("init", func() {
+	var _ = BeforeEach(func() {
+		_initPlugin(apid.AllServices())
+	})
 
 	Context("Apid Instance display name", func() {
 

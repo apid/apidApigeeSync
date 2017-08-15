@@ -205,22 +205,24 @@ func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
 }
 
 // Skip Downloading snapshot if there is already a snapshot available from previous run
-func startOnLocalSnapshot(snapshot string) *common.Snapshot {
-	log.Infof("Starting on local snapshot: %s", snapshot)
+func (s *simpleSnapShotManager) startOnLocalSnapshot(snapshotName string) *common.Snapshot {
+	log.Infof("Starting on local snapshot: %s", snapshotName)
 
 	// ensure DB version will be accessible on behalf of dependant plugins
-	db, err := dataService.DBVersion(snapshot)
+	db, err := dataService.DBVersion(snapshotName)
 	if err != nil {
 		log.Panicf("Database inaccessible: %v", err)
 	}
 
 	knownTables = extractTablesFromDB(db)
+	snapshot := &common.Snapshot{
+		SnapshotInfo: snapshotName,
+	}
+	processSnapshot(snapshot)
 
 	// allow plugins (including this one) to start immediately on existing database
 	// Note: this MUST have no tables as that is used as an indicator
-	return &common.Snapshot{
-		SnapshotInfo: snapshot,
-	}
+	return snapshot
 }
 
 // a blocking method
@@ -363,4 +365,23 @@ func (o *offlineSnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {}
 
 func (o *offlineSnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
 	return nil
+}
+func (o *offlineSnapshotManager) startOnLocalSnapshot(snapshotName string) *common.Snapshot {
+	log.Infof("Starting on local snapshot: %s", snapshotName)
+
+	// ensure DB version will be accessible on behalf of dependant plugins
+	db, err := dataService.DBVersion(snapshotName)
+	if err != nil {
+		log.Panicf("Database inaccessible: %v", err)
+	}
+
+	knownTables = extractTablesFromDB(db)
+	snapshot := &common.Snapshot{
+		SnapshotInfo: snapshotName,
+	}
+	processSnapshot(snapshot)
+
+	// allow plugins (including this one) to start immediately on existing database
+	// Note: this MUST have no tables as that is used as an indicator
+	return snapshot
 }

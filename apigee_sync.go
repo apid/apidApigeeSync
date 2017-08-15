@@ -41,8 +41,7 @@ func bootstrap() {
 	}
 
 	if apidInfo.LastSnapshot != "" {
-		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
-		processSnapshot(snapshot)
+		snapshot := apidSnapshotManager.startOnLocalSnapshot(apidInfo.LastSnapshot)
 		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
 			apidChangeManager.pollChangeWithBackoff()
 		})

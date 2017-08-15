@@ -44,10 +44,12 @@ var _ = BeforeSuite(func() {
 	wipeDBAferTest = true
 })
 
-var _ = BeforeEach(func(done Done) {
+var _ = BeforeEach(func() {
 	apid.Initialize(factory.DefaultServicesFactory())
 
 	config = apid.Config()
+	dataService = apid.Data()
+	events = apid.Events()
 
 	var err error
 	tmpDir, err = ioutil.TempDir("", "api_test")
@@ -66,25 +68,12 @@ var _ = BeforeEach(func(done Done) {
 	config.Set(configConsumerSecret, "YYYYYYY")
 
 	block = "0"
-	log = apid.Log()
-
-	_initPlugin(apid.AllServices())
-	createManagers()
-	close(done)
+	log = apid.Log().ForModule("apigeeSync")
 }, 3)
 
 var _ = AfterEach(func() {
 	apid.Events().Close()
-
 	lastSequence = ""
-
-	if wipeDBAferTest {
-		db, err := dataService.DB()
-		Expect(err).NotTo(HaveOccurred())
-		_, err = db.Exec("DELETE FROM APID")
-		Expect(err).NotTo(HaveOccurred())
-	}
-	wipeDBAferTest = true
 })
 
 var _ = AfterSuite(func() {

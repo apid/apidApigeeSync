@@ -96,9 +96,7 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func initVariables(services apid.Services) error {
-	dataService = services.Data()
-	events = services.Events()
+func initVariables() error {
 
 	tr := &http.Transport{
 		MaxIdleConnsPerHost: maxIdleConnsPerHost,
@@ -173,13 +171,13 @@ func SetLogger(logger apid.LogService) {
 
 /* initialization */
 func _initPlugin(services apid.Services) error {
-	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
 
 	config = services.Config()
 	initConfigDefaults()
 
 	if strings.EqualFold(config.GetString(configOnlineMode), offlineMode) {
+		log.Warn("offline mode!")
 		isOfflineMode = true
 	}
 
@@ -188,7 +186,7 @@ func _initPlugin(services apid.Services) error {
 		return err
 	}
 
-	err = initVariables(services)
+	err = initVariables()
 	if err != nil {
 		return err
 	}
@@ -197,6 +195,9 @@ func _initPlugin(services apid.Services) error {
 }
 
 func initPlugin(services apid.Services) (apid.PluginData, error) {
+	SetLogger(services.Log().ForModule("apigeeSync"))
+	dataService = services.Data()
+	events = services.Events()
 
 	err := _initPlugin(services)
 	if err != nil {
