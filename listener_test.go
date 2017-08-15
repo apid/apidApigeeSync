@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	"os"
 	"reflect"
@@ -36,6 +37,20 @@ var _ = Describe("listener", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		return s
 	}
+
+	var _ = BeforeEach(func() {
+		_initPlugin(apid.AllServices())
+	})
+
+	var _ = AfterEach(func() {
+		if wipeDBAferTest {
+			db, err := dataService.DB()
+			Expect(err).Should(Succeed())
+			_, err = db.Exec("DELETE FROM APID")
+			Expect(err).Should(Succeed())
+		}
+		wipeDBAferTest = true
+	})
 
 	Context("ApigeeSync snapshot event", func() {
 

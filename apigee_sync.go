@@ -36,10 +36,12 @@ var knownTables = make(map[string]bool)
  *  Then, poll for changes
  */
 func bootstrap() {
+	if isOfflineMode && apidInfo.LastSnapshot == "" {
+		log.Panic("Diagnostic mode requires existent snapshot info in default DB.")
+	}
 
 	if apidInfo.LastSnapshot != "" {
-		snapshot := startOnLocalSnapshot(apidInfo.LastSnapshot)
-		processSnapshot(snapshot)
+		snapshot := apidSnapshotManager.startOnLocalSnapshot(apidInfo.LastSnapshot)
 		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
 			apidChangeManager.pollChangeWithBackoff()
 		})

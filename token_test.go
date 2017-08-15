@@ -185,11 +185,9 @@ var _ = Describe("token", func() {
 
 				count++
 				if count == 1 {
-					Expect(newInstanceID).To(BeTrue())
 					Expect(r.Header.Get("created_at_apid")).NotTo(BeEmpty())
 					Expect(r.Header.Get("updated_at_apid")).To(BeEmpty())
 				} else {
-					Expect(newInstanceID).To(BeFalse())
 					Expect(r.Header.Get("created_at_apid")).To(BeEmpty())
 					Expect(r.Header.Get("updated_at_apid")).NotTo(BeEmpty())
 					finished <- true
