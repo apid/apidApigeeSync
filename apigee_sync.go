@@ -37,7 +37,7 @@ var knownTables = make(map[string]bool)
  */
 func bootstrap() {
 	if isOfflineMode && apidInfo.LastSnapshot == "" {
-		log.Panic("Offline mode requires existent snapshot info in default DB.")
+		log.Panic("Diagnostic mode requires existent snapshot info in default DB.")
 	}
 
 	if apidInfo.LastSnapshot != "" {

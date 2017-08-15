@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/30x/apid-core"
-	"strings"
 )
 
 const (
@@ -35,7 +34,7 @@ const (
 	configApidClusterId       = "apigeesync_cluster_id"
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
 	configName                = "apigeesync_instance_name"
-	configOnlineMode          = "apigeesync_online"
+	configDiagnosticMode      = "apigeesync_diagnostic_mode"
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
@@ -44,10 +43,6 @@ const (
 
 const (
 	ApigeeSyncEventSelector = "ApigeeSync"
-)
-
-const (
-	offlineMode = "offline"
 )
 
 var (
@@ -86,7 +81,7 @@ func init() {
 func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
-	config.SetDefault(configOnlineMode, "online")
+	config.SetDefault(configDiagnosticMode, false)
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -176,8 +171,8 @@ func _initPlugin(services apid.Services) error {
 	config = services.Config()
 	initConfigDefaults()
 
-	if strings.EqualFold(config.GetString(configOnlineMode), offlineMode) {
-		log.Warn("offline mode!")
+	if config.GetBool(configDiagnosticMode) {
+		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
 		isOfflineMode = true
 	}
 

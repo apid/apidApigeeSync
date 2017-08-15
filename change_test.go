@@ -20,7 +20,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"time"
 )
@@ -155,77 +154,3 @@ var _ = Describe("Change Agent", func() {
 
 	})
 })
-
-type dummyTokenManager struct {
-	invalidateChan chan bool
-}
-
-func (t *dummyTokenManager) getTokenReadyChannel() <-chan bool {
-	return nil
-}
-
-func (t *dummyTokenManager) getBearerToken() string {
-	return ""
-}
-
-func (t *dummyTokenManager) invalidateToken() error {
-	log.Debug("invalidateToken called")
-	testMock.passAuthCheck()
-	t.invalidateChan <- true
-	return nil
-}
-
-func (t *dummyTokenManager) getToken() *OauthToken {
-	return nil
-}
-
-func (t *dummyTokenManager) close() {
-	return
-}
-
-func (t *dummyTokenManager) getRetrieveNewTokenClosure(*url.URL) func(chan bool) error {
-	return func(chan bool) error {
-		return nil
-	}
-}
-
-func (t *dummyTokenManager) start() {
-
-}
-
-type dummySnapshotManager struct {
-	downloadCalledChan chan bool
-}
-
-func (s *dummySnapshotManager) close() <-chan bool {
-	closeChan := make(chan bool)
-	close(closeChan)
-	return closeChan
-}
-
-func (s *dummySnapshotManager) downloadBootSnapshot() {
-
-}
-
-func (s *dummySnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {
-
-}
-
-func (s *dummySnapshotManager) downloadDataSnapshot() {
-	log.Debug("dummySnapshotManager.downloadDataSnapshot() called")
-	s.downloadCalledChan <- true
-}
-
-func (s *dummySnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {
-
-}
-
-func (s *dummySnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
-	return nil
-}
-
-func (s *dummySnapshotManager) startOnLocalSnapshot(snapshot string) *common.Snapshot {
-	return &common.Snapshot{
-		SnapshotInfo: snapshot,
-	}
-}

@@ -34,7 +34,7 @@ var _ = Describe("Sync", func() {
 		)
 
 		var _ = BeforeEach(func() {
-			config.Set(configOnlineMode, offlineMode)
+			config.Set(configDiagnosticMode, true)
 			config.Set(configApidClusterId, testClusterID)
 			_initPlugin(apid.AllServices())
 			apidSnapshotManager = &dummySnapshotManager{}
@@ -54,7 +54,7 @@ var _ = Describe("Sync", func() {
 		})
 
 		var _ = AfterEach(func() {
-			config.Set(configOnlineMode, "")
+			config.Set(configDiagnosticMode, false)
 			if wipeDBAferTest {
 				db, err := dataService.DB()
 				Expect(err).NotTo(HaveOccurred())

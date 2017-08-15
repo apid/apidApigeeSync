@@ -61,7 +61,7 @@ var _ = BeforeEach(func() {
 	config.Set(configChangeServerBaseURI, dummyConfigValue)
 	config.Set(configSnapshotProtocol, "sqlite")
 	config.Set(configPollInterval, 10*time.Millisecond)
-
+	config.Set(configDiagnosticMode, false)
 	config.Set(configName, "testhost")
 	config.Set(configApidClusterId, expectedClusterId)
 	config.Set(configConsumerKey, "XXXXXXX")
