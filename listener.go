@@ -25,8 +25,15 @@ const (
 )
 
 func processSnapshot(snapshot *common.Snapshot) {
-	log.Debugf("Snapshot received. Switching to DB version: %s", snapshot.SnapshotInfo)
 
+	if apidInfo.LastSnapshot != "" && apidInfo.LastSnapshot != snapshot.SnapshotInfo {
+		log.Debugf("Release snapshot for {%s}. Switching to version {%s}",
+			apidInfo.LastSnapshot , snapshot.SnapshotInfo)
+		dataService.ReleaseDB(apidInfo.LastSnapshot)
+	} else {
+		log.Debugf("Process snapshot for version {%s}",
+			snapshot.SnapshotInfo)
+	}
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
 		log.Panicf("Unable to access database: %v", err)
