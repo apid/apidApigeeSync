@@ -26,10 +26,11 @@ const (
 
 func processSnapshot(snapshot *common.Snapshot) {
 
+	var prevDb string
 	if apidInfo.LastSnapshot != "" && apidInfo.LastSnapshot != snapshot.SnapshotInfo {
 		log.Debugf("Release snapshot for {%s}. Switching to version {%s}",
 			apidInfo.LastSnapshot , snapshot.SnapshotInfo)
-		dataService.ReleaseDB(apidInfo.LastSnapshot)
+		prevDb = apidInfo.LastSnapshot
 	} else {
 		log.Debugf("Process snapshot for version {%s}",
 			snapshot.SnapshotInfo)
@@ -51,6 +52,10 @@ func processSnapshot(snapshot *common.Snapshot) {
 	setDB(db)
 	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
 
+	// Releases the DB, when the Connection reference count reaches 0.
+	if prevDb != "" {
+		dataService.ReleaseDB(prevDb)
+	}
 }
 
 func processSqliteSnapshot(db apid.DB) {
