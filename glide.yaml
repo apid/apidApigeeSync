@@ -15,7 +15,7 @@
 package: github.com/30x/apidApigeeSync
 import:
 - package: github.com/30x/apid-core
-  version: master
+  version: Release_170815-EdgeX-EAP
 testImport:
 - package: github.com/onsi/ginkgo/ginkgo
 - package: github.com/onsi/gomega
