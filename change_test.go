@@ -18,8 +18,8 @@ import (
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"time"
 )
@@ -31,23 +31,12 @@ var _ = Describe("Change Agent", func() {
 		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
 			initDb(sqlfile, "./mockdb_change.sqlite3")
 			file, err := os.Open("./mockdb_change.sqlite3")
-			if err != nil {
-				Fail("Failed to open mock db for test")
-			}
-
+			Expect(err).Should(Succeed())
 			s := common.Snapshot{}
 			err = processSnapshotServerFileResponse(dbId, file, &s)
-			if err != nil {
-				Fail("Error processing test snapshots")
-			}
+			Expect(err).Should(Succeed())
 			return s
 		}
-
-		BeforeEach(func() {
-			event := createTestDb("./sql/init_mock_db.sql", "test_change")
-			processSnapshot(&event)
-			knownTables = extractTablesFromDB(getDB())
-		})
 
 		var initializeContext = func() {
 			testRouter = apid.API().Router()
@@ -80,8 +69,23 @@ var _ = Describe("Change Agent", func() {
 			config.Set(configPollInterval, 10*time.Millisecond)
 		}
 
-		AfterEach(func() {
+		var _ = BeforeEach(func() {
+			_initPlugin(apid.AllServices())
+			createManagers()
+			event := createTestDb("./sql/init_mock_db.sql", "test_change")
+			processSnapshot(&event)
+			knownTables = extractTablesFromDB(getDB())
+		})
+
+		var _ = AfterEach(func() {
 			restoreContext()
+			if wipeDBAferTest {
+				db, err := dataService.DB()
+				Expect(err).Should(Succeed())
+				_, err = db.Exec("DELETE FROM APID")
+				Expect(err).Should(Succeed())
+			}
+			wipeDBAferTest = true
 		})
 
 		It("test change agent with authorization failure", func() {
@@ -150,71 +154,3 @@ var _ = Describe("Change Agent", func() {
 
 	})
 })
-
-type dummyTokenManager struct {
-	invalidateChan chan bool
-}
-
-func (t *dummyTokenManager) getTokenReadyChannel() <-chan bool {
-	return nil
-}
-
-func (t *dummyTokenManager) getBearerToken() string {
-	return ""
-}
-
-func (t *dummyTokenManager) invalidateToken() error {
-	log.Debug("invalidateToken called")
-	testMock.passAuthCheck()
-	t.invalidateChan <- true
-	return nil
-}
-
-func (t *dummyTokenManager) getToken() *OauthToken {
-	return nil
-}
-
-func (t *dummyTokenManager) close() {
-	return
-}
-
-func (t *dummyTokenManager) getRetrieveNewTokenClosure(*url.URL) func(chan bool) error {
-	return func(chan bool) error {
-		return nil
-	}
-}
-
-func (t *dummyTokenManager) start() {
-
-}
-
-type dummySnapshotManager struct {
-	downloadCalledChan chan bool
-}
-
-func (s *dummySnapshotManager) close() <-chan bool {
-	closeChan := make(chan bool)
-	close(closeChan)
-	return closeChan
-}
-
-func (s *dummySnapshotManager) downloadBootSnapshot() {
-
-}
-
-func (s *dummySnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {
-
-}
-
-func (s *dummySnapshotManager) downloadDataSnapshot() {
-	log.Debug("dummySnapshotManager.downloadDataSnapshot() called")
-	s.downloadCalledChan <- true
-}
-
-func (s *dummySnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {
-
-}
-
-func (s *dummySnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
-	return nil
-}

@@ -34,12 +34,15 @@ const (
 	configApidClusterId       = "apigeesync_cluster_id"
 	configSnapshotProtocol    = "apigeesync_snapshot_proto"
 	configName                = "apigeesync_instance_name"
-	ApigeeSyncEventSelector   = "ApigeeSync"
-
+	configDiagnosticMode      = "apigeesync_diagnostic_mode"
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
 	configBearerToken = "apigeesync_bearer_token"
+)
+
+const (
+	ApigeeSyncEventSelector = "ApigeeSync"
 )
 
 var (
@@ -54,6 +57,7 @@ var (
 	apidChangeManager   changeManager
 	apidSnapshotManager snapShotManager
 	httpclient          *http.Client
+	isOfflineMode       bool
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -77,6 +81,7 @@ func init() {
 func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
+	config.SetDefault(configDiagnosticMode, false)
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -86,9 +91,7 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func initVariables(services apid.Services) error {
-	dataService = services.Data()
-	events = services.Events()
+func initVariables() error {
 
 	tr := &http.Transport{
 		MaxIdleConnsPerHost: maxIdleConnsPerHost,
@@ -127,15 +130,24 @@ func initVariables(services apid.Services) error {
 }
 
 func createManagers() {
-	apidSnapshotManager = createSnapShotManager()
-	apidChangeManager = createChangeManager()
+	if isOfflineMode {
+		apidSnapshotManager = &offlineSnapshotManager{}
+		apidChangeManager = &offlineChangeManager{}
+	} else {
+		apidSnapshotManager = createSnapShotManager()
+		apidChangeManager = createChangeManager()
+	}
+
 	apidTokenManager = createSimpleTokenManager()
 }
 
 func checkForRequiredValues() error {
+	required := []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret}
+	if !isOfflineMode {
+		required = append(required, configSnapServerBaseURI, configChangeServerBaseURI)
+	}
 	// check for required values
-	for _, key := range []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret,
-		configSnapServerBaseURI, configChangeServerBaseURI} {
+	for _, key := range required {
 		if !config.IsSet(key) {
 			return fmt.Errorf("Missing required config value: %s", key)
 		}
@@ -154,18 +166,22 @@ func SetLogger(logger apid.LogService) {
 
 /* initialization */
 func _initPlugin(services apid.Services) error {
-	SetLogger(services.Log().ForModule("apigeeSync"))
 	log.Debug("start init")
 
 	config = services.Config()
 	initConfigDefaults()
+
+	if config.GetBool(configDiagnosticMode) {
+		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
+		isOfflineMode = true
+	}
 
 	err := checkForRequiredValues()
 	if err != nil {
 		return err
 	}
 
-	err = initVariables(services)
+	err = initVariables()
 	if err != nil {
 		return err
 	}
@@ -174,6 +190,9 @@ func _initPlugin(services apid.Services) error {
 }
 
 func initPlugin(services apid.Services) (apid.PluginData, error) {
+	SetLogger(services.Log().ForModule("apigeeSync"))
+	dataService = services.Data()
+	events = services.Events()
 
 	err := _initPlugin(services)
 	if err != nil {

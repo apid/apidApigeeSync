@@ -24,8 +24,87 @@ import (
 )
 
 var _ = Describe("Sync", func() {
+	Context("offline mode", func() {
+		var (
+			testInstanceID   = GenerateUUID()
+			testInstanceName = "offline-instance-name"
+			testClusterID    = "offline-cluster-id"
+			testLastSnapshot = "offline-last-snapshot"
+			testChangeMan    *dummyChangeManager
+		)
 
-	Context("Sync", func() {
+		var _ = BeforeEach(func() {
+			config.Set(configDiagnosticMode, true)
+			config.Set(configApidClusterId, testClusterID)
+			_initPlugin(apid.AllServices())
+			apidSnapshotManager = &dummySnapshotManager{}
+			testChangeMan = &dummyChangeManager{
+				pollChangeWithBackoffChan: make(chan bool, 1),
+			}
+			apidChangeManager = testChangeMan
+			apidTokenManager = &dummyTokenManager{}
+			apidInfo = apidInstanceInfo{
+				InstanceID:   testInstanceID,
+				InstanceName: testInstanceName,
+				ClusterID:    testClusterID,
+				LastSnapshot: testLastSnapshot,
+			}
+			updateApidInstanceInfo()
+
+		})
+
+		var _ = AfterEach(func() {
+			config.Set(configDiagnosticMode, false)
+			if wipeDBAferTest {
+				db, err := dataService.DB()
+				Expect(err).NotTo(HaveOccurred())
+				_, err = db.Exec("DELETE FROM APID")
+				Expect(err).NotTo(HaveOccurred())
+			}
+			wipeDBAferTest = true
+			newInstanceID = true
+			isOfflineMode = false
+		})
+
+		It("offline mode should bootstrap from local DB", func(done Done) {
+
+			Expect(apidInfo.LastSnapshot).NotTo(BeEmpty())
+
+			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
+
+				if s, ok := event.(*common.Snapshot); ok {
+					// In this test, the changeManager.pollChangeWithBackoff() has not been launched when changeManager closed
+					// This is because the changeManager.pollChangeWithBackoff() in bootstrap() happened after this handler
+					Expect(s.SnapshotInfo).Should(Equal(testLastSnapshot))
+					Expect(s.Tables).To(BeNil())
+					close(done)
+				}
+			})
+			pie := apid.PluginsInitializedEvent{
+				Description: "plugins initialized",
+			}
+			pie.Plugins = append(pie.Plugins, pluginData)
+			postInitPlugins(pie)
+
+		}, 3)
+
+	})
+
+	Context("online mode", func() {
+		var _ = BeforeEach(func() {
+			_initPlugin(apid.AllServices())
+			createManagers()
+		})
+
+		var _ = AfterEach(func() {
+			if wipeDBAferTest {
+				db, err := dataService.DB()
+				Expect(err).NotTo(HaveOccurred())
+				_, err = db.Exec("DELETE FROM APID")
+				Expect(err).NotTo(HaveOccurred())
+			}
+			wipeDBAferTest = true
+		})
 
 		const expectedDataScopeId1 = "dataScope1"
 		const expectedDataScopeId2 = "dataScope2"

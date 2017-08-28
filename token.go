@@ -169,6 +169,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 
 		if newInstanceID {
 			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
+			newInstanceID = false
 		} else {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}
@@ -208,15 +209,17 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 
 		log.Debugf("Got new token: %#v", token)
 
-		if newInstanceID {
-			newInstanceID = false
-			err = updateApidInstanceInfo()
-			if err != nil {
-				log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
-				return err
+		/*
+			if newInstanceID {
+				newInstanceID = false
+				err = updateApidInstanceInfo()
+				if err != nil {
+					log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
+					return err
 
+				}
 			}
-		}
+		*/
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
 

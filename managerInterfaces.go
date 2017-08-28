@@ -36,6 +36,7 @@ type snapShotManager interface {
 	downloadDataSnapshot()
 	storeDataSnapshot(snapshot *common.Snapshot)
 	downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error
+	startOnLocalSnapshot(snapshot string) *common.Snapshot
 }
 
 type changeManager interface {
