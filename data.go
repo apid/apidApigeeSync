@@ -79,7 +79,7 @@ func setDB(db apid.DB) {
 }
 
 //TODO if len(rows) > 1000, chunk it up and exec multiple inserts in the txn
-func insert(tableName string, rows []common.Row, txn *sql.Tx) bool {
+func insert(tableName string, rows []common.Row, txn apid.Tx) bool {
 
 	if len(rows) == 0 {
 		return false
@@ -133,7 +133,7 @@ func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
 	return values
 }
 
-func _delete(tableName string, rows []common.Row, txn *sql.Tx) bool {
+func _delete(tableName string, rows []common.Row, txn apid.Tx) bool {
 	pkeys, err := getPkeysForTable(tableName)
 	sort.Strings(pkeys)
 	if len(pkeys) == 0 || err != nil {
@@ -200,7 +200,7 @@ func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
 
 }
 
-func update(tableName string, oldRows, newRows []common.Row, txn *sql.Tx) bool {
+func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
 	pkeys, err := getPkeysForTable(tableName)
 	if len(pkeys) == 0 || err != nil {
 		log.Errorf("UPDATE No primary keys found for table.", tableName)
@@ -426,19 +426,29 @@ func updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	stmt, err := getDB().Prepare("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;")
+	db, err := dataService.DB()
 	if err != nil {
-		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		log.Errorf("updateLastSequence: Unable to get DB Err: {%v}", err)
 		return err
 	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(lastSequence)
+	tx, err := db.Begin()
 	if err != nil {
-		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
 
+	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;", lastSequence)
+	if err != nil {
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		rollbackTxn(tx)
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Tx Commit err : %v", err)
+		rollbackTxn(tx)
+		return err
+	}
 	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
 	log.Infof("Replication lastSequence=%s", lastSequence)
 	return nil
@@ -456,12 +466,18 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	if err != nil {
 		return
 	}
+	tx, err := db.Begin()
+	if err != nil {
+		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
+		return
+	}
 
-	err = db.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
+	err = tx.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
 		Scan(&info.InstanceID, &savedClusterId, &info.LastSnapshot)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
+			tx.Rollback()
 			return
 		} else {
 			// first start - no row, generate a UUID and store it
@@ -470,7 +486,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID = GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
-			db.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+			_, err = tx.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
 				info.InstanceID, info.ClusterID, "")
 		}
 	} else if savedClusterId != info.ClusterID {
@@ -479,9 +495,17 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		newInstanceID = true
 		info.InstanceID = GenerateUUID()
 
-		db.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
+		_, err = tx.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
 			info.InstanceID, info.ClusterID, "")
 		info.LastSnapshot = ""
+	}
+	if err != nil {
+		err = tx.Commit()
+		if err != nil {
+			rollbackTxn(tx)
+		}
+	} else {
+		rollbackTxn(tx)
 	}
 	return
 }
@@ -493,18 +517,32 @@ func updateApidInstanceInfo() error {
 	if err != nil {
 		return err
 	}
-
-	rows, err := db.Exec(`
+	tx, err := db.Begin()
+	if err != nil {
+		log.Errorf("updateApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
+		return err
+	}
+	rows, err := tx.Exec(`
 		REPLACE
 		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
 		VALUES (?,?,?)`,
 		apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
 	if err != nil {
+		log.Errorf("updateApidInstanceInfo: Tx Exec Err: {%v}", err)
+		rollbackTxn(tx)
 		return err
 	}
 	n, err := rows.RowsAffected()
 	if err == nil && n == 0 {
 		err = errors.New("no rows affected")
+		rollbackTxn(tx)
+	} else if err == nil {
+		err = tx.Commit()
+		if err != nil {
+			rollbackTxn(tx)
+		}
+	} else {
+		rollbackTxn(tx)
 	}
 
 	return err

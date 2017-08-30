@@ -58,43 +58,44 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 }
 
+func rollbackTxn (tx apid.Tx) {
+	err := tx.Rollback()
+	if err != nil {
+		log.Panicf("Unable to rollback Transaction. DB in inconsistent state. Err {%v}", err)
+	}
+}
+
 func processSqliteSnapshot(db apid.DB) {
 
 	var numApidClusters int
 	tx, err := db.Begin()
 	if err != nil {
-		log.Panicf("Unable to open DB txn: %v", err)
+		log.Panicf("Unable to open DB txn: {%v}", err.Error())
 	}
 
 	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
+		log.Panicf("Unable to read database: {%s}", err.Error())
 	}
 
 	if numApidClusters != 1 {
 		log.Panic("Illegal state for apid_cluster. Must be a single row.")
 	}
 
-	prep, err := tx.Prepare("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
+	_, err = tx.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
 	if err != nil {
 		if err.Error() == "duplicate column name: last_sequence" {
-			tx.Rollback()
+			rollbackTxn(tx)
 			return
 		} else {
-			log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error ", err)
+			log.Panicf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
 		}
 	}
-
-	_, err = prep.Exec()
+	err = tx.Commit()
 	if err != nil {
-		log.Debugf("Snapshot processing DB exec failed. Err: %v", err)
-		prep.Close()
-		tx.Rollback()
+		rollbackTxn(tx)
 		return
 	}
-	prep.Close()
-	tx.Commit()
-
 }
 
 func processChangeList(changes *common.ChangeList) bool {
