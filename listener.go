@@ -63,12 +63,12 @@ func processSqliteSnapshot(db apid.DB) {
 	var numApidClusters int
 	tx, err := db.Begin()
 	if err != nil {
-		log.Panicf("Unable to open DB txn: %v", err)
+		log.Panicf("Unable to open DB txn: {%v}", err.Error())
 	}
 
 	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
+		log.Panicf("Unable to read database: {%s}", err.Error())
 	}
 
 	if numApidClusters != 1 {
@@ -81,13 +81,13 @@ func processSqliteSnapshot(db apid.DB) {
 			tx.Rollback()
 			return
 		} else {
-			log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error ", err)
+			log.Panicf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
 		}
 	}
 
 	_, err = prep.Exec()
 	if err != nil {
-		log.Debugf("Snapshot processing DB exec failed. Err: %v", err)
+		log.Errorf("Snapshot processing DB exec failed. Err: {%v}", err)
 		prep.Close()
 		tx.Rollback()
 		return
