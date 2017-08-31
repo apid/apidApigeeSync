@@ -15,7 +15,6 @@
 package apidApigeeSync
 
 import (
-	"database/sql"
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
@@ -59,7 +58,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 }
 
-func rollbackTxn (tx *sql.Tx) {
+func rollbackTxn (tx apid.Tx) {
 	err := tx.Rollback()
 	if err != nil {
 		log.Panicf("Unable to rollback Transaction. DB in inconsistent state. Err {%v}", err)
