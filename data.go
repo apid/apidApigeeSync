@@ -49,7 +49,12 @@ This plugin uses 2 databases:
 (Currently, the snapshot never changes, but this is future-proof)
 */
 func initDB(db apid.DB) error {
-	_, err := db.Exec(`
+	tx, err := db.Begin()
+	if err != nil {
+		log.Errorf("initDB(): Unable to get DB tx err: {%v}", err)
+		return err
+	}
+	_, err = tx.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
 	    apid_cluster_id text,
@@ -58,9 +63,16 @@ func initDB(db apid.DB) error {
 	);
 	`)
 	if err != nil {
+		rollbackTxn(tx)
+		log.Errorf("initDB(): Unable to tx exec err: {%v}", err)
 		return err
 	}
-
+	err = tx.Commit()
+	if err != nil {
+		rollbackTxn(tx)
+		log.Errorf("initDB(): tx commit err: {%v}", err)
+		return err
+	}
 	log.Debug("Database tables created.")
 	return nil
 }
@@ -426,18 +438,13 @@ func updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	db, err := dataService.DB()
-	if err != nil {
-		log.Errorf("updateLastSequence: Unable to get DB Err: {%v}", err)
-		return err
-	}
-	tx, err := db.Begin()
+	tx, err := getDB().Begin()
 	if err != nil {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
 
-	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;", lastSequence)
+	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=?;", lastSequence)
 	if err != nil {
 		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
 		rollbackTxn(tx)
@@ -450,7 +457,6 @@ func updateLastSequence(lastSequence string) error {
 		return err
 	}
 	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
-	log.Infof("Replication lastSequence=%s", lastSequence)
 	return nil
 }
 
@@ -499,7 +505,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID, info.ClusterID, "")
 		info.LastSnapshot = ""
 	}
-	if err != nil {
+	if err == nil {
 		err = tx.Commit()
 		if err != nil {
 			rollbackTxn(tx)

@@ -181,10 +181,12 @@ var _ = Describe("Sync", func() {
 					Expect(true).To(Equal(numApidClusters.Next()))
 					numApidClusters.Scan(&rowCount)
 					Expect(1).To(Equal(rowCount))
+					numApidClusters.Close()
 					apidClusters, _ := db.Query("select id from edgex_apid_cluster;")
 					apidClusters.Next()
 					apidClusters.Scan(&id)
 					Expect(id).To(Equal(expectedClusterId))
+					apidClusters.Close()
 
 					numDataScopes, _ := db.Query("select distinct count(*) from edgex_data_scope;")
 					Expect(true).To(Equal(numDataScopes.Next()))
