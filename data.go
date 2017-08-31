@@ -426,19 +426,29 @@ func updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	stmt, err := getDB().Prepare("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;")
+	db, err := dataService.DB()
 	if err != nil {
-		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		log.Errorf("updateLastSequence: Unable to get DB Err: {%v}", err)
 		return err
 	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(lastSequence)
+	tx, err := db.Begin()
 	if err != nil {
-		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
 
+	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=$1;", lastSequence)
+	if err != nil {
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		rollbackTxn(tx)
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Tx Commit err : %v", err)
+		rollbackTxn(tx)
+		return err
+	}
 	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
 	log.Infof("Replication lastSequence=%s", lastSequence)
 	return nil
