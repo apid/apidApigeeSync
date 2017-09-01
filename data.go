@@ -438,12 +438,7 @@ func updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	db, err := dataService.DBVersion(apidInfo.LastSnapshot)
-	if err != nil {
-		log.Errorf("updateLastSequence: Unable to get DB Err: {%v}", err)
-		return err
-	}
-	tx, err := db.Begin()
+	tx, err := getDB().Begin()
 	if err != nil {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
