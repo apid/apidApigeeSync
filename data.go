@@ -505,7 +505,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID, info.ClusterID, "")
 		info.LastSnapshot = ""
 	}
-	if err != nil {
+	if err == nil {
 		err = tx.Commit()
 		if err != nil {
 			rollbackTxn(tx)
