@@ -58,8 +58,12 @@ var _ = Describe("Sync", func() {
 			if wipeDBAferTest {
 				db, err := dataService.DB()
 				Expect(err).NotTo(HaveOccurred())
-				_, err = db.Exec("DELETE FROM APID")
+				tx, err := db.Begin()
+				_, err = tx.Exec("DELETE FROM APID")
 				Expect(err).NotTo(HaveOccurred())
+				err = tx.Commit()
+				Expect(err).NotTo(HaveOccurred())
+
 			}
 			wipeDBAferTest = true
 			newInstanceID = true
@@ -100,7 +104,10 @@ var _ = Describe("Sync", func() {
 			if wipeDBAferTest {
 				db, err := dataService.DB()
 				Expect(err).NotTo(HaveOccurred())
-				_, err = db.Exec("DELETE FROM APID")
+				tx, err := db.Begin()
+				_, err = tx.Exec("DELETE FROM APID")
+				Expect(err).NotTo(HaveOccurred())
+				err = tx.Commit()
 				Expect(err).NotTo(HaveOccurred())
 			}
 			wipeDBAferTest = true
