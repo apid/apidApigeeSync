@@ -15,6 +15,7 @@
 package apidApigeeSync
 
 import (
+	"errors"
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
@@ -130,6 +131,7 @@ func processChangeList(changes *common.ChangeList) bool {
 			ok = _delete(change.Table, []common.Row{change.OldRow}, tx)
 		}
 		if !ok {
+			err = errors.New("Sql Operation error. Operation rollbacked")
 			log.Error("Sql Operation error. Operation rollbacked")
 			return ok
 		}
