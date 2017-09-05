@@ -54,9 +54,6 @@ func initDB(db apid.DB) error {
 		log.Errorf("initDB(): Unable to get DB tx err: {%v}", err)
 		return err
 	}
-
-	defer completeTxn(tx, err)
-
 	_, err = tx.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
@@ -66,7 +63,14 @@ func initDB(db apid.DB) error {
 	);
 	`)
 	if err != nil {
+		rollbackTxn(tx)
 		log.Errorf("initDB(): Unable to tx exec err: {%v}", err)
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		rollbackTxn(tx)
+		log.Errorf("initDB(): tx commit err: {%v}", err)
 		return err
 	}
 	log.Debug("Database tables created.")
@@ -173,7 +177,6 @@ func _delete(tableName string, rows []common.Row, txn apid.Tx) bool {
 		if err == nil && affected != 0 {
 			log.Debugf("DELETE Success [%s] values=%v", sql, values)
 		} else if err == nil && affected == 0 {
-			err = errors.New("Entry not found. Nothing to delete")
 			log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
 			return false
 		} else {
@@ -441,11 +444,16 @@ func updateLastSequence(lastSequence string) error {
 		return err
 	}
 
-	defer completeTxn(tx, err)
-
 	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=?;", lastSequence)
 	if err != nil {
 		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
+		rollbackTxn(tx)
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		log.Errorf("UPDATE EDGEX_APID_CLUSTER Tx Commit err : %v", err)
+		rollbackTxn(tx)
 		return err
 	}
 	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
@@ -469,13 +477,13 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return
 	}
-	defer completeTxn(tx, err)
 
 	err = tx.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
 		Scan(&info.InstanceID, &savedClusterId, &info.LastSnapshot)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Errorf("Unable to retrieve apidInstanceInfo: %v", err)
+			tx.Rollback()
 			return
 		} else {
 			// first start - no row, generate a UUID and store it
@@ -497,6 +505,14 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID, info.ClusterID, "")
 		info.LastSnapshot = ""
 	}
+	if err == nil {
+		err = tx.Commit()
+		if err != nil {
+			rollbackTxn(tx)
+		}
+	} else {
+		rollbackTxn(tx)
+	}
 	return
 }
 
@@ -512,9 +528,6 @@ func updateApidInstanceInfo() error {
 		log.Errorf("updateApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
-
-	defer completeTxn(tx, err)
-
 	rows, err := tx.Exec(`
 		REPLACE
 		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
@@ -522,12 +535,20 @@ func updateApidInstanceInfo() error {
 		apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
 	if err != nil {
 		log.Errorf("updateApidInstanceInfo: Tx Exec Err: {%v}", err)
+		rollbackTxn(tx)
 		return err
 	}
-
 	n, err := rows.RowsAffected()
 	if err == nil && n == 0 {
 		err = errors.New("no rows affected")
+		rollbackTxn(tx)
+	} else if err == nil {
+		err = tx.Commit()
+		if err != nil {
+			rollbackTxn(tx)
+		}
+	} else {
+		rollbackTxn(tx)
 	}
 
 	return err
