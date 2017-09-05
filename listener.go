@@ -58,8 +58,17 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 }
 
-func rollbackTxn (tx apid.Tx) {
-	err := tx.Rollback()
+
+func completeTxn (tx apid.Tx, err error) {
+	if err == nil {
+		err = tx.Commit()
+		if err == nil {
+			log.Debugf("Transaction committed successfully")
+			return
+		}
+		log.Errorf("Transaction commit failed with error : {%v}", err)
+	}
+	err = tx.Rollback()
 	if err != nil {
 		log.Panicf("Unable to rollback Transaction. DB in inconsistent state. Err {%v}", err)
 	}
@@ -72,7 +81,7 @@ func processSqliteSnapshot(db apid.DB) {
 	if err != nil {
 		log.Panicf("Unable to open DB txn: {%v}", err.Error())
 	}
-
+	defer completeTxn(tx, err)
 	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
 		log.Panicf("Unable to read database: {%s}", err.Error())
@@ -85,16 +94,10 @@ func processSqliteSnapshot(db apid.DB) {
 	_, err = tx.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
 	if err != nil {
 		if err.Error() == "duplicate column name: last_sequence" {
-			rollbackTxn(tx)
 			return
 		} else {
 			log.Panicf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
 		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		rollbackTxn(tx)
-		return
 	}
 }
 
@@ -107,7 +110,7 @@ func processChangeList(changes *common.ChangeList) bool {
 		log.Panicf("Error processing ChangeList: %v", err)
 		return ok
 	}
-	defer tx.Rollback()
+	defer completeTxn(tx, err)
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
 
@@ -130,12 +133,6 @@ func processChangeList(changes *common.ChangeList) bool {
 			log.Error("Sql Operation error. Operation rollbacked")
 			return ok
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		log.Panicf("Error processing ChangeList: %v", err)
-		return false
 	}
 
 	return ok
