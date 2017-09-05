@@ -195,11 +195,14 @@ var _ = Describe("Sync", func() {
 					Expect(id).To(Equal(expectedClusterId))
 					apidClusters.Close()
 
-					numDataScopes, _ := db.Query("select distinct count(*) from edgex_data_scope;")
+					numDataScopes, err := db.Query("select distinct count(*) from edgex_data_scope;")
+					Expect(err).NotTo(HaveOccurred())
 					Expect(true).To(Equal(numDataScopes.Next()))
 					numDataScopes.Scan(&rowCount)
 					Expect(2).To(Equal(rowCount))
-					dataScopes, _ := db.Query("select id from edgex_data_scope;")
+					numDataScopes.Close()
+					dataScopes, err := db.Query("select id from edgex_data_scope;")
+					Expect(err).NotTo(HaveOccurred())
 					dataScopes.Next()
 					dataScopes.Scan(&id)
 					dataScopes.Next()
@@ -211,6 +214,7 @@ var _ = Describe("Sync", func() {
 						dataScopes.Scan(&id)
 						Expect(id).To(Equal(expectedDataScopeId1))
 					}
+					dataScopes.Close()
 
 				} else if cl, ok := event.(*common.ChangeList); ok {
 					closeDone = apidChangeManager.close()
