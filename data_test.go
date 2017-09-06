@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 	"sort"
 	"strconv"
+	"github.com/30x/apid-core"
 )
 
 var _ = Describe("data access tests", func() {
@@ -31,31 +32,7 @@ var _ = Describe("data access tests", func() {
 		db, err := dataService.DBVersion("data_test_" + strconv.Itoa(testCount))
 		Expect(err).Should(Succeed())
 		initDB(db)
-		//all tests in this file operate on the api_product table.  Create the necessary tables for this here
-		db.Exec("CREATE TABLE _transicator_tables " +
-			"(tableName varchar not null, columnName varchar not null, " +
-			"typid integer, primaryKey bool);")
-		db.Exec("DELETE from _transicator_tables")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','id',2950,1)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','tenant_id',1043,1)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','description',1043,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','api_resources',1015,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','approval_type',1043,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','scopes',1015,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','proxies',1015,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','environments',1015,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_at',1114,1)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_by',1043,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_at',1114,1)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_by',1043,0)")
-		db.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','_change_selector',1043,0)")
-
-		db.Exec("CREATE TABLE kms_api_product (id text,tenant_id text,name text, description text, " +
-			"api_resources text,approval_type text,scopes text,proxies text, environments text," +
-			"created_at blob, created_by text,updated_at blob,updated_by text,_change_selector text, " +
-			"primary key (id,tenant_id,created_at,updated_at));")
-		db.Exec("DELETE from kms_api_product")
-
+		createBootstrapTables(db)
 		setDB(db)
 	})
 
@@ -1204,3 +1181,34 @@ var _ = Describe("data access tests", func() {
 		}, 3)
 	})
 })
+
+func createBootstrapTables(db apid.DB) {
+	tx, err := db.Begin()
+	Expect(err).To(Succeed())
+	//all tests in this file operate on the api_product table.  Create the necessary tables for this here
+	tx.Exec("CREATE TABLE _transicator_tables " +
+		"(tableName varchar not null, columnName varchar not null, " +
+		"typid integer, primaryKey bool);")
+	tx.Exec("DELETE from _transicator_tables")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','id',2950,1)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','tenant_id',1043,1)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','description',1043,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','api_resources',1015,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','approval_type',1043,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','scopes',1015,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','proxies',1015,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','environments',1015,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_at',1114,1)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','created_by',1043,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_at',1114,1)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','updated_by',1043,0)")
+	tx.Exec("INSERT INTO _transicator_tables VALUES('kms_api_product','_change_selector',1043,0)")
+
+	tx.Exec("CREATE TABLE kms_api_product (id text,tenant_id text,name text, description text, " +
+		"api_resources text,approval_type text,scopes text,proxies text, environments text," +
+		"created_at blob, created_by text,updated_at blob,updated_by text,_change_selector text, " +
+		"primary key (id,tenant_id,created_at,updated_at));")
+	tx.Exec("DELETE from kms_api_product")
+	err = tx.Commit()
+	Expect(err).To(Succeed())
+}
