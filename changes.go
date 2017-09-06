@@ -336,7 +336,7 @@ func updateSequence(seq string) {
 	lastSequence = seq
 	err := updateLastSequence(seq)
 	if err != nil {
-		log.Panic("Unable to update Sequence in DB")
+		log.Panicf("Unable to update Sequence in DB. Err {%v}", err)
 	}
 
 }
