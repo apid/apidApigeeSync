@@ -15,6 +15,7 @@
 package apidApigeeSync
 
 import (
+	"errors"
 	"github.com/30x/apid-core"
 	"github.com/apigee-labs/transicator/common"
 )
@@ -58,30 +59,45 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 }
 
+
+func completeTxn (tx apid.Tx, err error) {
+	if err == nil {
+		err = tx.Commit()
+		if err == nil {
+			log.Debugf("Transaction committed successfully")
+			return
+		}
+		log.Errorf("Transaction commit failed with error : {%v}", err)
+	}
+	err = tx.Rollback()
+	if err != nil {
+		log.Panicf("Unable to rollback Transaction. DB in inconsistent state. Err {%v}", err)
+	}
+}
+
 func processSqliteSnapshot(db apid.DB) {
 
 	var numApidClusters int
-	apidClusters, err := db.Query("SELECT COUNT(*) FROM edgex_apid_cluster")
+	tx, err := db.Begin()
 	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
+		log.Panicf("Unable to open DB txn: {%v}", err.Error())
 	}
-	apidClusters.Next()
-	err = apidClusters.Scan(&numApidClusters)
+	defer completeTxn(tx, err)
+	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
-		log.Panicf("Unable to read database: %s", err.Error())
+		log.Panicf("Unable to read database: {%s}", err.Error())
 	}
 
 	if numApidClusters != 1 {
 		log.Panic("Illegal state for apid_cluster. Must be a single row.")
 	}
 
-	_, err = db.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
+	_, err = tx.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
 	if err != nil {
 		if err.Error() == "duplicate column name: last_sequence" {
 			return
 		} else {
-			log.Error("[[" + err.Error() + "]]")
-			log.Panicf("Unable to create last_sequence column on DB.  Unrecoverable error ", err)
+			log.Panicf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
 		}
 	}
 }
@@ -95,7 +111,7 @@ func processChangeList(changes *common.ChangeList) bool {
 		log.Panicf("Error processing ChangeList: %v", err)
 		return ok
 	}
-	defer tx.Rollback()
+	defer completeTxn(tx, err)
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
 
@@ -115,15 +131,10 @@ func processChangeList(changes *common.ChangeList) bool {
 			ok = _delete(change.Table, []common.Row{change.OldRow}, tx)
 		}
 		if !ok {
+			err = errors.New("Sql Operation error. Operation rollbacked")
 			log.Error("Sql Operation error. Operation rollbacked")
 			return ok
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		log.Panicf("Error processing ChangeList: %v", err)
-		return false
 	}
 
 	return ok

@@ -82,7 +82,10 @@ var _ = Describe("Change Agent", func() {
 			if wipeDBAferTest {
 				db, err := dataService.DB()
 				Expect(err).Should(Succeed())
-				_, err = db.Exec("DELETE FROM APID")
+				tx, err := db.Begin()
+				_, err = tx.Exec("DELETE FROM APID")
+				Expect(err).Should(Succeed())
+				err = tx.Commit()
 				Expect(err).Should(Succeed())
 			}
 			wipeDBAferTest = true

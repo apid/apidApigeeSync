@@ -1,7 +1,7 @@
 language: go
 
 go:
-  - 1.7.x
+  - 1.8.3
 
 before_install:
   - sudo add-apt-repository ppa:masterminds/glide -y
@@ -9,7 +9,7 @@ before_install:
   - sudo apt-get install glide -y
 
 install:
-  - glide install
+  - glide up --strip-vendor
 
 script:
   - go test
