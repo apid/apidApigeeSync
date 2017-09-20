@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package: github.com/30x/apidApigeeSync
+package: github.com/apid/apidApigeeSync
 import:
 - package: github.com/30x/apid-core
   version: Release_170815-EdgeX-EAP

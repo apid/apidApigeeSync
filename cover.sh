@@ -19,7 +19,7 @@
 set -e
 echo "mode: atomic" > coverage.txt
 
-go test -coverprofile=profile.out -covermode=atomic github.com/30x/apidApigeeSync
+go test -coverprofile=profile.out -covermode=atomic github.com/apid/apidApigeeSync
 if [ -f profile.out ]; then
     tail -n +2 profile.out >> coverage.txt
     rm profile.out

@@ -21,7 +21,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/30x/apid-core"
+	"github.com/apid/apid-core"
 )
 
 const (

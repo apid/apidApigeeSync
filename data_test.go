@@ -15,13 +15,13 @@
 package apidApigeeSync
 
 import (
-	"github.com/30x/apid-core/data"
+	"github.com/apid/apid-core/data"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"sort"
 	"strconv"
-	"github.com/30x/apid-core"
+	"github.com/apid/apid-core"
 )
 
 var _ = Describe("data access tests", func() {
