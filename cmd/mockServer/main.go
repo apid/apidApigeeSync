@@ -20,9 +20,9 @@ import (
 	"os"
 
 
-	"github.com/30x/apid-core"
-	"github.com/30x/apid-core/factory"
-	"github.com/30x/apidApigeeSync"
+	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/factory"
+	"github.com/apid/apidApigeeSync"
 )
 
 // runs a mock server standalone

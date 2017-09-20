@@ -15,8 +15,8 @@
 package apidApigeeSync
 
 import (
-	"github.com/30x/apid-core"
-	"github.com/30x/apid-core/data"
+	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/data"
 	"github.com/apigee-labs/transicator/common"
 	"net/http"
 	"os"
