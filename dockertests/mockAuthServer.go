@@ -16,8 +16,8 @@ package dockertests
 
 import (
 	"encoding/json"
-	"github.com/30x/apid-core"
-	"github.com/30x/apidApigeeSync"
+	"github.com/apid/apid-core"
+	"github.com/apid/apidApigeeSync"
 	"net/http"
 )
 

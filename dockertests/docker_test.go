@@ -16,9 +16,9 @@ package dockertests
 
 import (
 	"encoding/json"
-	"github.com/30x/apid-core"
-	"github.com/30x/apid-core/factory"
-	_ "github.com/30x/apidApigeeSync"
+	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/factory"
+	_ "github.com/apid/apidApigeeSync"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

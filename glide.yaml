@@ -15,7 +15,7 @@
 package: github.com/apid/apidApigeeSync
 import:
 - package: github.com/apid/apid-core
-  version: 30xtoapid
+  version: master
 testImport:
 - package: github.com/onsi/ginkgo/ginkgo
 - package: github.com/onsi/gomega
