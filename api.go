@@ -16,7 +16,7 @@ package apidApigeeSync
 
 import (
 	"encoding/json"
-	"github.com/30x/apid-core"
+	"github.com/apid/apid-core"
 	"net/http"
 	"strconv"
 	"time"

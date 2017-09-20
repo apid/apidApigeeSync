@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package: github.com/30x/apidApigeeSync
+package: github.com/apid/apidApigeeSync
 import:
-- package: github.com/30x/apid-core
-  version: master
+- package: github.com/apid/apid-core
+  version: 30xtoapid
 testImport:
 - package: github.com/onsi/ginkgo/ginkgo
 - package: github.com/onsi/gomega
