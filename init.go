@@ -75,7 +75,7 @@ type pluginDetail struct {
 }
 
 func init() {
-	apid.RegisterPlugin(initPlugin)
+	apid.RegisterPlugin(initPlugin, pluginData)
 }
 
 func initConfigDefaults() {
