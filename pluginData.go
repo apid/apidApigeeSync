@@ -18,7 +18,7 @@ import "github.com/apid/apid-core"
 
 var pluginData = apid.PluginData{
 	Name:    "apidApigeeSync",
-	Version: "0.0.3",
+	Version: "0.0.4",
 	ExtraData: map[string]interface{}{
 		"schemaVersion": "0.0.2",
 	},
