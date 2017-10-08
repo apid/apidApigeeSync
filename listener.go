@@ -30,7 +30,7 @@ func processSnapshot(snapshot *common.Snapshot) {
 	var prevDb string
 	if apidInfo.LastSnapshot != "" && apidInfo.LastSnapshot != snapshot.SnapshotInfo {
 		log.Debugf("Release snapshot for {%s}. Switching to version {%s}",
-			apidInfo.LastSnapshot , snapshot.SnapshotInfo)
+			apidInfo.LastSnapshot, snapshot.SnapshotInfo)
 		prevDb = apidInfo.LastSnapshot
 	} else {
 		log.Debugf("Process snapshot for version {%s}",
@@ -59,22 +59,6 @@ func processSnapshot(snapshot *common.Snapshot) {
 	}
 }
 
-
-func completeTxn (tx apid.Tx, err error) {
-	if err == nil {
-		err = tx.Commit()
-		if err == nil {
-			log.Debugf("Transaction committed successfully")
-			return
-		}
-		log.Errorf("Transaction commit failed with error : {%v}", err)
-	}
-	err = tx.Rollback()
-	if err != nil {
-		log.Panicf("Unable to rollback Transaction. DB in inconsistent state. Err {%v}", err)
-	}
-}
-
 func processSqliteSnapshot(db apid.DB) {
 
 	var numApidClusters int
@@ -82,7 +66,7 @@ func processSqliteSnapshot(db apid.DB) {
 	if err != nil {
 		log.Panicf("Unable to open DB txn: {%v}", err.Error())
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
 		log.Panicf("Unable to read database: {%s}", err.Error())
@@ -100,6 +84,9 @@ func processSqliteSnapshot(db apid.DB) {
 			log.Panicf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
 		}
 	}
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Error when commit in processSqliteSnapshot: %v", err)
+	}
 }
 
 func processChangeList(changes *common.ChangeList) bool {
@@ -109,9 +96,8 @@ func processChangeList(changes *common.ChangeList) bool {
 	tx, err := getDB().Begin()
 	if err != nil {
 		log.Panicf("Error processing ChangeList: %v", err)
-		return ok
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 
 	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
 
@@ -133,9 +119,13 @@ func processChangeList(changes *common.ChangeList) bool {
 		if !ok {
 			err = errors.New("Sql Operation error. Operation rollbacked")
 			log.Error("Sql Operation error. Operation rollbacked")
-			return ok
+			return false
 		}
 	}
 
-	return ok
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Commit error in processChangeList: %v", err)
+		return false
+	}
+	return true
 }

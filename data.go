@@ -54,7 +54,7 @@ func initDB(db apid.DB) error {
 		log.Errorf("initDB(): Unable to get DB tx err: {%v}", err)
 		return err
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 	_, err = tx.Exec(`
 	CREATE TABLE IF NOT EXISTS APID (
 	    instance_id text,
@@ -65,6 +65,10 @@ func initDB(db apid.DB) error {
 	`)
 	if err != nil {
 		log.Errorf("initDB(): Unable to tx exec err: {%v}", err)
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Error when initDb: %v", err)
 		return err
 	}
 	log.Debug("Database tables created.")
@@ -437,14 +441,17 @@ func updateLastSequence(lastSequence string) error {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 	_, err = tx.Exec("UPDATE EDGEX_APID_CLUSTER SET last_sequence=?;", lastSequence)
 	if err != nil {
 		log.Errorf("UPDATE EDGEX_APID_CLUSTER Failed: %v", err)
 		return err
 	}
 	log.Debugf("UPDATE EDGEX_APID_CLUSTER Success: %s", lastSequence)
-	return nil
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Commit error in updateLastSequence: %v", err)
+	}
+	return err
 }
 
 func getApidInstanceInfo() (info apidInstanceInfo, err error) {
@@ -464,7 +471,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 	err = tx.QueryRow("SELECT instance_id, apid_cluster_id, last_snapshot_info FROM APID LIMIT 1").
 		Scan(&info.InstanceID, &savedClusterId, &info.LastSnapshot)
 	if err != nil {
@@ -491,6 +498,9 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			info.InstanceID, info.ClusterID, "")
 		info.LastSnapshot = ""
 	}
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Commit error in getApidInstanceInfo: %v", err)
+	}
 	return
 }
 
@@ -506,7 +516,7 @@ func updateApidInstanceInfo() error {
 		log.Errorf("updateApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
 	}
-	defer completeTxn(tx, err)
+	defer tx.Rollback()
 	rows, err := tx.Exec(`
 		REPLACE
 		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
@@ -519,6 +529,9 @@ func updateApidInstanceInfo() error {
 	n, err := rows.RowsAffected()
 	if err == nil && n == 0 {
 		err = errors.New("no rows affected")
+	}
+	if err = tx.Commit(); err != nil {
+		log.Errorf("Commit error in updateApidInstanceInfo: %v", err)
 	}
 
 	return err
