@@ -17,6 +17,7 @@ package dockertests
 import (
 	"encoding/json"
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/util"
 	"github.com/apid/apidApigeeSync"
 	"net/http"
 )
@@ -27,7 +28,7 @@ type MockAuthServer struct {
 }
 
 func (m *MockAuthServer) sendToken(w http.ResponseWriter, req *http.Request) {
-	oauthToken := apidApigeeSync.GenerateUUID()
+	oauthToken := util.GenerateUUID()
 	res := apidApigeeSync.OauthToken{
 		AccessToken: oauthToken,
 		ExpiresIn:   oauthExpiresIn,

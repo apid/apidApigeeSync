@@ -16,6 +16,7 @@ package apidApigeeSync
 
 import (
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/util"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -26,7 +27,7 @@ import (
 var _ = Describe("Sync", func() {
 	Context("offline mode", func() {
 		var (
-			testInstanceID   = GenerateUUID()
+			testInstanceID   = util.GenerateUUID()
 			testInstanceName = "offline-instance-name"
 			testClusterID    = "offline-cluster-id"
 			testLastSnapshot = "offline-last-snapshot"

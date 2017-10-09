@@ -15,10 +15,10 @@
 package apidApigeeSync
 
 import (
-	"crypto/rand"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/apid/apid-core/util"
 	"sync"
 
 	"github.com/apid/apid-core"
@@ -482,7 +482,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 			// first start - no row, generate a UUID and store it
 			err = nil
 			newInstanceID = true
-			info.InstanceID = GenerateUUID()
+			info.InstanceID = util.GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
 			_, err = tx.Exec("INSERT INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
@@ -492,7 +492,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
 		err = nil
 		newInstanceID = true
-		info.InstanceID = GenerateUUID()
+		info.InstanceID = util.GenerateUUID()
 
 		_, err = tx.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
 			info.InstanceID, info.ClusterID, "")
@@ -535,22 +535,4 @@ func updateApidInstanceInfo() error {
 	}
 
 	return err
-}
-
-/*
- * generates a random uuid (mix of timestamp & crypto random string)
- */
-
-//TODO: Change to https://tools.ietf.org/html/rfc4122 based implementation such as https://github.com/google/uuid
-func GenerateUUID() string {
-
-	buff := make([]byte, 16)
-	numRead, err := rand.Read(buff)
-	if numRead != len(buff) || err != nil {
-		panic(err)
-	}
-	/* uuid v4 spec */
-	buff[6] = (buff[6] | 0x40) & 0x4F
-	buff[8] = (buff[8] | 0x80) & 0xBF
-	return fmt.Sprintf("%x-%x-%x-%x-%x", buff[0:4], buff[4:6], buff[6:8], buff[8:10], buff[10:])
 }
