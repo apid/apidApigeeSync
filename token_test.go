@@ -24,7 +24,7 @@ import (
 	"net/http/httptest"
 
 	"encoding/json"
-
+	"github.com/apid/apid-core/util"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -114,7 +114,7 @@ var _ = Describe("token", func() {
 				defer GinkgoRecover()
 
 				res := OauthToken{
-					AccessToken: GenerateUUID(),
+					AccessToken: util.GenerateUUID(),
 					ExpiresIn:   1,
 				}
 				body, err := json.Marshal(res)

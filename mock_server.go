@@ -29,6 +29,7 @@ import (
 
 	"database/sql"
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/util"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -248,7 +249,7 @@ func (m *MockServer) sendToken(w http.ResponseWriter, req *http.Request) {
 	err = json.Unmarshal(plInfo, &plugInfo)
 	Expect(err).NotTo(HaveOccurred())
 
-	m.oauthToken = GenerateUUID()
+	m.oauthToken = util.GenerateUUID()
 	res := OauthToken{
 		AccessToken: m.oauthToken,
 		ExpiresIn:   oauthExpiresIn,
@@ -266,7 +267,7 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
 
-	w.Header().Set("Transicator-Snapshot-TXID", GenerateUUID())
+	w.Header().Set("Transicator-Snapshot-TXID", util.GenerateUUID())
 
 	if len(scopes) == 1 {
 		//send bootstrap db
@@ -405,7 +406,7 @@ func (m *MockServer) stringColumnVal(v string) *common.ColumnVal {
 func (m *MockServer) createDeployment() tableRowMap {
 
 	deploymentID := m.nextDeploymentID()
-	bundleID := GenerateUUID()
+	bundleID := util.GenerateUUID()
 
 	listen := apid.Config().GetString("api_listen")
 	_, port, err := net.SplitHostPort(listen)
