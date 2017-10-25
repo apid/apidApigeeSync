@@ -153,11 +153,14 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	scopes := findScopesForId(apidInfo.ClusterID)
 	v := url.Values{}
 
+	blockValue := block
 	/* Sequence added to the query if available */
 	if lastSequence != "" {
 		v.Add("since", lastSequence)
+	} else {
+		blockValue = "0"
 	}
-	v.Add("block", block)
+	v.Add("block", blockValue)
 
 	/*
 	 * Include all the scopes associated with the config Id
@@ -253,6 +256,12 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 	/* If valid data present, Emit to plugins */
 	if len(resp.Changes) > 0 {
 		processChangeList(&resp)
+		select {
+		case <-time.After(httpTimeout):
+			log.Panic("Timeout. Plugins failed to respond to changes.")
+		case <-events.Emit(ApigeeSyncEventSelector, &resp):
+		}
+	} else if lastSequence == "" {
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
