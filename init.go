@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/util"
 )
 
 const (
@@ -39,6 +40,12 @@ const (
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
 	configBearerToken = "apigeesync_bearer_token"
+
+	configfwdProxyURL	=   "configfwdproxy_url"
+	configfwdProxyUser	=   "configfwdproxy_user"
+	configfwdProxyPasswd	=   "configfwdproxy_passwd"
+	configfwdProxyPort      =   "configfwdproxy_port"
+	configfwdProxyPortURL   =   "configcompletefwdp"
 )
 
 const (
@@ -91,11 +98,28 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
+func setFwdProxyConfig() {
+	var pURL string
+	fwdPrxy := config.GetString(configfwdProxyURL)
+	fwdPrxyUser := config.GetString(configfwdProxyUser)
+	fwdPrxyPass := config.GetString(configfwdProxyPasswd)
+	fwdPrxyPort := config.GetString(configfwdProxyPort)
+	if fwdPrxy != "" && fwdPrxyUser != "" && fwdPrxyPort != "" {
+		pURL = fwdPrxy + "://" + fwdPrxyUser + ":" + fwdPrxyPass + "@" + fwdPrxy + ":" + fwdPrxyPort
+	} else if fwdPrxy != "" && fwdPrxyPort != "" {
+		pURL = fwdPrxy + "://" + fwdPrxy + ":" + fwdPrxyPort
+	}
+	config.Set(configfwdProxyPortURL, pURL)
+}
+
 func initVariables() error {
 
-	tr := &http.Transport{
-		MaxIdleConnsPerHost: maxIdleConnsPerHost,
-	}
+	var tr *http.Transport
+
+	setFwdProxyConfig()
+	tr = util.Transport(config.GetString(configfwdProxyPortURL))
+	tr.MaxIdleConnsPerHost =  maxIdleConnsPerHost
+
 	httpclient = &http.Client{
 		Transport: tr,
 		Timeout:   httpTimeout,
