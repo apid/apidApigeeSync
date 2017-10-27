@@ -40,7 +40,6 @@ const (
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
 	configBearerToken = "apigeesync_bearer_token"
-	configfwdProxyPortURL   =   "configcompletefwdp"
 )
 
 const (
@@ -94,14 +93,12 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-
-
 func initVariables() error {
 
 	var tr *http.Transport
 
-	tr = util.Transport(config.GetString(configfwdProxyPortURL))
-	tr.MaxIdleConnsPerHost =  maxIdleConnsPerHost
+	tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
+	tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
 
 	httpclient = &http.Client{
 		Transport: tr,

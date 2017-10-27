@@ -416,8 +416,8 @@ var _ = Describe("Sync", func() {
 			var tr *http.Transport
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			}))
-			tr = util.Transport(config.GetString(ConfigfwdProxyPortURL))
-			tr.MaxIdleConnsPerHost =  maxIdleConnsPerHost
+			tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
+			tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
 
 			var rspcnt int = 0
 			ch := make(chan *http.Response)
