@@ -18,13 +18,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/apid/apid-core/util"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"sync/atomic"
 	"time"
-	"github.com/apid/apid-core/util"
 )
 
 var (
@@ -176,9 +176,9 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 		}
 
 		client := &http.Client{
-			Transport: util.Transport(config.GetString(configfwdProxyPortURL)),
-			Timeout: httpTimeout,
-			}
+			Transport: util.Transport(config.GetString(util.ConfigfwdProxyPortURL)),
+			Timeout:   httpTimeout,
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			log.Errorf("Unable to Connect to Edge Proxy Server: %v", err)
