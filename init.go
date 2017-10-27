@@ -40,11 +40,6 @@ const (
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
 	configBearerToken = "apigeesync_bearer_token"
-
-	configfwdProxyURL	=   "configfwdproxy_url"
-	configfwdProxyUser	=   "configfwdproxy_user"
-	configfwdProxyPasswd	=   "configfwdproxy_passwd"
-	configfwdProxyPort      =   "configfwdproxy_port"
 	configfwdProxyPortURL   =   "configcompletefwdp"
 )
 
@@ -89,6 +84,7 @@ func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
 	config.SetDefault(configDiagnosticMode, false)
+
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -98,25 +94,12 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func setFwdProxyConfig() {
-	var pURL string
-	fwdPrxy := config.GetString(configfwdProxyURL)
-	fwdPrxyUser := config.GetString(configfwdProxyUser)
-	fwdPrxyPass := config.GetString(configfwdProxyPasswd)
-	fwdPrxyPort := config.GetString(configfwdProxyPort)
-	if fwdPrxy != "" && fwdPrxyUser != "" && fwdPrxyPort != "" {
-		pURL = fwdPrxy + "://" + fwdPrxyUser + ":" + fwdPrxyPass + "@" + fwdPrxy + ":" + fwdPrxyPort
-	} else if fwdPrxy != "" && fwdPrxyPort != "" {
-		pURL = fwdPrxy + "://" + fwdPrxy + ":" + fwdPrxyPort
-	}
-	config.Set(configfwdProxyPortURL, pURL)
-}
+
 
 func initVariables() error {
 
 	var tr *http.Transport
 
-	setFwdProxyConfig()
 	tr = util.Transport(config.GetString(configfwdProxyPortURL))
 	tr.MaxIdleConnsPerHost =  maxIdleConnsPerHost
 
