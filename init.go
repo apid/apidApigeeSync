@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/util"
 )
 
 const (
@@ -82,6 +83,7 @@ func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
 	config.SetDefault(configDiagnosticMode, false)
+
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -93,9 +95,11 @@ func initConfigDefaults() {
 
 func initVariables() error {
 
-	tr := &http.Transport{
-		MaxIdleConnsPerHost: maxIdleConnsPerHost,
-	}
+	var tr *http.Transport
+
+	tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
+	tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
+
 	httpclient = &http.Client{
 		Transport: tr,
 		Timeout:   httpTimeout,
