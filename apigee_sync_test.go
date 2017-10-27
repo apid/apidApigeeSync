@@ -413,11 +413,12 @@ var _ = Describe("Sync", func() {
 		}, 3)
 
 		It("Reuse http.Client connection for multiple concurrent requests", func() {
+			var tr *http.Transport
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			}))
-			tr := &http.Transport{
-				MaxIdleConnsPerHost: maxIdleConnsPerHost,
-			}
+			tr = util.Transport(config.GetString(ConfigfwdProxyPortURL))
+			tr.MaxIdleConnsPerHost =  maxIdleConnsPerHost
+
 			var rspcnt int = 0
 			ch := make(chan *http.Response)
 			client := &http.Client{Transport: tr}
