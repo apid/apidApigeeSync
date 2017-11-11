@@ -39,7 +39,8 @@ const (
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
-	configBearerToken = "apigeesync_bearer_token"
+	configBearerToken       = "apigeesync_bearer_token"
+	configMachineKeyEnabled = "apigeesync_machine_key_enabled"
 )
 
 const (
@@ -83,7 +84,7 @@ func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
 	config.SetDefault(configDiagnosticMode, false)
-
+	config.SetDefault(configMachineKeyEnabled, false)
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -178,6 +179,15 @@ func _initPlugin(services apid.Services) error {
 	if config.GetBool(configDiagnosticMode) {
 		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
 		isOfflineMode = true
+	}
+
+	if val, ok := os.LookupEnv(configConsumerKey); ok {
+		config.Set(configConsumerKey, val)
+		log.Warnf("Got consumer key from env: %v", val)
+	}
+	if val, ok := os.LookupEnv(configConsumerSecret); ok {
+		config.Set(configConsumerSecret, val)
+		log.Warnf("Got consumer secret from env: %v", val)
 	}
 
 	err := checkForRequiredValues()
