@@ -183,11 +183,11 @@ func _initPlugin(services apid.Services) error {
 
 	if val, ok := os.LookupEnv(configConsumerKey); ok {
 		config.Set(configConsumerKey, val)
-		log.Warnf("Got consumer key from env: %v", val)
+		log.Debug("Got consumer key from env vars")
 	}
 	if val, ok := os.LookupEnv(configConsumerSecret); ok {
 		config.Set(configConsumerSecret, val)
-		log.Warnf("Got consumer secret from env: %v", val)
+		log.Debug("Got consumer secret from env vars")
 	}
 
 	err := checkForRequiredValues()
