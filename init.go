@@ -83,7 +83,6 @@ func initConfigDefaults() {
 	config.SetDefault(configPollInterval, 120*time.Second)
 	config.SetDefault(configSnapshotProtocol, "sqlite")
 	config.SetDefault(configDiagnosticMode, false)
-
 	name, errh := os.Hostname()
 	if (errh != nil) && (len(config.GetString(configName)) == 0) {
 		log.Errorf("Not able to get hostname for kernel. Please set '%s' property in config", configName)
@@ -178,6 +177,15 @@ func _initPlugin(services apid.Services) error {
 	if config.GetBool(configDiagnosticMode) {
 		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
 		isOfflineMode = true
+	}
+
+	if val, ok := os.LookupEnv(configConsumerKey); ok {
+		config.Set(configConsumerKey, val)
+		log.Debug("Got consumer key from env vars")
+	}
+	if val, ok := os.LookupEnv(configConsumerSecret); ok {
+		config.Set(configConsumerSecret, val)
+		log.Debug("Got consumer secret from env vars")
 	}
 
 	err := checkForRequiredValues()
