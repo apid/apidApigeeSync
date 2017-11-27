@@ -1,5 +1,7 @@
 # apidApigeeSync
 
+[![Build Status](https://travis-ci.org/apid/apidApigeeSync.svg)](https://travis-ci.org/apid/apidApigeeSync) [![GoDoc](https://godoc.org/github.com/apid/apidApigeeSync?status.svg)](https://godoc.org/github.com/apid/apidApigeeSync) [![Go Report Card](https://goreportcard.com/badge/github.com/apid/apidApigeeSync)](https://goreportcard.com/report/github.com/apid/apidApigeeSync)
+
 This core plugin for [apid](http://github.com/apid/apid) connects to the Apigee Change Agent and publishes the data
 changes events onto the apid Event service. It also coordinates DB initialization for plugins on startup.
 
