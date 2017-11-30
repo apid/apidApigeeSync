@@ -24,11 +24,15 @@ import (
 
 const tokenEndpoint = "/accesstoken"
 
-func InitAPI(services apid.Services) {
-	services.API().HandleFunc(tokenEndpoint, getAccessToken).Methods("GET")
+type ApiManager struct {
+	tokenMan tokenManager
 }
 
-func getAccessToken(w http.ResponseWriter, r *http.Request) {
+func (a *ApiManager) InitAPI(api apid.APIService) {
+	api.HandleFunc(tokenEndpoint, a.getAccessToken).Methods("GET")
+}
+
+func (a *ApiManager) getAccessToken(w http.ResponseWriter, r *http.Request) {
 	b := r.URL.Query().Get("block")
 	var timeout int
 	if b != "" {
@@ -42,14 +46,14 @@ func getAccessToken(w http.ResponseWriter, r *http.Request) {
 	log.Debugf("api timeout: %d", timeout)
 	ifNoneMatch := r.Header.Get("If-None-Match")
 
-	if apidTokenManager.getBearerToken() != ifNoneMatch {
-		w.Write([]byte(apidTokenManager.getBearerToken()))
+	if a.tokenMan.getBearerToken() != ifNoneMatch {
+		w.Write([]byte(a.tokenMan.getBearerToken()))
 		return
 	}
 
 	select {
-	case <-apidTokenManager.getTokenReadyChannel():
-		w.Write([]byte(apidTokenManager.getBearerToken()))
+	case <-a.tokenMan.getTokenReadyChannel():
+		w.Write([]byte(a.tokenMan.getBearerToken()))
 	case <-time.After(time.Duration(timeout) * time.Second):
 		w.WriteHeader(http.StatusNotModified)
 	}

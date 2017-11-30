@@ -15,7 +15,6 @@
 package apidApigeeSync
 
 import (
-	"github.com/apid/apid-core"
 	"net/http"
 	"time"
 )
@@ -25,37 +24,6 @@ const (
 	pluginTimeout       = time.Minute
 	maxIdleConnsPerHost = 10
 )
-
-var knownTables = make(map[string]bool)
-
-/*
- *  Start from existing snapshot if possible
- *  If an existing snapshot does not exist, use the apid scope to fetch
- *  all data scopes, then get a snapshot for those data scopes
- *
- *  Then, poll for changes
- */
-func bootstrap() {
-	if isOfflineMode && apidInfo.LastSnapshot == "" {
-		log.Panic("Diagnostic mode requires existent snapshot info in default DB.")
-	}
-
-	if apidInfo.LastSnapshot != "" {
-		snapshot := apidSnapshotManager.startOnLocalSnapshot(apidInfo.LastSnapshot)
-		events.EmitWithCallback(ApigeeSyncEventSelector, snapshot, func(event apid.Event) {
-			apidChangeManager.pollChangeWithBackoff()
-		})
-
-		log.Infof("Started on local snapshot: %s", snapshot.SnapshotInfo)
-		return
-	}
-
-	apidSnapshotManager.downloadBootSnapshot()
-	apidSnapshotManager.downloadDataSnapshot()
-
-	apidChangeManager.pollChangeWithBackoff()
-
-}
 
 /*
  * Call toExecute repeatedly until it does not return an error, with an exponential backoff policy
@@ -103,8 +71,8 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	}
 }
 
-func addHeaders(req *http.Request) {
-	req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
+func addHeaders(req *http.Request, token string) {
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("apid_instance_id", apidInfo.InstanceID)
 	req.Header.Set("apid_cluster_Id", apidInfo.ClusterID)
 	req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))

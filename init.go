@@ -15,7 +15,6 @@
 package apidApigeeSync
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -48,17 +47,13 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log                 apid.LogService
-	config              apid.ConfigService
-	dataService         apid.DataService
-	events              apid.EventsService
-	apidInfo            apidInstanceInfo
-	newInstanceID       bool
-	apidTokenManager    tokenManager
-	apidChangeManager   changeManager
-	apidSnapshotManager snapShotManager
-	httpclient          *http.Client
-	isOfflineMode       bool
+	log           apid.LogService
+	config        apid.ConfigService
+	dataService   apid.DataService
+	eventService  apid.EventsService
+	apiService    apid.APIService
+	apidInfo      apidInstanceInfo
+	isOfflineMode bool
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -68,6 +63,7 @@ var (
 
 type apidInstanceInfo struct {
 	InstanceID, InstanceName, ClusterID, LastSnapshot string
+	IsNewInstance                                     bool
 }
 
 type pluginDetail struct {
@@ -91,58 +87,6 @@ func initConfigDefaults() {
 	}
 	config.SetDefault(configName, name)
 	log.Debugf("Using %s as display name", config.GetString(configName))
-}
-
-func initVariables() error {
-
-	var tr *http.Transport
-
-	tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
-	tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
-
-	httpclient = &http.Client{
-		Transport: tr,
-		Timeout:   httpTimeout,
-		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
-			return nil
-		},
-	}
-
-	// set up default database
-	db, err := dataService.DB()
-	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
-	}
-	err = initDB(db)
-	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
-	}
-	setDB(db)
-
-	apidInfo, err = getApidInstanceInfo()
-	if err != nil {
-		return fmt.Errorf("Unable to get apid instance info: %v", err)
-	}
-
-	if config.IsSet(configApidInstanceID) {
-		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
-	}
-	config.Set(configApidInstanceID, apidInfo.InstanceID)
-
-	return nil
-}
-
-func createManagers() {
-	if isOfflineMode {
-		apidSnapshotManager = &offlineSnapshotManager{}
-		apidChangeManager = &offlineChangeManager{}
-	} else {
-		apidSnapshotManager = createSnapShotManager()
-		apidChangeManager = createChangeManager()
-	}
-
-	apidTokenManager = createSimpleTokenManager()
 }
 
 func checkForRequiredValues() error {
@@ -169,7 +113,7 @@ func SetLogger(logger apid.LogService) {
 }
 
 /* initialization */
-func _initPlugin(services apid.Services) error {
+func initConfigs(services apid.Services) error {
 	log.Debug("start init")
 
 	config = services.Config()
@@ -185,73 +129,87 @@ func _initPlugin(services apid.Services) error {
 		return err
 	}
 
-	err = initVariables()
+	return nil
+}
+
+func initManagers() error {
+	// check for forward proxy
+	var tr *http.Transport
+	tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
+	tr.MaxIdleConnsPerHost = maxIdleConnsPerHost
+
+	apidDbManager := creatDbManager()
+	db, err := dataService.DB()
 	if err != nil {
-		return err
+		return fmt.Errorf("Unable to access DB: %v", err)
+	}
+	apidDbManager.setDB(db)
+	err = apidDbManager.initDB()
+	if err != nil {
+		return fmt.Errorf("Unable to access DB: %v", err)
 	}
 
+	apidInfo, err = apidDbManager.getApidInstanceInfo()
+	if err != nil {
+		return fmt.Errorf("Unable to get apid instance info: %v", err)
+	}
+
+	if config.IsSet(configApidInstanceID) {
+		log.Warnf("ApigeeSync plugin overriding %s.", configApidInstanceID)
+	}
+	config.Set(configApidInstanceID, apidInfo.InstanceID)
+
+	apidTokenManager := createSimpleTokenManager(apidInfo.IsNewInstance)
+	var apidSnapshotManager snapShotManager
+	var apidChangeManager changeManager
+
+	if isOfflineMode {
+		apidSnapshotManager = &offlineSnapshotManager{
+			dbMan: apidDbManager,
+		}
+		apidChangeManager = &offlineChangeManager{}
+	} else {
+		httpClient := &http.Client{
+			Transport: tr,
+			Timeout:   httpTimeout,
+			CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+				req.Header.Set("Authorization", "Bearer "+apidTokenManager.getBearerToken())
+				return nil
+			},
+		}
+		apidSnapshotManager = createSnapShotManager(apidDbManager, apidTokenManager, httpClient)
+		apidChangeManager = createChangeManager(apidDbManager, apidSnapshotManager, apidTokenManager, httpClient)
+	}
+
+	listenerMan := &listenerManager{
+		changeMan: apidChangeManager,
+		snapMan:   apidSnapshotManager,
+		tokenMan:  apidTokenManager,
+	}
+
+	apiMan := &ApiManager{
+		tokenMan: apidTokenManager,
+	}
+
+	listenerMan.init()
+	apiMan.InitAPI(apiService)
 	return nil
 }
 
 func initPlugin(services apid.Services) (apid.PluginData, error) {
 	SetLogger(services.Log().ForModule("apigeeSync"))
 	dataService = services.Data()
-	events = services.Events()
-
-	err := _initPlugin(services)
+	eventService = services.Events()
+	apiService = services.API()
+	err := initConfigs(services)
 	if err != nil {
 		return pluginData, err
 	}
 
-	createManagers()
-
-	/* This callback function will get called once all the plugins are
-	 * initialized (not just this plugin). This is needed because,
-	 * downloadSnapshots/changes etc have to begin to be processed only
-	 * after all the plugins are initialized
-	 */
-	events.ListenOnceFunc(apid.SystemEventsSelector, postInitPlugins)
-
-	InitAPI(services)
-	log.Debug("end init")
-
-	return pluginData, nil
-}
-
-// Plugins have all initialized, gather their info and start the ApigeeSync downloads
-func postInitPlugins(event apid.Event) {
-	var plinfoDetails []pluginDetail
-	if pie, ok := event.(apid.PluginsInitializedEvent); ok {
-		/*
-		 * Store the plugin details in the heap. Needed during
-		 * Bearer token generation request.
-		 */
-		for _, plugin := range pie.Plugins {
-			name := plugin.Name
-			version := plugin.Version
-			if schemaVersion, ok := plugin.ExtraData["schemaVersion"].(string); ok {
-				inf := pluginDetail{
-					Name:          name,
-					SchemaVersion: schemaVersion}
-				plinfoDetails = append(plinfoDetails, inf)
-				log.Debugf("plugin %s is version %s, schemaVersion: %s", name, version, schemaVersion)
-			}
-		}
-		if plinfoDetails == nil {
-			log.Panicf("No Plugins registered!")
-		}
-
-		pgInfo, err := json.Marshal(plinfoDetails)
-		if err != nil {
-			log.Panicf("Unable to marshal plugin data: %v", err)
-		}
-		apidPluginDetails = string(pgInfo[:])
-
-		log.Debug("start post plugin init")
-
-		apidTokenManager.start()
-		go bootstrap()
-
-		log.Debug("Done post plugin init")
+	if err = initManagers(); err != nil {
+		return pluginData, err
 	}
+
+	log.Debug("end init")
+	return pluginData, nil
 }

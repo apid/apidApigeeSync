@@ -15,12 +15,12 @@
 package apidApigeeSync
 
 import (
-	"github.com/apid/apid-core"
 	"github.com/apid/apid-core/data"
 	"github.com/apigee-labs/transicator/common"
 	"net/http"
 	"os"
 
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
@@ -38,9 +38,12 @@ type simpleSnapShotManager struct {
 	isClosed *int32
 	// make sure close() returns immediately if there's no downloading/processing snapshot
 	isDownloading *int32
+	tokenMan      tokenManager
+	dbMan         DbManager
+	client        *http.Client
 }
 
-func createSnapShotManager() *simpleSnapShotManager {
+func createSnapShotManager(dbMan DbManager, tokenMan tokenManager, client *http.Client) *simpleSnapShotManager {
 	isClosedInt := int32(0)
 	isDownloadingInt := int32(0)
 	return &simpleSnapShotManager{
@@ -48,6 +51,9 @@ func createSnapShotManager() *simpleSnapShotManager {
 		finishChan:    make(chan bool, 1),
 		isClosed:      &isClosedInt,
 		isDownloading: &isDownloadingInt,
+		dbMan:         dbMan,
+		tokenMan:      tokenMan,
+		client:        client,
 	}
 }
 
@@ -114,11 +120,13 @@ func (s *simpleSnapShotManager) downloadBootSnapshot() {
 }
 
 func (s *simpleSnapShotManager) storeBootSnapshot(snapshot *common.Snapshot) {
-	processSnapshot(snapshot)
+	if err := s.dbMan.processSnapshot(snapshot, false); err != nil {
+		log.Panic(err)
+	}
 }
 
 // use the scope IDs from the boot snapshot to get all the data associated with the scopes
-func (s *simpleSnapShotManager) downloadDataSnapshot() {
+func (s *simpleSnapShotManager) downloadDataSnapshot() error {
 	if atomic.SwapInt32(s.isDownloading, 1) == int32(1) {
 		log.Panic("downloadDataSnapshot: only 1 thread can download snapshot at the same time!")
 	}
@@ -127,102 +135,45 @@ func (s *simpleSnapShotManager) downloadDataSnapshot() {
 	// has been closed
 	if atomic.LoadInt32(s.isClosed) == int32(1) {
 		log.Warn("snapShotManager: downloadDataSnapshot called on closed snapShotManager")
-		return
+		return nil
 	}
 
 	log.Debug("download Snapshot for data scopes")
 
-	scopes := findScopesForId(apidInfo.ClusterID)
+	scopes, err := s.dbMan.findScopesForId(apidInfo.ClusterID)
+	if err != nil {
+		return err
+	}
 	scopes = append(scopes, apidInfo.ClusterID)
 	snapshot := &common.Snapshot{}
-	err := s.downloadSnapshot(false, scopes, snapshot)
+	err = s.downloadSnapshot(false, scopes, snapshot)
 	if err != nil {
 		// this may happen during shutdown
 		if _, ok := err.(quitSignalError); ok {
 			log.Warn("downloadDataSnapshot failed due to shutdown: " + err.Error())
 		}
-		return
+		return err
 	}
-	s.storeDataSnapshot(snapshot)
-}
-
-func (s *simpleSnapShotManager) storeDataSnapshot(snapshot *common.Snapshot) {
-	knownTables = extractTablesFromSnapshot(snapshot)
-
-	_, err := dataService.DBVersion(snapshot.SnapshotInfo)
-	if err != nil {
-		log.Panicf("Database inaccessible: %v", err)
-	}
-
-	processSnapshot(snapshot)
-	log.Info("Emitting Snapshot to plugins")
-
-	select {
-	case <-time.After(pluginTimeout):
-		log.Panic("Timeout. Plugins failed to respond to snapshot.")
-	case <-events.Emit(ApigeeSyncEventSelector, snapshot):
-		// the new snapshot has been processed
-		// if close() happen after persistKnownTablesToDB(), will not interrupt snapshot processing to maintain consistency
-	}
-
-}
-
-func extractTablesFromSnapshot(snapshot *common.Snapshot) (tables map[string]bool) {
-
-	tables = make(map[string]bool)
-
-	log.Debug("Extracting table names from snapshot")
-	//if this panic ever fires, it's a bug
-	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
-	if err != nil {
-		log.Panicf("Database inaccessible: %v", err)
-	}
-	return extractTablesFromDB(db)
-}
-
-func extractTablesFromDB(db apid.DB) (tables map[string]bool) {
-
-	tables = make(map[string]bool)
-
-	log.Debug("Extracting table names from existing DB")
-	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
-	defer rows.Close()
-
-	if err != nil {
-		log.Panicf("Error reading current set of tables: %v", err)
-	}
-
-	for rows.Next() {
-		var table string
-		if err := rows.Scan(&table); err != nil {
-			log.Panicf("Error reading current set of tables: %v", err)
-		}
-		log.Debugf("Table %s found in existing db", table)
-
-		tables[table] = true
-	}
-	return tables
+	return s.startOnDataSnapshot(snapshot.SnapshotInfo)
 }
 
 // Skip Downloading snapshot if there is already a snapshot available from previous run
-func (s *simpleSnapShotManager) startOnLocalSnapshot(snapshotName string) *common.Snapshot {
-	log.Infof("Starting on local snapshot: %s", snapshotName)
-
-	// ensure DB version will be accessible on behalf of dependant plugins
-	db, err := dataService.DBVersion(snapshotName)
-	if err != nil {
-		log.Panicf("Database inaccessible: %v", err)
-	}
-
-	knownTables = extractTablesFromDB(db)
+func (s *simpleSnapShotManager) startOnDataSnapshot(snapshotName string) error {
+	log.Infof("Processing snapshot: %s", snapshotName)
 	snapshot := &common.Snapshot{
 		SnapshotInfo: snapshotName,
 	}
-	processSnapshot(snapshot)
-
-	// allow plugins (including this one) to start immediately on existing database
-	// Note: this MUST have no tables as that is used as an indicator
-	return snapshot
+	if err := s.dbMan.processSnapshot(snapshot, true); err != nil {
+		return err
+	}
+	log.Info("Emitting Snapshot to plugins")
+	select {
+	case <-time.After(pluginTimeout):
+		return fmt.Errorf("timeout, plugins failed to respond to snapshot")
+	case <-eventService.Emit(ApigeeSyncEventSelector, snapshot):
+		// the new snapshot has been processed
+	}
+	return nil
 }
 
 // a blocking method
@@ -254,12 +205,12 @@ func (s *simpleSnapShotManager) downloadSnapshot(isBoot bool, scopes []string, s
 
 	//pollWithBackoff only accepts function that accept a single quit channel
 	//to accommodate functions which need more parameters, wrap them in closures
-	attemptDownload := getAttemptDownloadClosure(isBoot, snapshot, uri)
+	attemptDownload := s.getAttemptDownloadClosure(isBoot, snapshot, uri)
 	pollWithBackoff(s.quitChan, attemptDownload, handleSnapshotServerError)
 	return nil
 }
 
-func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri string) func(chan bool) error {
+func (s *simpleSnapShotManager) getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri string) func(chan bool) error {
 	return func(_ chan bool) error {
 
 		var tid string
@@ -268,7 +219,7 @@ func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri strin
 			// should never happen, but if it does, it's unrecoverable anyway
 			log.Panicf("Snapshotserver comm error: %v", err)
 		}
-		addHeaders(req)
+		addHeaders(req, s.tokenMan.getBearerToken())
 
 		var processSnapshotResponse func(string, io.Reader, *common.Snapshot) error
 
@@ -280,7 +231,7 @@ func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri strin
 		processSnapshotResponse = processSnapshotServerFileResponse
 
 		// Issue the request to the snapshot server
-		r, err := httpclient.Do(req)
+		r, err := s.client.Do(req)
 		if err != nil {
 			log.Errorf("Snapshotserver comm error: %v", err)
 			return err
@@ -315,11 +266,20 @@ func getAttemptDownloadClosure(isBoot bool, snapshot *common.Snapshot, uri strin
 
 func processSnapshotServerFileResponse(dbId string, body io.Reader, snapshot *common.Snapshot) error {
 	dbPath := data.DBPath("common/" + dbId)
+	dbDir := dbPath[0 : len(dbPath)-7]
 	log.Infof("Attempting to stream the sqlite snapshot to %s", dbPath)
+
+	// if exists, delete the old snapshot file
+	if _, err := os.Stat(dbDir); !os.IsNotExist(err) {
+		if err = os.RemoveAll(dbDir); err != nil {
+			log.Errorf("Failed to delete old snapshot; %v", err)
+			return err
+		}
+	}
 
 	//this path includes the sqlite3 file name.  why does mkdir all stop at parent??
 	log.Infof("Creating directory with mkdirall %s", dbPath)
-	err := os.MkdirAll(dbPath[0:len(dbPath)-7], 0700)
+	err := os.MkdirAll(dbDir, 0700)
 	if err != nil {
 		log.Errorf("Error creating db path %s", err)
 	}
@@ -347,6 +307,7 @@ func handleSnapshotServerError(err error) {
 }
 
 type offlineSnapshotManager struct {
+	dbMan DbManager
 }
 
 func (o *offlineSnapshotManager) close() <-chan bool {
@@ -355,33 +316,28 @@ func (o *offlineSnapshotManager) close() <-chan bool {
 	return c
 }
 
-func (o *offlineSnapshotManager) downloadBootSnapshot() {}
-
-func (o *offlineSnapshotManager) storeBootSnapshot(snapshot *common.Snapshot) {}
-
-func (o *offlineSnapshotManager) downloadDataSnapshot() {}
-
-func (o *offlineSnapshotManager) storeDataSnapshot(snapshot *common.Snapshot) {}
-
-func (o *offlineSnapshotManager) downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error {
-	return nil
+func (o *offlineSnapshotManager) downloadBootSnapshot() {
+	log.Panic("downloadBootSnapshot called for offlineSnapshotManager")
 }
-func (o *offlineSnapshotManager) startOnLocalSnapshot(snapshotName string) *common.Snapshot {
-	log.Infof("Starting on local snapshot: %s", snapshotName)
 
-	// ensure DB version will be accessible on behalf of dependant plugins
-	db, err := dataService.DBVersion(snapshotName)
-	if err != nil {
-		log.Panicf("Database inaccessible: %v", err)
-	}
+func (o *offlineSnapshotManager) downloadDataSnapshot() error {
+	return fmt.Errorf("downloadDataSnapshot called for offlineSnapshotManager")
+}
 
-	knownTables = extractTablesFromDB(db)
+func (o *offlineSnapshotManager) startOnDataSnapshot(snapshotName string) error {
+	log.Infof("Processing snapshot: %s", snapshotName)
 	snapshot := &common.Snapshot{
 		SnapshotInfo: snapshotName,
 	}
-	processSnapshot(snapshot)
-
-	// allow plugins (including this one) to start immediately on existing database
-	// Note: this MUST have no tables as that is used as an indicator
-	return snapshot
+	if err := o.dbMan.processSnapshot(snapshot, true); err != nil {
+		return err
+	}
+	log.Info("Emitting Snapshot to plugins")
+	select {
+	case <-time.After(pluginTimeout):
+		return fmt.Errorf("timeout, plugins failed to respond to snapshot")
+	case <-eventService.Emit(ApigeeSyncEventSelector, snapshot):
+		// the new snapshot has been processed
+	}
+	return nil
 }

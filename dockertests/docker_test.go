@@ -335,7 +335,7 @@ func (w *waitSnapshotHandler) Handle(event apid.Event) {
 type newTableHandler struct {
 	targetTablename string
 	done            Done
-	verifyFunc      func (string, apid.DB)
+	verifyFunc      func(string, apid.DB)
 }
 
 func (n *newTableHandler) Handle(event apid.Event) {

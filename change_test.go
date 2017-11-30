@@ -16,32 +16,63 @@ package apidApigeeSync
 
 import (
 	"github.com/apid/apid-core"
+	"github.com/apid/apid-core/api"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"net/http"
 	"net/http/httptest"
-	"os"
 	"time"
+)
+
+const (
+	expectedInstanceId = "dummy"
 )
 
 var _ = Describe("Change Agent", func() {
 
 	Context("Change Agent Unit Tests", func() {
+		testCount := 0
+		var testChangeMan *pollChangeManager
+		var dummyDbMan *dummyDbManager
+		var dummySnapMan *dummySnapshotManager
+		var dummyTokenMan *dummyTokenManager
+		var testServer *httptest.Server
+		var testRouter apid.Router
+		var testMock *MockServer
+		BeforeEach(func() {
+			testCount++
+			dummyDbMan = &dummyDbManager{
+				knownTables: map[string]bool{
+					"_transicator_metadata":                true,
+					"_transicator_tables":                  true,
+					"attributes":                           true,
+					"edgex_apid_cluster":                   true,
+					"edgex_data_scope":                     true,
+					"kms_api_product":                      true,
+					"kms_app":                              true,
+					"kms_app_credential":                   true,
+					"kms_app_credential_apiproduct_mapper": true,
+					"kms_company":                          true,
+					"kms_company_developer":                true,
+					"kms_deployment":                       true,
+					"kms_developer":                        true,
+					"kms_organization":                     true,
+				},
+				scopes: []string{"43aef41d"},
+			}
+			dummySnapMan = &dummySnapshotManager{
+				downloadCalledChan: make(chan bool, 1),
+			}
+			dummyTokenMan = &dummyTokenManager{
+				invalidateChan: make(chan bool, 1),
+			}
+			client := &http.Client{}
+			testChangeMan = createChangeManager(dummyDbMan, dummySnapMan, dummyTokenMan, client)
+			testChangeMan.block = 0
 
-		var createTestDb = func(sqlfile string, dbId string) common.Snapshot {
-			initDb(sqlfile, "./mockdb_change.sqlite3")
-			file, err := os.Open("./mockdb_change.sqlite3")
-			Expect(err).Should(Succeed())
-			s := common.Snapshot{}
-			err = processSnapshotServerFileResponse(dbId, file, &s)
-			Expect(err).Should(Succeed())
-			return s
-		}
-
-		var initializeContext = func() {
-			testRouter = apid.API().Router()
+			// create a new API service to have a new router for testing
+			testRouter = api.CreateService().Router()
 			testServer = httptest.NewServer(testRouter)
-
 			// set up mock server
 			mockParms := MockParms{
 				ReliableAPI:  true,
@@ -52,94 +83,51 @@ var _ = Describe("Change Agent", func() {
 				Organization: "att",
 				Environment:  "prod",
 			}
+			apidInfo.ClusterID = expectedClusterId
+			apidInfo.InstanceID = expectedInstanceId
 			testMock = Mock(mockParms, testRouter)
-
 			config.Set(configProxyServerBaseURI, testServer.URL)
 			config.Set(configSnapServerBaseURI, testServer.URL)
 			config.Set(configChangeServerBaseURI, testServer.URL)
 			config.Set(configPollInterval, 1*time.Millisecond)
-		}
 
-		var restoreContext = func() {
+		})
 
+		AfterEach(func() {
 			testServer.Close()
+			<-testChangeMan.close()
 			config.Set(configProxyServerBaseURI, dummyConfigValue)
 			config.Set(configSnapServerBaseURI, dummyConfigValue)
 			config.Set(configChangeServerBaseURI, dummyConfigValue)
 			config.Set(configPollInterval, 10*time.Millisecond)
-		}
-
-		var _ = BeforeEach(func() {
-			_initPlugin(apid.AllServices())
-			createManagers()
-			event := createTestDb("./sql/init_mock_db.sql", "test_change")
-			processSnapshot(&event)
-			knownTables = extractTablesFromDB(getDB())
-		})
-
-		var _ = AfterEach(func() {
-			restoreContext()
-			if wipeDBAferTest {
-				db, err := dataService.DB()
-				Expect(err).Should(Succeed())
-				tx, err := db.Begin()
-				_, err = tx.Exec("DELETE FROM APID")
-				Expect(err).Should(Succeed())
-				err = tx.Commit()
-				Expect(err).Should(Succeed())
-			}
-			wipeDBAferTest = true
 		})
 
 		It("test change agent with authorization failure", func() {
 			log.Debug("test change agent with authorization failure")
-			testTokenManager := &dummyTokenManager{make(chan bool)}
-			apidTokenManager = testTokenManager
-			apidTokenManager.start()
-			apidSnapshotManager = &dummySnapshotManager{}
-			initializeContext()
 			testMock.forceAuthFail()
-			wipeDBAferTest = true
-			apidChangeManager.pollChangeWithBackoff()
+			testChangeMan.pollChangeWithBackoff()
 			// auth check fails
-			<-testTokenManager.invalidateChan
+			<-dummyTokenMan.invalidateChan
 			log.Debug("closing")
-			<-apidChangeManager.close()
 		})
 
 		It("test change agent with too old snapshot", func() {
 			log.Debug("test change agent with too old snapshot")
-			testTokenManager := &dummyTokenManager{make(chan bool)}
-			apidTokenManager = testTokenManager
-			apidTokenManager.start()
-			testSnapshotManager := &dummySnapshotManager{make(chan bool)}
-			apidSnapshotManager = testSnapshotManager
-			initializeContext()
-
 			testMock.passAuthCheck()
 			testMock.forceNewSnapshot()
-			wipeDBAferTest = true
-			apidChangeManager.pollChangeWithBackoff()
-			<-testSnapshotManager.downloadCalledChan
+			testChangeMan.pollChangeWithBackoff()
+			<-dummySnapMan.downloadCalledChan
 			log.Debug("closing")
-			<-apidChangeManager.close()
 		})
 
 		It("change agent should retry with authorization failure", func(done Done) {
 			log.Debug("change agent should retry with authorization failure")
-			testTokenManager := &dummyTokenManager{make(chan bool)}
-			apidTokenManager = testTokenManager
-			apidTokenManager.start()
-			apidSnapshotManager = &dummySnapshotManager{}
-			initializeContext()
 			testMock.forceAuthFail()
 			testMock.forceNoSnapshot()
-			wipeDBAferTest = true
-
 			apid.Events().ListenFunc(ApigeeSyncEventSelector, func(event apid.Event) {
 
 				if _, ok := event.(*common.ChangeList); ok {
-					closeDone := apidChangeManager.close()
+					closeDone := testChangeMan.close()
 					log.Debug("closing")
 					go func() {
 						// when close done, all handlers for the first snapshot have been executed
@@ -150,10 +138,11 @@ var _ = Describe("Change Agent", func() {
 				}
 			})
 
-			apidChangeManager.pollChangeWithBackoff()
+			testChangeMan.pollChangeWithBackoff()
 			// auth check fails
-			<-testTokenManager.invalidateChan
-		}, 2)
+			<-dummyTokenMan.invalidateChan
+			testMock.passAuthCheck()
+		}, 3)
 
 	})
 })

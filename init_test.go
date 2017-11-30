@@ -18,36 +18,47 @@ import (
 	"github.com/apid/apid-core"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"net/http"
+	"strconv"
 )
 
 var _ = Describe("init", func() {
-	var _ = BeforeEach(func() {
-		_initPlugin(apid.AllServices())
+	testCount := 0
+	BeforeEach(func() {
+		testCount++
 	})
 
 	Context("Apid Instance display name", func() {
+		AfterEach(func() {
+			eventService = apid.Events()
+			apiService = apid.API()
+		})
 
 		It("should be hostname by default", func() {
-			log.Info("Starting init tests...")
-
-			initConfigDefaults()
-			Expect(apidInfo.InstanceName).To(Equal("testhost"))
+			me := &mockEvent{
+				listenerMap: make(map[apid.EventSelector]apid.EventHandlerFunc),
+			}
+			ma := &mockApi{
+				handleMap: make(map[string]http.HandlerFunc),
+			}
+			ms := &mockService{
+				config: apid.Config(),
+				log:    apid.Log(),
+				api:    ma,
+				data:   apid.Data(),
+				events: me,
+			}
+			testname := "test_" + strconv.Itoa(testCount)
+			config.Set(configName, testname)
+			pd, err := initPlugin(ms)
+			Expect(err).Should(Succeed())
+			Expect(apidInfo.InstanceName).To(Equal(testname))
+			Expect(me.listenerMap[apid.SystemEventsSelector]).ToNot(BeNil())
+			Expect(ma.handleMap[tokenEndpoint]).ToNot(BeNil())
+			Expect(pd).Should(Equal(pluginData))
+			Expect(apidInfo.IsNewInstance).Should(BeTrue())
+			dataService.ReleaseCommonDB()
 		}, 3)
 
-		It("accept display name from config", func() {
-			config.Set(configName, "aa01")
-			initConfigDefaults()
-			var apidInfoLatest apidInstanceInfo
-			apidInfoLatest, _ = getApidInstanceInfo()
-			Expect(apidInfoLatest.InstanceName).To(Equal("aa01"))
-			Expect(apidInfoLatest.LastSnapshot).To(Equal(""))
-		}, 3)
-
-	})
-
-	It("should put apigeesync_apid_instance_id value in config", func() {
-		instanceID := config.GetString(configApidInstanceID)
-		Expect(instanceID).NotTo(BeEmpty())
-		Expect(instanceID).To(Equal(apidInfo.InstanceID))
 	})
 })

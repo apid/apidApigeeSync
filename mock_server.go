@@ -90,7 +90,7 @@ type MockServer struct {
 	changeChannel   chan []byte
 	sequenceID      *int64
 	maxDevID        *int64
-	deployIDMutex   sync.RWMutex
+	deployIDMutex   *sync.RWMutex
 	minDeploymentID *int64
 	maxDeploymentID *int64
 	newSnap         *int32
@@ -118,11 +118,13 @@ func (m *MockServer) forceNoSnapshot() {
 }
 
 func (m *MockServer) lastSequenceID() string {
-	return strconv.FormatInt(atomic.LoadInt64(m.sequenceID), 10)
+	num := strconv.FormatInt(atomic.LoadInt64(m.sequenceID), 10)
+	return num + "." + num + "." + num
 }
 
 func (m *MockServer) nextSequenceID() string {
-	return strconv.FormatInt(atomic.AddInt64(m.sequenceID, 1), 10)
+	num := strconv.FormatInt(atomic.AddInt64(m.sequenceID, 1), 10)
+	return num + "." + num + "." + num
 }
 
 func (m *MockServer) nextDeveloperID() string {
@@ -180,7 +182,7 @@ func (m *MockServer) init() {
 	m.newSnap = new(int32)
 	m.authFail = new(int32)
 	*m.authFail = 0
-
+	m.deployIDMutex = &sync.RWMutex{}
 	initDb("./sql/init_mock_db.sql", "./mockdb.sqlite3")
 	initDb("./sql/init_mock_boot_db.sql", "./mockdb_boot.sqlite3")
 
@@ -285,7 +287,7 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
 
-	val := atomic.SwapInt32(m.newSnap, 0)
+	val := atomic.LoadInt32(m.newSnap)
 	if val > 0 {
 		log.Debug("MockServer: force new snapshot")
 		w.WriteHeader(http.StatusBadRequest)

@@ -40,7 +40,7 @@ Usage:
    man.close()
 */
 
-func createSimpleTokenManager() *simpleTokenManager {
+func createSimpleTokenManager(isNewInstance bool) *simpleTokenManager {
 	isClosedInt := int32(0)
 
 	t := &simpleTokenManager{
@@ -52,6 +52,7 @@ func createSimpleTokenManager() *simpleTokenManager {
 		invalidateDone:      make(chan bool),
 		tokenUpdatedChan:    make(chan bool, 1),
 		isClosed:            &isClosedInt,
+		isNewInstance:       isNewInstance,
 	}
 	return t
 }
@@ -67,6 +68,7 @@ type simpleTokenManager struct {
 	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
 	tokenUpdatedChan    chan bool
+	isNewInstance       bool
 }
 
 func (t *simpleTokenManager) start() {
@@ -168,9 +170,9 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 		req.Header.Set("status", "ONLINE")
 		req.Header.Set("plugin_details", apidPluginDetails)
 
-		if newInstanceID {
+		if t.isNewInstance {
 			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
-			newInstanceID = false
+			t.isNewInstance = false
 		} else {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}

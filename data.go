@@ -28,19 +28,8 @@ import (
 )
 
 var (
-	unsafeDB apid.DB
-	dbMux    sync.RWMutex
+	dbMux sync.RWMutex
 )
-
-type dataApidCluster struct {
-	ID, Name, OrgAppName, CreatedBy, UpdatedBy, Description string
-	Updated, Created                                        string
-}
-
-type dataDataScope struct {
-	ID, ClusterID, Scope, Org, Env, CreatedBy, UpdatedBy string
-	Updated, Created                                     string
-}
 
 /*
 This plugin uses 2 databases:
@@ -48,7 +37,27 @@ This plugin uses 2 databases:
 2. The versioned DB is used for APID_CLUSTER & DATA_SCOPE
 (Currently, the snapshot never changes, but this is future-proof)
 */
-func initDB(db apid.DB) error {
+
+func creatDbManager() *dbManager {
+	return &dbManager{
+		DbMux:       &sync.RWMutex{},
+		knownTables: make(map[string]bool),
+	}
+}
+
+type dbManager struct {
+	Db          apid.DB
+	DbMux       *sync.RWMutex
+	dbVersion   string
+	knownTables map[string]bool
+}
+
+// idempotent call to initialize default DB
+func (dbMan *dbManager) initDB() error {
+	db, err := dataService.DB()
+	if err != nil {
+		return err
+	}
 	tx, err := db.Begin()
 	if err != nil {
 		log.Errorf("initDB(): Unable to get DB tx err: {%v}", err)
@@ -75,24 +84,22 @@ func initDB(db apid.DB) error {
 	return nil
 }
 
-func getDB() apid.DB {
+func (dbMan *dbManager) getDB() apid.DB {
 	dbMux.RLock()
-	db := unsafeDB
-	dbMux.RUnlock()
-	return db
+	defer dbMux.RUnlock()
+	return dbMan.Db
 }
 
-func setDB(db apid.DB) {
+func (dbMan *dbManager) setDB(db apid.DB) {
 	dbMux.Lock()
-	unsafeDB = db
-	dbMux.Unlock()
+	defer dbMux.Unlock()
+	dbMan.Db = db
 }
 
 //TODO if len(rows) > 1000, chunk it up and exec multiple inserts in the txn
-func insert(tableName string, rows []common.Row, txn apid.Tx) bool {
-
+func (dbMan *dbManager) insert(tableName string, rows []common.Row, txn apid.Tx) error {
 	if len(rows) == 0 {
-		return false
+		return fmt.Errorf("no rows")
 	}
 
 	var orderedColumns []string
@@ -101,12 +108,12 @@ func insert(tableName string, rows []common.Row, txn apid.Tx) bool {
 	}
 	sort.Strings(orderedColumns)
 
-	sql := buildInsertSql(tableName, orderedColumns, rows)
+	sql := dbMan.buildInsertSql(tableName, orderedColumns, rows)
 
 	prep, err := txn.Prepare(sql)
 	if err != nil {
 		log.Errorf("INSERT Fail to prepare statement [%s] error=[%v]", sql, err)
-		return false
+		return err
 	}
 	defer prep.Close()
 
@@ -124,14 +131,14 @@ func insert(tableName string, rows []common.Row, txn apid.Tx) bool {
 
 	if err != nil {
 		log.Errorf("INSERT Fail [%s] values=%v error=[%v]", sql, values, err)
-		return false
+		return err
 	}
 	log.Debugf("INSERT Success [%s] values=%v", sql, values)
 
-	return true
+	return nil
 }
 
-func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
+func (dbMan *dbManager) getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
 	var values = make([]interface{}, len(pkeys))
 	for i, pkey := range pkeys {
 		if row[pkey] == nil {
@@ -143,52 +150,46 @@ func getValueListFromKeys(row common.Row, pkeys []string) []interface{} {
 	return values
 }
 
-func _delete(tableName string, rows []common.Row, txn apid.Tx) bool {
-	pkeys, err := getPkeysForTable(tableName)
+func (dbMan *dbManager) delete(tableName string, rows []common.Row, txn apid.Tx) error {
+	pkeys, err := dbMan.getPkeysForTable(tableName)
 	sort.Strings(pkeys)
 	if len(pkeys) == 0 || err != nil {
-		log.Errorf("DELETE No primary keys found for table. %s", tableName)
-		return false
+		return fmt.Errorf("DELETE No primary keys found for table. %s", tableName)
 	}
 
 	if len(rows) == 0 {
-		log.Errorf("No rows found for table.", tableName)
-		return false
+		return fmt.Errorf("No rows found for table.", tableName)
 	}
 
-	sql := buildDeleteSql(tableName, rows[0], pkeys)
+	sql := dbMan.buildDeleteSql(tableName, rows[0], pkeys)
 	prep, err := txn.Prepare(sql)
 	if err != nil {
-		log.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
-		return false
+		return fmt.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
 	}
 	defer prep.Close()
 	for _, row := range rows {
-		values := getValueListFromKeys(row, pkeys)
+		values := dbMan.getValueListFromKeys(row, pkeys)
 		// delete prepared statement from existing template statement
 		res, err := txn.Stmt(prep).Exec(values...)
 		if err != nil {
-			log.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
-			return false
+			return fmt.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
 		}
 		affected, err := res.RowsAffected()
 		if err == nil && affected != 0 {
 			log.Debugf("DELETE Success [%s] values=%v", sql, values)
 		} else if err == nil && affected == 0 {
-			log.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
-			return false
+			return fmt.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
 		} else {
-			log.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
-			return false
+			return fmt.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
 		}
 
 	}
-	return true
+	return nil
 
 }
 
 // Syntax "DELETE FROM Obj WHERE key1=$1 AND key2=$2 ... ;"
-func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
+func (dbMan *dbManager) buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
 
 	var wherePlaceholders []string
 	i := 1
@@ -210,14 +211,13 @@ func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
 
 }
 
-func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
-	pkeys, err := getPkeysForTable(tableName)
+func (dbMan *dbManager) update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) error {
+	pkeys, err := dbMan.getPkeysForTable(tableName)
 	if len(pkeys) == 0 || err != nil {
-		log.Errorf("UPDATE No primary keys found for table.", tableName)
-		return false
+		return fmt.Errorf("UPDATE No primary keys found for table: %v, %v", tableName, err)
 	}
 	if len(oldRows) == 0 || len(newRows) == 0 {
-		return false
+		return fmt.Errorf("UPDATE No old or new rows, table: %v, %v, %v", tableName, oldRows, newRows)
 	}
 
 	var orderedColumns []string
@@ -229,11 +229,10 @@ func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
 	sort.Strings(orderedColumns)
 
 	//build update statement, use arbitrary row as template
-	sql := buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
+	sql := dbMan.buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
 	prep, err := txn.Prepare(sql)
 	if err != nil {
-		log.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
-		return false
+		return fmt.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
 	}
 	defer prep.Close()
 
@@ -265,13 +264,11 @@ func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
 		res, err := txn.Stmt(prep).Exec(values...)
 
 		if err != nil {
-			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
-			return false
+			return fmt.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
 		}
 		numRowsAffected, err := res.RowsAffected()
 		if err != nil {
-			log.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
-			return false
+			return fmt.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
 		}
 		//delete this once we figure out why tests are failing/not updating
 		log.Debugf("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
@@ -279,11 +276,11 @@ func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
 
 	}
 
-	return true
+	return nil
 
 }
 
-func buildUpdateSql(tableName string, orderedColumns []string, row common.Row, pkeys []string) string {
+func (dbMan *dbManager) buildUpdateSql(tableName string, orderedColumns []string, row common.Row, pkeys []string) string {
 	if row == nil {
 		return ""
 	}
@@ -311,7 +308,7 @@ func buildUpdateSql(tableName string, orderedColumns []string, row common.Row, p
 }
 
 //precondition: rows.length > 1000, max number of entities for sqlite
-func buildInsertSql(tableName string, orderedColumns []string, rows []common.Row) string {
+func (dbMan *dbManager) buildInsertSql(tableName string, orderedColumns []string, rows []common.Row) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -343,8 +340,8 @@ func buildInsertSql(tableName string, orderedColumns []string, rows []common.Row
 	return sql
 }
 
-func getPkeysForTable(tableName string) ([]string, error) {
-	db := getDB()
+func (dbMan *dbManager) getPkeysForTable(tableName string) ([]string, error) {
+	db := dbMan.getDB()
 	normalizedTableName := normalizeTableName(tableName)
 	sql := "SELECT columnName FROM _transicator_tables WHERE tableName=$1 AND primaryKey ORDER BY columnName;"
 	rows, err := db.Query(sql, normalizedTableName)
@@ -358,13 +355,15 @@ func getPkeysForTable(tableName string) ([]string, error) {
 		var value string
 		err := rows.Scan(&value)
 		if err != nil {
-			log.Fatal(err)
+			log.Errorf("failed to scan column names: %v", err)
+			return nil, err
 		}
 		columnNames = append(columnNames, value)
 	}
 	err = rows.Err()
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("failed to scan column names: %v", err)
+		return nil, err
 	}
 	return columnNames, nil
 }
@@ -377,13 +376,11 @@ func normalizeTableName(tableName string) string {
  * For the given apidConfigId, this function will retrieve all the distinch scopes
  * associated with it. Distinct, because scope is already a collection of the tenants.
  */
-func findScopesForId(configId string) (scopes []string) {
+func (dbMan *dbManager) findScopesForId(configId string) (scopes []string, err error) {
 
 	log.Debugf("findScopesForId: %s", configId)
-
 	var scope sql.NullString
-	db := getDB()
-
+	db := dbMan.getDB()
 	query := `
 		SELECT scope FROM edgex_data_scope WHERE apid_cluster_id = $1
 		UNION
@@ -391,7 +388,6 @@ func findScopesForId(configId string) (scopes []string) {
 		UNION
 		SELECT env_scope FROM edgex_data_scope WHERE apid_cluster_id = $3
 	`
-
 	rows, err := db.Query(query, configId, configId, configId)
 	if err != nil {
 		log.Errorf("Failed to query EDGEX_DATA_SCOPE: %v", err)
@@ -416,9 +412,9 @@ func findScopesForId(configId string) (scopes []string) {
 /*
  * Retrieve SnapshotInfo for the given apidConfigId from apid_config table
  */
-func getLastSequence() (lastSequence string) {
+func (dbMan *dbManager) getLastSequence() (lastSequence string) {
 
-	err := getDB().QueryRow("select last_sequence from EDGEX_APID_CLUSTER LIMIT 1").Scan(&lastSequence)
+	err := dbMan.getDB().QueryRow("select last_sequence from EDGEX_APID_CLUSTER LIMIT 1").Scan(&lastSequence)
 	if err != nil && err != sql.ErrNoRows {
 		log.Panicf("Failed to query EDGEX_APID_CLUSTER: %v", err)
 		return
@@ -432,11 +428,11 @@ func getLastSequence() (lastSequence string) {
  * Persist the last change Id each time a change has been successfully
  * processed by the plugin(s)
  */
-func updateLastSequence(lastSequence string) error {
+func (dbMan *dbManager) updateLastSequence(lastSequence string) error {
 
 	log.Debugf("updateLastSequence: %s", lastSequence)
 
-	tx, err := getDB().Begin()
+	tx, err := dbMan.getDB().Begin()
 	if err != nil {
 		log.Errorf("getApidInstanceInfo: Unable to get DB tx Err: {%v}", err)
 		return err
@@ -454,10 +450,9 @@ func updateLastSequence(lastSequence string) error {
 	return err
 }
 
-func getApidInstanceInfo() (info apidInstanceInfo, err error) {
+func (dbMan *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	info.InstanceName = config.GetString(configName)
 	info.ClusterID = config.GetString(configApidClusterId)
-
 	var savedClusterId string
 
 	// always use default database for this
@@ -481,7 +476,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 		} else {
 			// first start - no row, generate a UUID and store it
 			err = nil
-			newInstanceID = true
+			info.IsNewInstance = true
 			info.InstanceID = util.GenerateUUID()
 
 			log.Debugf("Inserting new apid instance id %s", info.InstanceID)
@@ -489,13 +484,13 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 				info.InstanceID, info.ClusterID, "")
 		}
 	} else if savedClusterId != info.ClusterID {
-		log.Debug("Detected apid cluster id change in config.  Apid will start clean")
+		log.Warn("Detected apid cluster id change in config.  Apid will start clean")
 		err = nil
-		newInstanceID = true
+		info.IsNewInstance = true
 		info.InstanceID = util.GenerateUUID()
 
-		_, err = tx.Exec("REPLACE INTO APID (instance_id, apid_cluster_id, last_snapshot_info) VALUES (?,?,?)",
-			info.InstanceID, info.ClusterID, "")
+		_, err = tx.Exec("DELETE FROM APID;")
+
 		info.LastSnapshot = ""
 	}
 	if err = tx.Commit(); err != nil {
@@ -504,7 +499,7 @@ func getApidInstanceInfo() (info apidInstanceInfo, err error) {
 	return
 }
 
-func updateApidInstanceInfo() error {
+func (dbMan *dbManager) updateApidInstanceInfo(instanceId, clusterId, lastSnap string) error {
 
 	// always use default database for this
 	db, err := dataService.DB()
@@ -521,7 +516,7 @@ func updateApidInstanceInfo() error {
 		REPLACE
 		INTO APID (instance_id, apid_cluster_id, last_snapshot_info)
 		VALUES (?,?,?)`,
-		apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
+		instanceId, clusterId, lastSnap)
 	if err != nil {
 		log.Errorf("updateApidInstanceInfo: Tx Exec Err: {%v}", err)
 		return err
@@ -535,4 +530,131 @@ func updateApidInstanceInfo() error {
 	}
 
 	return err
+}
+
+func (dbMan *dbManager) extractTables() (map[string]bool, error) {
+	tables := make(map[string]bool)
+	db := dbMan.getDB()
+	rows, err := db.Query("SELECT DISTINCT tableName FROM _transicator_tables;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var table sql.NullString
+		if err := rows.Scan(&table); err != nil {
+			return nil, err
+		}
+		log.Debugf("Table %v found in existing db", table)
+		if table.Valid {
+			tables[table.String] = true
+		}
+	}
+	log.Debugf("Extracting table names from existing DB %v", tables)
+	return tables, nil
+}
+
+func (dbMan *dbManager) getKnowTables() map[string]bool {
+	return dbMan.knownTables
+}
+
+func (dbMan *dbManager) processChangeList(changes *common.ChangeList) error {
+
+	tx, err := dbMan.getDB().Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	log.Debugf("apigeeSyncEvent: %d changes", len(changes.Changes))
+
+	for _, change := range changes.Changes {
+		if change.Table == LISTENER_TABLE_APID_CLUSTER {
+			return fmt.Errorf("illegal operation: %s for %s", change.Operation, change.Table)
+		}
+		switch change.Operation {
+		case common.Insert:
+			err = dbMan.insert(change.Table, []common.Row{change.NewRow}, tx)
+		case common.Update:
+			if change.Table == LISTENER_TABLE_DATA_SCOPE {
+				return fmt.Errorf("illegal operation: %s for %s", change.Operation, change.Table)
+			}
+			err = dbMan.update(change.Table, []common.Row{change.OldRow}, []common.Row{change.NewRow}, tx)
+		case common.Delete:
+			err = dbMan.delete(change.Table, []common.Row{change.OldRow}, tx)
+		}
+		if err != nil {
+			return err
+		}
+
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("Commit error in processChangeList: %v", err)
+	}
+	return nil
+}
+
+func (dbMan *dbManager) processSnapshot(snapshot *common.Snapshot, isDataSnapshot bool) error {
+
+	var prevDb string
+	if apidInfo.LastSnapshot != "" && apidInfo.LastSnapshot != snapshot.SnapshotInfo {
+		log.Debugf("Release snapshot for {%s}. Switching to version {%s}",
+			apidInfo.LastSnapshot, snapshot.SnapshotInfo)
+		prevDb = apidInfo.LastSnapshot
+	} else {
+		log.Debugf("Process snapshot for version {%s}",
+			snapshot.SnapshotInfo)
+	}
+	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
+	if err != nil {
+		return fmt.Errorf("Unable to access database: %v", err)
+	}
+
+	var numApidClusters int
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("Unable to open DB txn: {%v}", err.Error())
+	}
+	defer tx.Rollback()
+	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
+	if err != nil {
+		return fmt.Errorf("Unable to read database: {%s}", err.Error())
+	}
+
+	if numApidClusters != 1 {
+		return fmt.Errorf("Illegal state for apid_cluster. Must be a single row.")
+	}
+
+	_, err = tx.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
+	if err != nil && err.Error() != "duplicate column name: last_sequence" {
+		return fmt.Errorf("Unable to create last_sequence column on DB.  Error {%v}", err.Error())
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("Error when commit in processSqliteSnapshot: %v", err)
+	}
+
+	//update apid instance info
+	apidInfo.LastSnapshot = snapshot.SnapshotInfo
+	err = dbMan.updateApidInstanceInfo(apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
+	if err != nil {
+		return fmt.Errorf("Unable to update instance info: %v", err)
+	}
+
+	dbMan.setDB(db)
+	if isDataSnapshot {
+		dbMan.knownTables, err = dbMan.extractTables()
+		if err != nil {
+			return fmt.Errorf("Unable to extract tables: %v", err)
+		}
+	}
+	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
+
+	// Releases the DB, when the Connection reference count reaches 0.
+	if prevDb != "" {
+		dataService.ReleaseDB(prevDb)
+	}
+	return nil
 }

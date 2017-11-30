@@ -22,28 +22,37 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
-
-var lastSequence string
-var block string = "45"
 
 type pollChangeManager struct {
 	// 0 for not closed, 1 for closed
 	isClosed *int32
 	// 0 for pollChangeWithBackoff() not launched, 1 for launched
-	isLaunched *int32
-	quitChan   chan bool
+	isLaunched   *int32
+	quitChan     chan bool
+	block        int
+	lastSequence string
+	dbMan        DbManager
+	snapMan      snapShotManager
+	tokenMan     tokenManager
+	client       *http.Client
 }
 
-func createChangeManager() *pollChangeManager {
+func createChangeManager(dbMan DbManager, snapMan snapShotManager, tokenMan tokenManager, client *http.Client) *pollChangeManager {
 	isClosedInt := int32(0)
 	isLaunchedInt := int32(0)
 	return &pollChangeManager{
 		isClosed:   &isClosedInt,
 		quitChan:   make(chan bool),
 		isLaunched: &isLaunchedInt,
+		block:      45,
+		dbMan:      dbMan,
+		snapMan:    snapMan,
+		tokenMan:   tokenMan,
+		client:     client,
 	}
 }
 
@@ -68,8 +77,8 @@ func (c *pollChangeManager) close() <-chan bool {
 		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
 		go func() {
 			c.quitChan <- true
-			apidTokenManager.close()
-			<-apidSnapshotManager.close()
+			c.tokenMan.close()
+			<-c.snapMan.close()
 			log.Debug("change manager closed")
 			finishChan <- false
 		}()
@@ -79,8 +88,8 @@ func (c *pollChangeManager) close() <-chan bool {
 	log.Debug("pollChangeManager: close pollChangeWithBackoff and token manager")
 	go func() {
 		c.quitChan <- true
-		apidTokenManager.close()
-		<-apidSnapshotManager.close()
+		c.tokenMan.close()
+		<-c.snapMan.close()
 		log.Debug("change manager closed")
 		finishChan <- true
 	}()
@@ -120,43 +129,152 @@ func (c *pollChangeManager) pollChangeAgent(dummyQuit chan bool) error {
 	 * Check to see if we have lastSequence already saved in the DB,
 	 * in which case, it has to be used to prevent re-reading same data
 	 */
-	lastSequence = getLastSequence()
-
+	c.lastSequence = c.dbMan.getLastSequence()
 	for {
 		select {
 		case <-c.quitChan:
 			log.Info("pollChangeAgent; Recevied quit signal to stop polling change server, close token manager")
 			return quitSignalError{}
 		default:
-			err := c.getChanges(changesUri)
+			scopes, err := c.dbMan.findScopesForId(apidInfo.ClusterID)
 			if err != nil {
-				if _, ok := err.(quitSignalError); ok {
-					log.Debug("pollChangeAgent: consuming the quit signal")
-					<-c.quitChan
-				}
+				return err
+			}
+			r, err := c.getChanges(scopes, changesUri)
+			if err != nil {
+				return err
+			}
+			cl, err := c.parseChangeResp(r)
+			if err != nil {
+				return err
+			}
+			if err = c.emitChangeList(scopes, cl); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-//TODO refactor this method more, split it up
-/* Make a single request to the changeserver to get a changelist */
-func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
-	// if closed
-	if atomic.LoadInt32(c.isClosed) == int32(1) {
-		return quitSignalError{}
+func (c *pollChangeManager) parseChangeResp(r *http.Response) (*common.ChangeList, error) {
+	var err error
+	defer r.Body.Close()
+
+	if r.StatusCode != http.StatusOK {
+		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
+		switch r.StatusCode {
+		case http.StatusUnauthorized:
+			err = c.tokenMan.invalidateToken()
+			if err != nil {
+				return nil, err
+			}
+			return nil, authFailError{}
+
+		case http.StatusNotModified:
+			return nil, nil
+		case http.StatusBadRequest:
+			var apiErr changeServerError
+			var b []byte
+			b, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Errorf("Unable to read response body: %v", err)
+				return nil, err
+			}
+			err = json.Unmarshal(b, &apiErr)
+			if err != nil {
+				log.Errorf("JSON Response Data not parsable: %s", string(b))
+				return nil, err
+			}
+			if apiErr.Code == "SNAPSHOT_TOO_OLD" {
+				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
+				err = apiErr
+			}
+			return nil, err
+		default:
+			log.Errorf("Unknown response code from change server: %v", r.Status)
+			return nil, nil
+		}
 	}
+
+	resp := &common.ChangeList{}
+	err = json.NewDecoder(r.Body).Decode(resp)
+	if err != nil {
+		log.Errorf("JSON Response Data not parsable: %v", err)
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *pollChangeManager) emitChangeList(scopes []string, cl *common.ChangeList) error {
+	var err error
+	/*
+	 * If the lastSequence is already newer or the same than what we got via
+	 * cl.LastSequence, Ignore it.
+	 */
+	if c.lastSequence != "" &&
+		getChangeStatus(c.lastSequence, cl.LastSequence) != 1 {
+		return nil
+	}
+
+	if changesRequireDDLSync(c.dbMan.getKnowTables(), cl) {
+		return changeServerError{
+			Code: "DDL changes detected; must get new snapshot",
+		}
+	}
+
+	/* If valid data present, Emit to plugins */
+	if len(cl.Changes) > 0 {
+		if err = c.dbMan.processChangeList(cl); err != nil {
+			log.Errorf("Error in processChangeList: %v", err)
+			return err
+		}
+		select {
+		case <-time.After(httpTimeout):
+			log.Panic("Timeout. Plugins failed to respond to changes.")
+		case <-eventService.Emit(ApigeeSyncEventSelector, cl):
+		}
+	} else if c.lastSequence == "" {
+		select {
+		case <-time.After(httpTimeout):
+			log.Panic("Timeout. Plugins failed to respond to changes.")
+		case <-eventService.Emit(ApigeeSyncEventSelector, cl):
+		}
+	} else {
+		log.Debugf("No Changes detected")
+	}
+
+	err = c.dbMan.updateLastSequence(cl.LastSequence)
+	if err != nil {
+		log.Panicf("Unable to update Sequence in DB. Err {%v}", err)
+	}
+	c.lastSequence = cl.LastSequence
+
+	/*
+	 * Check to see if there was any change in scope. If found, handle it
+	 * by getting a new snapshot
+	 */
+	newScopes, err := c.dbMan.findScopesForId(apidInfo.ClusterID)
+	if err != nil {
+		return err
+	}
+	cs := scopeChanged(newScopes, scopes)
+	if cs != nil {
+		return cs
+	}
+
+	return nil
+}
+
+/* Make a single request to the changeserver to get a changelist */
+func (c *pollChangeManager) getChanges(scopes []string, changesUri *url.URL) (*http.Response, error) {
 	log.Debug("polling...")
 
 	/* Find the scopes associated with the config id */
-	scopes := findScopesForId(apidInfo.ClusterID)
 	v := url.Values{}
 
-	blockValue := block
+	blockValue := strconv.Itoa(c.block)
 	/* Sequence added to the query if available */
-	if lastSequence != "" {
-		v.Add("since", lastSequence)
+	if c.lastSequence != "" {
+		v.Add("since", c.lastSequence)
 	} else {
 		blockValue = "0"
 	}
@@ -178,115 +296,16 @@ func (c *pollChangeManager) getChanges(changesUri *url.URL) error {
 
 	/* If error, break the loop, and retry after interval */
 	req, err := http.NewRequest("GET", uri, nil)
-	addHeaders(req)
-	r, err := httpclient.Do(req)
+	addHeaders(req, c.tokenMan.getBearerToken())
+	r, err := c.client.Do(req)
 	if err != nil {
 		log.Errorf("change agent comm error: %s", err)
-		// if closed
-		if atomic.LoadInt32(c.isClosed) == int32(1) {
-			return quitSignalError{}
-		}
-		return err
+		return nil, err
 	}
-	defer r.Body.Close()
-
-	// has been closed
-	if atomic.LoadInt32(c.isClosed) == int32(1) {
-		log.Debugf("getChanges: changeManager has been closed")
-		return quitSignalError{}
-	}
-
-	if r.StatusCode != http.StatusOK {
-		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
-		switch r.StatusCode {
-		case http.StatusUnauthorized:
-			err = apidTokenManager.invalidateToken()
-			if err != nil {
-				return err
-			}
-			return authFailError{}
-
-		case http.StatusNotModified:
-			return nil
-
-		case http.StatusBadRequest:
-			var apiErr changeServerError
-			var b []byte
-			b, err = ioutil.ReadAll(r.Body)
-			if err != nil {
-				log.Errorf("Unable to read response body: %v", err)
-				return err
-			}
-			err = json.Unmarshal(b, &apiErr)
-			if err != nil {
-				log.Errorf("JSON Response Data not parsable: %s", string(b))
-				return err
-			}
-			if apiErr.Code == "SNAPSHOT_TOO_OLD" {
-				log.Debug("Received SNAPSHOT_TOO_OLD message from change server.")
-				err = apiErr
-			}
-			return err
-		}
-		return nil
-	}
-
-	var resp common.ChangeList
-	err = json.NewDecoder(r.Body).Decode(&resp)
-	if err != nil {
-		log.Errorf("JSON Response Data not parsable: %v", err)
-		return err
-	}
-
-	/*
-	 * If the lastSequence is already newer or the same than what we got via
-	 * resp.LastSequence, Ignore it.
-	 */
-	if lastSequence != "" &&
-		getChangeStatus(lastSequence, resp.LastSequence) != 1 {
-		return nil
-	}
-
-	if changesRequireDDLSync(resp) {
-		return changeServerError{
-			Code: "DDL changes detected; must get new snapshot",
-		}
-	}
-
-	/* If valid data present, Emit to plugins */
-	if len(resp.Changes) > 0 {
-		processChangeList(&resp)
-		select {
-		case <-time.After(httpTimeout):
-			log.Panic("Timeout. Plugins failed to respond to changes.")
-		case <-events.Emit(ApigeeSyncEventSelector, &resp):
-		}
-	} else if lastSequence == "" {
-		select {
-		case <-time.After(httpTimeout):
-			log.Panic("Timeout. Plugins failed to respond to changes.")
-		case <-events.Emit(ApigeeSyncEventSelector, &resp):
-		}
-	} else {
-		log.Debugf("No Changes detected for Scopes: %s", scopes)
-	}
-
-	updateSequence(resp.LastSequence)
-
-	/*
-	 * Check to see if there was any change in scope. If found, handle it
-	 * by getting a new snapshot
-	 */
-	newScopes := findScopesForId(apidInfo.ClusterID)
-	cs := scopeChanged(newScopes, scopes)
-	if cs != nil {
-		return cs
-	}
-
-	return nil
+	return r, nil
 }
 
-func changesRequireDDLSync(changes common.ChangeList) bool {
+func changesRequireDDLSync(knownTables map[string]bool, changes *common.ChangeList) bool {
 	return changesHaveNewTables(knownTables, changes.Changes)
 }
 
@@ -296,10 +315,12 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 		log.Debugf("handleChangeServerError: changeManager has been closed")
 		return
 	}
-	if c, ok := err.(changeServerError); ok {
-		log.Debugf("%s. Fetch a new snapshot to sync...", c.Code)
-		apidSnapshotManager.downloadDataSnapshot()
-	} else {
+
+	switch e := err.(type) {
+	case changeServerError:
+		log.Debugf("%s. Fetch a new snapshot to sync...", e.Code)
+		c.snapMan.downloadDataSnapshot()
+	default:
 		log.Debugf("Error connecting to changeserver: %v", err)
 	}
 }
@@ -310,7 +331,7 @@ func (c *pollChangeManager) handleChangeServerError(err error) {
 func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 
 	//nil maps should not be passed in.  Making the distinction between nil map and empty map
-	if a == nil {
+	if len(a) == 0 {
 		log.Warn("Nil map passed to function changesHaveNewTables, may be bug")
 		return true
 	}
@@ -332,22 +353,13 @@ func changesHaveNewTables(a map[string]bool, changes []common.Change) bool {
 func getChangeStatus(lastSeq string, currSeq string) int {
 	seqPrev, err := common.ParseSequence(lastSeq)
 	if err != nil {
-		log.Panic("Unable to parse previous sequence string")
+		log.Panicf("Unable to parse previous sequence string: %v", err)
 	}
 	seqCurr, err := common.ParseSequence(currSeq)
 	if err != nil {
-		log.Panic("Unable to parse current sequence string")
+		log.Panicf("Unable to parse current sequence string: %v", err)
 	}
 	return seqCurr.Compare(seqPrev)
-}
-
-func updateSequence(seq string) {
-	lastSequence = seq
-	err := updateLastSequence(seq)
-	if err != nil {
-		log.Panicf("Unable to update Sequence in DB. Err {%v}", err)
-	}
-
 }
 
 /*
