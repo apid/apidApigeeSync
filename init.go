@@ -112,7 +112,6 @@ func SetLogger(logger apid.LogService) {
 	log = logger
 }
 
-
 func initManagers(isOfflineMode bool) (*listenerManager, *ApiManager, error) {
 	// check for forward proxy
 	var tr *http.Transport
