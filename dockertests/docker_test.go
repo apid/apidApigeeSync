@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"github.com/apid/apid-core"
 	"github.com/apid/apid-core/factory"
+	"github.com/apid/apidApigeeSync"
 	_ "github.com/apid/apidApigeeSync"
 	"github.com/apigee-labs/transicator/common"
 	. "github.com/onsi/ginkgo"
@@ -77,7 +78,7 @@ var _ = BeforeSuite(func() {
 	config.Set(configProxyServerBaseURI, testServer.URL)
 
 	// init plugin
-	apid.RegisterPlugin(initPlugin)
+	apid.RegisterPlugin(initPlugin, apidApigeeSync.PluginData)
 	apid.InitializePlugins("dockerTest")
 
 	<-initDone
@@ -263,6 +264,8 @@ func initPgData() {
 		updated:        t,
 		updatedBy:      testInitUser,
 		changeSelector: clusterId,
+		orgScope:       "org1",
+		envScope:       "env1",
 	}
 
 	bf := bundleConfigData{

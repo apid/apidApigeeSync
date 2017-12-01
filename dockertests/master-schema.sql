@@ -45,6 +45,8 @@ CREATE TABLE data_scope (
     updated timestamp without time zone,
     updated_by text,
     _change_selector text,
+    org_scope character varying(36) NOT NULL,
+    env_scope character varying(36) NOT NULL,
     CONSTRAINT data_scope_pkey PRIMARY KEY (id),
     CONSTRAINT data_scope_apid_cluster_id_fk FOREIGN KEY (apid_cluster_id)
           REFERENCES apid_cluster (id)

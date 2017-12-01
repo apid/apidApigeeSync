@@ -54,7 +54,7 @@ var _ = Describe("init", func() {
 			Expect(apidInfo.InstanceName).To(Equal(testname))
 			Expect(me.listenerMap[apid.SystemEventsSelector]).ToNot(BeNil())
 			Expect(ma.handleMap[tokenEndpoint]).ToNot(BeNil())
-			Expect(pd).Should(Equal(pluginData))
+			Expect(pd).Should(Equal(PluginData))
 			Expect(apidInfo.IsNewInstance).Should(BeTrue())
 		})
 

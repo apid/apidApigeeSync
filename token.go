@@ -34,9 +34,7 @@ var (
 Usage:
    man := createTokenManager()
    bearer := man.getBearerToken()
-   // will automatically update config(configBearerToken) for other modules
-   // optionally, when done...
-   man.close()
+   will automatically update config(configBearerToken) for other modules
 */
 
 func createApidTokenManager(isNewInstance bool) *apidTokenManager {

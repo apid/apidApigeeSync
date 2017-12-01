@@ -42,6 +42,8 @@ type dataScopeRow struct {
 	updated        time.Time
 	updatedBy      string
 	changeSelector string
+	orgScope       string
+	envScope       string
 }
 
 /* FOREIGN KEY (data_scope_id)

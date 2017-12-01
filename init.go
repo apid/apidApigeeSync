@@ -72,7 +72,7 @@ type pluginDetail struct {
 }
 
 func init() {
-	apid.RegisterPlugin(initPlugin, pluginData)
+	apid.RegisterPlugin(initPlugin, PluginData)
 }
 
 func initConfigDefaults() {
@@ -112,11 +112,6 @@ func SetLogger(logger apid.LogService) {
 	log = logger
 }
 
-/* initialization */
-func initConfigs(services apid.Services) error {
-
-	return nil
-}
 
 func initManagers(isOfflineMode bool) (*listenerManager, *ApiManager, error) {
 	// check for forward proxy
@@ -198,18 +193,18 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 
 	err := checkForRequiredValues(isOfflineMode)
 	if err != nil {
-		return pluginData, err
+		return PluginData, err
 	}
 	if err != nil {
-		return pluginData, err
+		return PluginData, err
 	}
 	listenerMan, apiMan, err := initManagers(isOfflineMode)
 	if err != nil {
-		return pluginData, err
+		return PluginData, err
 	}
 	listenerMan.init()
 	apiMan.InitAPI(apiService)
 
 	log.Debug("end init")
-	return pluginData, nil
+	return PluginData, nil
 }
