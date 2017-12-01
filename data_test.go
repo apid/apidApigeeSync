@@ -30,6 +30,10 @@ var _ = Describe("data access tests", func() {
 	var testDbMan *dbManager
 	var dbVersion string
 	BeforeEach(func() {
+		var testDir string
+		testDir, err := ioutil.TempDir(tmpDir, "data_test")
+		config.Set(configLocalStoragePath, testDir)
+		Expect(err).NotTo(HaveOccurred())
 		testDbMan = creatDbManager()
 		testCount++
 		dbVersion = "data_test_" + strconv.Itoa(testCount)
@@ -39,7 +43,7 @@ var _ = Describe("data access tests", func() {
 	})
 
 	AfterEach(func() {
-		dataService.ReleaseDB(dbVersion)
+		config.Set(configLocalStoragePath, tmpDir)
 	})
 
 	It("check scope changes", func() {
@@ -1370,7 +1374,7 @@ var _ = Describe("data access tests", func() {
 		}
 
 		AfterEach(func() {
-			dataService.ReleaseCommonDB()
+
 		})
 
 		It("should fail if more than one apid_cluster rows", func() {

@@ -97,7 +97,7 @@ type MockServer struct {
 	authFail        *int32
 }
 
-func (m *MockServer) forceAuthFail() {
+func (m *MockServer) forceAuthFailOnce() {
 	atomic.StoreInt32(m.authFail, 1)
 }
 
@@ -268,8 +268,11 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	scopes := q["scope"]
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
-
-	w.Header().Set("Transicator-Snapshot-TXID", util.GenerateUUID())
+	if m.params.Scope != "" {
+		Expect(scopes).To(ContainElement(m.params.Scope))
+	}
+	m.snapshotID = util.GenerateUUID()
+	w.Header().Set(headerSnapshotNumber, m.snapshotID)
 
 	if len(scopes) == 1 {
 		//send bootstrap db
@@ -313,7 +316,9 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	//Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
-	//Expect(scopes).To(ContainElement(m.params.Scope))
+	if m.params.Scope != "" {
+		Expect(scopes).To(ContainElement(m.params.Scope))
+	}
 
 	// todo: the following is just legacy for the existing test in apigeeSync_suite_test
 	developer := m.createDeveloperWithProductAndApp()
@@ -345,6 +350,7 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 
 		// force failing auth check
 		if atomic.LoadInt32(m.authFail) == 1 {
+			atomic.StoreInt32(m.authFail, 0)
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
 			return
@@ -358,7 +364,7 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 
 		// check auth header
 		auth := req.Header.Get("Authorization")
-		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
+		expectedAuth := m.getBearerToken()
 		if auth != expectedAuth {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
@@ -366,6 +372,10 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 		}
 		target(w, req)
 	}
+}
+
+func (m *MockServer) getBearerToken() string {
+	return fmt.Sprintf("Bearer %s", m.oauthToken)
 }
 
 // make a handler unreliable

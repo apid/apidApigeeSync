@@ -139,20 +139,21 @@ func (d *dummyChangeManager) pollChangeWithBackoff() {
 
 type dummyTokenManager struct {
 	invalidateChan chan bool
+	token          string
+	tokenReadyChan chan bool
 }
 
 func (t *dummyTokenManager) getTokenReadyChannel() <-chan bool {
-	return nil
+	return t.tokenReadyChan
 }
 
 func (t *dummyTokenManager) getBearerToken() string {
-	return ""
+	return t.token
 }
 
-func (t *dummyTokenManager) invalidateToken() error {
+func (t *dummyTokenManager) invalidateToken() {
 	log.Debug("invalidateToken called")
 	t.invalidateChan <- true
-	return nil
 }
 
 func (t *dummyTokenManager) close() {
@@ -189,9 +190,12 @@ func (s *dummySnapshotManager) startOnDataSnapshot(snapshot string) error {
 }
 
 type dummyDbManager struct {
-	lastSequence string
-	knownTables  map[string]bool
-	scopes       []string
+	lastSequence   string
+	knownTables    map[string]bool
+	scopes         []string
+	snapshot       *common.Snapshot
+	isDataSnapshot bool
+	lastSeqUpdated chan string
 }
 
 func (d *dummyDbManager) initDB() error {
@@ -207,6 +211,7 @@ func (d *dummyDbManager) findScopesForId(configId string) (scopes []string, err 
 	return d.scopes, nil
 }
 func (d *dummyDbManager) updateLastSequence(lastSequence string) error {
+	d.lastSeqUpdated <- lastSequence
 	return nil
 }
 func (d *dummyDbManager) getApidInstanceInfo() (info apidInstanceInfo, err error) {
@@ -221,6 +226,8 @@ func (d *dummyDbManager) processChangeList(changes *common.ChangeList) error {
 	return nil
 }
 func (d *dummyDbManager) processSnapshot(snapshot *common.Snapshot, isDataSnapshot bool) error {
+	d.snapshot = snapshot
+	d.isDataSnapshot = isDataSnapshot
 	return nil
 }
 func (d *dummyDbManager) getKnowTables() map[string]bool {

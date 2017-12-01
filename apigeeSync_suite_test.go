@@ -24,27 +24,27 @@ import (
 	"time"
 
 	"github.com/apid/apid-core"
-
+	"github.com/apid/apid-core/events"
 	"github.com/apid/apid-core/factory"
-)
-
-var (
-	tmpDir string
 )
 
 const dummyConfigValue string = "placeholder"
 const expectedClusterId = "bootstrap"
 
+var tmpDir string
+
 var _ = BeforeSuite(func() {
 	apid.Initialize(factory.DefaultServicesFactory())
-	config = apid.Config()
 	dataService = apid.Data()
-	eventService = apid.Events()
+	config = apid.Config()
+	apiService = apid.API()
+	go apiService.Listen()
+	//dataService = apid.Data()
 	log = apid.Log().ForModule("apigeeSync")
 	var err error
-	tmpDir, err = ioutil.TempDir("", "api_test")
+	tmpDir, err = ioutil.TempDir("", "apid_test")
 	Expect(err).NotTo(HaveOccurred())
-	config.Set("local_storage_path", tmpDir)
+	config.Set(configLocalStoragePath, tmpDir)
 	config.Set(configProxyServerBaseURI, dummyConfigValue)
 	config.Set(configSnapServerBaseURI, dummyConfigValue)
 	config.Set(configChangeServerBaseURI, dummyConfigValue)
@@ -57,6 +57,7 @@ var _ = BeforeSuite(func() {
 }, 3)
 
 var _ = BeforeEach(func() {
+	eventService = events.CreateService()
 	config.Set(configName, "testhost")
 	config.Set(configApidClusterId, expectedClusterId)
 	apidInfo.ClusterID = expectedClusterId
@@ -66,14 +67,22 @@ var _ = BeforeEach(func() {
 })
 
 var _ = AfterEach(func() {
+	cleanCommonDb()
+	eventService.Close()
 })
 
 var _ = AfterSuite(func() {
-	apid.Events().Close()
-	os.RemoveAll(tmpDir)
+	Expect(os.RemoveAll(tmpDir)).Should(Succeed())
 })
 
 func TestApigeeSync(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "ApigeeSync Suite")
+}
+
+func cleanCommonDb() {
+	db, err := dataService.DB()
+	Expect(err).Should(Succeed())
+	_, err = db.Exec(`DROP TABLE IF EXISTS APID;`)
+	Expect(err).Should(Succeed())
 }

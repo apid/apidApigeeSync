@@ -24,28 +24,34 @@ import (
 
 const tokenEndpoint = "/accesstoken"
 
+const (
+	parBlock = "block"
+	parTag   = "If-None-Match"
+)
+
 type ApiManager struct {
 	tokenMan tokenManager
+	endpoint string
 }
 
 func (a *ApiManager) InitAPI(api apid.APIService) {
-	api.HandleFunc(tokenEndpoint, a.getAccessToken).Methods("GET")
+	api.HandleFunc(a.endpoint, a.getAccessToken).Methods("GET")
 }
 
 func (a *ApiManager) getAccessToken(w http.ResponseWriter, r *http.Request) {
-	b := r.URL.Query().Get("block")
+	b := r.URL.Query().Get(parBlock)
 	var timeout int
 	if b != "" {
 		var err error
 		timeout, err = strconv.Atoi(b)
-		if err != nil {
+		if err != nil || timeout < 0 {
 			writeError(w, http.StatusBadRequest, "bad block value, must be number of seconds")
 			return
 		}
 	}
 	log.Debugf("api timeout: %d", timeout)
-	ifNoneMatch := r.Header.Get("If-None-Match")
-
+	ifNoneMatch := r.Header.Get(parTag)
+	log.Debugf("ifNoneMatch: %s", ifNoneMatch)
 	if a.tokenMan.getBearerToken() != ifNoneMatch {
 		w.Write([]byte(a.tokenMan.getBearerToken()))
 		return

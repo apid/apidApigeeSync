@@ -21,13 +21,13 @@ import (
 
 type tokenManager interface {
 	getBearerToken() string
-	invalidateToken() error
+	invalidateToken()
 	close()
 	start()
 	getTokenReadyChannel() <-chan bool
 }
 
-type snapShotManager interface {
+type snapshotManager interface {
 	close() <-chan bool
 	downloadBootSnapshot()
 	downloadDataSnapshot() error

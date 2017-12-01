@@ -16,6 +16,7 @@ package apidApigeeSync
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/apigee-labs/transicator/common"
 	"io/ioutil"
 	"net/http"
@@ -36,12 +37,12 @@ type pollChangeManager struct {
 	block        int
 	lastSequence string
 	dbMan        DbManager
-	snapMan      snapShotManager
+	snapMan      snapshotManager
 	tokenMan     tokenManager
 	client       *http.Client
 }
 
-func createChangeManager(dbMan DbManager, snapMan snapShotManager, tokenMan tokenManager, client *http.Client) *pollChangeManager {
+func createChangeManager(dbMan DbManager, snapMan snapshotManager, tokenMan tokenManager, client *http.Client) *pollChangeManager {
 	isClosedInt := int32(0)
 	isLaunchedInt := int32(0)
 	return &pollChangeManager{
@@ -65,7 +66,7 @@ func (c *pollChangeManager) close() <-chan bool {
 	finishChan := make(chan bool, 1)
 	//has been closed
 	if atomic.SwapInt32(c.isClosed, 1) == int32(1) {
-		log.Error("pollChangeManager: close() called on a closed pollChangeManager!")
+		log.Warn("pollChangeManager: close() called on a closed pollChangeManager!")
 		go func() {
 			log.Debug("change manager closed")
 			finishChan <- false
@@ -74,9 +75,8 @@ func (c *pollChangeManager) close() <-chan bool {
 	}
 	// not launched
 	if atomic.LoadInt32(c.isLaunched) == int32(0) {
-		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched! Will wait until pollChangeWithBackoff is launched and then kill it and tokenManager!")
+		log.Warn("pollChangeManager: close() called when pollChangeWithBackoff unlaunched!")
 		go func() {
-			c.quitChan <- true
 			c.tokenMan.close()
 			<-c.snapMan.close()
 			log.Debug("change manager closed")
@@ -134,7 +134,7 @@ func (c *pollChangeManager) pollChangeAgent(dummyQuit chan bool) error {
 		select {
 		case <-c.quitChan:
 			log.Info("pollChangeAgent; Recevied quit signal to stop polling change server, close token manager")
-			return quitSignalError{}
+			return quitSignalError
 		default:
 			scopes, err := c.dbMan.findScopesForId(apidInfo.ClusterID)
 			if err != nil {
@@ -163,11 +163,8 @@ func (c *pollChangeManager) parseChangeResp(r *http.Response) (*common.ChangeLis
 		log.Errorf("Get changes request failed with status code: %d", r.StatusCode)
 		switch r.StatusCode {
 		case http.StatusUnauthorized:
-			err = c.tokenMan.invalidateToken()
-			if err != nil {
-				return nil, err
-			}
-			return nil, authFailError{}
+			c.tokenMan.invalidateToken()
+			return nil, authFailError
 
 		case http.StatusNotModified:
 			return nil, nil
@@ -191,7 +188,7 @@ func (c *pollChangeManager) parseChangeResp(r *http.Response) (*common.ChangeLis
 			return nil, err
 		default:
 			log.Errorf("Unknown response code from change server: %v", r.Status)
-			return nil, nil
+			return nil, fmt.Errorf("unknown response code from change server: %v", r.Status)
 		}
 	}
 
@@ -227,12 +224,24 @@ func (c *pollChangeManager) emitChangeList(scopes []string, cl *common.ChangeLis
 			log.Errorf("Error in processChangeList: %v", err)
 			return err
 		}
+		/*
+		* Check to see if there was any change in scope. If found, handle it
+		* by getting a new snapshot
+		 */
+		newScopes, err := c.dbMan.findScopesForId(apidInfo.ClusterID)
+		if err != nil {
+			return err
+		}
+		cs := scopeChanged(newScopes, scopes)
+		if cs != nil {
+			return cs
+		}
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
 		case <-eventService.Emit(ApigeeSyncEventSelector, cl):
 		}
-	} else if c.lastSequence == "" {
+	} else if c.lastSequence == "" { // emit the first changelist anyway
 		select {
 		case <-time.After(httpTimeout):
 			log.Panic("Timeout. Plugins failed to respond to changes.")
@@ -247,20 +256,6 @@ func (c *pollChangeManager) emitChangeList(scopes []string, cl *common.ChangeLis
 		log.Panicf("Unable to update Sequence in DB. Err {%v}", err)
 	}
 	c.lastSequence = cl.LastSequence
-
-	/*
-	 * Check to see if there was any change in scope. If found, handle it
-	 * by getting a new snapshot
-	 */
-	newScopes, err := c.dbMan.findScopesForId(apidInfo.ClusterID)
-	if err != nil {
-		return err
-	}
-	cs := scopeChanged(newScopes, scopes)
-	if cs != nil {
-		return cs
-	}
-
 	return nil
 }
 

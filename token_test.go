@@ -94,7 +94,7 @@ var _ = Describe("token", func() {
 				w.Write(body)
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager(false)
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 
@@ -123,7 +123,7 @@ var _ = Describe("token", func() {
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
 
-			testedTokenManager := createSimpleTokenManager(false)
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
@@ -163,7 +163,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager(false)
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 
@@ -200,7 +200,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager(true)
+			testedTokenManager := createApidTokenManager(true)
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 			testedTokenManager.invalidateToken()

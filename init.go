@@ -38,7 +38,8 @@ const (
 	// special value - set by ApigeeSync, not taken from configuration
 	configApidInstanceID = "apigeesync_apid_instance_id"
 	// This will not be needed once we have plugin handling tokens.
-	configBearerToken = "apigeesync_bearer_token"
+	configBearerToken      = "apigeesync_bearer_token"
+	configLocalStoragePath = "local_storage_path"
 )
 
 const (
@@ -47,13 +48,12 @@ const (
 
 var (
 	/* All set during plugin initialization */
-	log           apid.LogService
-	config        apid.ConfigService
-	dataService   apid.DataService
-	eventService  apid.EventsService
-	apiService    apid.APIService
-	apidInfo      apidInstanceInfo
-	isOfflineMode bool
+	log          apid.LogService
+	config       apid.ConfigService
+	dataService  apid.DataService
+	eventService apid.EventsService
+	apiService   apid.APIService
+	apidInfo     apidInstanceInfo
 
 	/* Set during post plugin initialization
 	 * set this as a default, so that it's guaranteed to be valid even if postInitPlugins isn't called
@@ -89,7 +89,7 @@ func initConfigDefaults() {
 	log.Debugf("Using %s as display name", config.GetString(configName))
 }
 
-func checkForRequiredValues() error {
+func checkForRequiredValues(isOfflineMode bool) error {
 	required := []string{configProxyServerBaseURI, configConsumerKey, configConsumerSecret}
 	if !isOfflineMode {
 		required = append(required, configSnapServerBaseURI, configChangeServerBaseURI)
@@ -97,12 +97,12 @@ func checkForRequiredValues() error {
 	// check for required values
 	for _, key := range required {
 		if !config.IsSet(key) {
-			return fmt.Errorf("Missing required config value: %s", key)
+			return fmt.Errorf("missing required config value: %s", key)
 		}
 	}
 	proto := config.GetString(configSnapshotProtocol)
 	if proto != "sqlite" {
-		return fmt.Errorf("Illegal value for %s. Only currently supported snashot protocol is sqlite", configSnapshotProtocol)
+		return fmt.Errorf("illegal value for %s. Only currently supported snashot protocol is sqlite", configSnapshotProtocol)
 	}
 
 	return nil
@@ -114,25 +114,11 @@ func SetLogger(logger apid.LogService) {
 
 /* initialization */
 func initConfigs(services apid.Services) error {
-	log.Debug("start init")
-
-	config = services.Config()
-	initConfigDefaults()
-
-	if config.GetBool(configDiagnosticMode) {
-		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
-		isOfflineMode = true
-	}
-
-	err := checkForRequiredValues()
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
 
-func initManagers() error {
+func initManagers(isOfflineMode bool) (*listenerManager, *ApiManager, error) {
 	// check for forward proxy
 	var tr *http.Transport
 	tr = util.Transport(config.GetString(util.ConfigfwdProxyPortURL))
@@ -141,17 +127,17 @@ func initManagers() error {
 	apidDbManager := creatDbManager()
 	db, err := dataService.DB()
 	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
+		return nil, nil, fmt.Errorf("unable to access DB: %v", err)
 	}
 	apidDbManager.setDB(db)
 	err = apidDbManager.initDB()
 	if err != nil {
-		return fmt.Errorf("Unable to access DB: %v", err)
+		return nil, nil, fmt.Errorf("unable to access DB: %v", err)
 	}
 
 	apidInfo, err = apidDbManager.getApidInstanceInfo()
 	if err != nil {
-		return fmt.Errorf("Unable to get apid instance info: %v", err)
+		return nil, nil, fmt.Errorf("unable to get apid instance info: %v", err)
 	}
 
 	if config.IsSet(configApidInstanceID) {
@@ -159,12 +145,12 @@ func initManagers() error {
 	}
 	config.Set(configApidInstanceID, apidInfo.InstanceID)
 
-	apidTokenManager := createSimpleTokenManager(apidInfo.IsNewInstance)
-	var apidSnapshotManager snapShotManager
+	apidTokenManager := createApidTokenManager(apidInfo.IsNewInstance)
+	var snapMan snapshotManager
 	var apidChangeManager changeManager
 
 	if isOfflineMode {
-		apidSnapshotManager = &offlineSnapshotManager{
+		snapMan = &offlineSnapshotManager{
 			dbMan: apidDbManager,
 		}
 		apidChangeManager = &offlineChangeManager{}
@@ -177,23 +163,22 @@ func initManagers() error {
 				return nil
 			},
 		}
-		apidSnapshotManager = createSnapShotManager(apidDbManager, apidTokenManager, httpClient)
-		apidChangeManager = createChangeManager(apidDbManager, apidSnapshotManager, apidTokenManager, httpClient)
+		snapMan = createSnapShotManager(apidDbManager, apidTokenManager, httpClient)
+		apidChangeManager = createChangeManager(apidDbManager, snapMan, apidTokenManager, httpClient)
 	}
 
 	listenerMan := &listenerManager{
-		changeMan: apidChangeManager,
-		snapMan:   apidSnapshotManager,
-		tokenMan:  apidTokenManager,
+		changeMan:     apidChangeManager,
+		snapMan:       snapMan,
+		tokenMan:      apidTokenManager,
+		isOfflineMode: isOfflineMode,
 	}
 
 	apiMan := &ApiManager{
+		endpoint: tokenEndpoint,
 		tokenMan: apidTokenManager,
 	}
-
-	listenerMan.init()
-	apiMan.InitAPI(apiService)
-	return nil
+	return listenerMan, apiMan, nil
 }
 
 func initPlugin(services apid.Services) (apid.PluginData, error) {
@@ -201,14 +186,29 @@ func initPlugin(services apid.Services) (apid.PluginData, error) {
 	dataService = services.Data()
 	eventService = services.Events()
 	apiService = services.API()
-	err := initConfigs(services)
+	log.Debug("start init")
+	config = services.Config()
+	initConfigDefaults()
+
+	isOfflineMode := false
+	if config.GetBool(configDiagnosticMode) {
+		log.Warn("Diagnostic mode: will not download changelist and snapshots!")
+		isOfflineMode = true
+	}
+
+	err := checkForRequiredValues(isOfflineMode)
 	if err != nil {
 		return pluginData, err
 	}
-
-	if err = initManagers(); err != nil {
+	if err != nil {
 		return pluginData, err
 	}
+	listenerMan, apiMan, err := initManagers(isOfflineMode)
+	if err != nil {
+		return pluginData, err
+	}
+	listenerMan.init()
+	apiMan.InitAPI(apiService)
 
 	log.Debug("end init")
 	return pluginData, nil

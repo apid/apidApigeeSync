@@ -25,9 +25,10 @@ const (
 )
 
 type listenerManager struct {
-	changeMan changeManager
-	snapMan   snapShotManager
-	tokenMan  tokenManager
+	changeMan     changeManager
+	snapMan       snapshotManager
+	tokenMan      tokenManager
+	isOfflineMode bool
 }
 
 func (l *listenerManager) init() {
@@ -85,7 +86,7 @@ func (l *listenerManager) postInitPlugins(event apid.Event) {
  *  Then, poll for changes
  */
 func (l *listenerManager) bootstrap(lastSnap string) {
-	if isOfflineMode && lastSnap == "" {
+	if l.isOfflineMode && lastSnap == "" {
 		log.Panic("Diagnostic mode requires existent snapshot info in default DB.")
 	}
 

@@ -112,7 +112,7 @@ func (dbMan *dbManager) insert(tableName string, rows []common.Row, txn apid.Tx)
 
 	prep, err := txn.Prepare(sql)
 	if err != nil {
-		log.Errorf("INSERT Fail to prepare statement [%s] error=[%v]", sql, err)
+		log.Errorf("INSERT Fail to prepare statement %s error=%v", sql, err)
 		return err
 	}
 	defer prep.Close()
@@ -130,10 +130,10 @@ func (dbMan *dbManager) insert(tableName string, rows []common.Row, txn apid.Tx)
 	_, err = prep.Exec(values...)
 
 	if err != nil {
-		log.Errorf("INSERT Fail [%s] values=%v error=[%v]", sql, values, err)
+		log.Errorf("INSERT Fail %s values=%v error=%v", sql, values, err)
 		return err
 	}
-	log.Debugf("INSERT Success [%s] values=%v", sql, values)
+	log.Debugf("INSERT Success %s values=%v", sql, values)
 
 	return nil
 }
@@ -158,13 +158,13 @@ func (dbMan *dbManager) delete(tableName string, rows []common.Row, txn apid.Tx)
 	}
 
 	if len(rows) == 0 {
-		return fmt.Errorf("No rows found for table.", tableName)
+		return fmt.Errorf("no rows found for table %s", tableName)
 	}
 
 	sql := dbMan.buildDeleteSql(tableName, rows[0], pkeys)
 	prep, err := txn.Prepare(sql)
 	if err != nil {
-		return fmt.Errorf("DELETE Fail to prep statement [%s] error=[%v]", sql, err)
+		return fmt.Errorf("DELETE Fail to prep statement %s error=%v", sql, err)
 	}
 	defer prep.Close()
 	for _, row := range rows {
@@ -172,15 +172,15 @@ func (dbMan *dbManager) delete(tableName string, rows []common.Row, txn apid.Tx)
 		// delete prepared statement from existing template statement
 		res, err := txn.Stmt(prep).Exec(values...)
 		if err != nil {
-			return fmt.Errorf("DELETE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return fmt.Errorf("DELETE Fail %s values=%v error=%v", sql, values, err)
 		}
 		affected, err := res.RowsAffected()
 		if err == nil && affected != 0 {
-			log.Debugf("DELETE Success [%s] values=%v", sql, values)
+			log.Debugf("DELETE Success %s values=%v", sql, values)
 		} else if err == nil && affected == 0 {
-			return fmt.Errorf("Entry not found [%s] values=%v. Nothing to delete.", sql, values)
+			return fmt.Errorf("entry not found %s values=%v, nothing to delete", sql, values)
 		} else {
-			return fmt.Errorf("DELETE Failed [%s] values=%v error=[%v]", sql, values, err)
+			return fmt.Errorf("DELETE Failed %s values=%v error=%v", sql, values, err)
 		}
 
 	}
@@ -232,7 +232,7 @@ func (dbMan *dbManager) update(tableName string, oldRows, newRows []common.Row, 
 	sql := dbMan.buildUpdateSql(tableName, orderedColumns, newRows[0], pkeys)
 	prep, err := txn.Prepare(sql)
 	if err != nil {
-		return fmt.Errorf("UPDATE Fail to prep statement [%s] error=[%v]", sql, err)
+		return fmt.Errorf("UPDATE Fail to prep statement %s error=%v", sql, err)
 	}
 	defer prep.Close()
 
@@ -264,15 +264,15 @@ func (dbMan *dbManager) update(tableName string, oldRows, newRows []common.Row, 
 		res, err := txn.Stmt(prep).Exec(values...)
 
 		if err != nil {
-			return fmt.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return fmt.Errorf("UPDATE Fail %s values=%v error=%v", sql, values, err)
 		}
 		numRowsAffected, err := res.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("UPDATE Fail [%s] values=%v error=[%v]", sql, values, err)
+			return fmt.Errorf("UPDATE Fail %s values=%v error=%v", sql, values, err)
 		}
 		//delete this once we figure out why tests are failing/not updating
 		log.Debugf("NUM ROWS AFFECTED BY UPDATE: %d", numRowsAffected)
-		log.Debugf("UPDATE Success [%s] values=%v", sql, values)
+		log.Debugf("UPDATE Success %s values=%v", sql, values)
 
 	}
 
@@ -346,7 +346,7 @@ func (dbMan *dbManager) getPkeysForTable(tableName string) ([]string, error) {
 	sql := "SELECT columnName FROM _transicator_tables WHERE tableName=$1 AND primaryKey ORDER BY columnName;"
 	rows, err := db.Query(sql, normalizedTableName)
 	if err != nil {
-		log.Errorf("Failed [%s] values=[s%] Error: %v", sql, normalizedTableName, err)
+		log.Errorf("Failed %s values=%s Error: %v", sql, normalizedTableName, err)
 		return nil, err
 	}
 	var columnNames []string
@@ -484,7 +484,8 @@ func (dbMan *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error)
 				info.InstanceID, info.ClusterID, "")
 		}
 	} else if savedClusterId != info.ClusterID {
-		log.Warn("Detected apid cluster id change in config.  Apid will start clean")
+		log.Warnf("Detected apid cluster id change in config. %v v.s. %v Apid will start clean.",
+			savedClusterId, info.ClusterID)
 		err = nil
 		info.IsNewInstance = true
 		info.InstanceID = util.GenerateUUID()
@@ -500,7 +501,7 @@ func (dbMan *dbManager) getApidInstanceInfo() (info apidInstanceInfo, err error)
 }
 
 func (dbMan *dbManager) updateApidInstanceInfo(instanceId, clusterId, lastSnap string) error {
-
+	log.Debugf("updateApidInstanceInfo: %v, %v, %v", instanceId, clusterId, lastSnap)
 	// always use default database for this
 	db, err := dataService.DB()
 	if err != nil {
@@ -609,22 +610,22 @@ func (dbMan *dbManager) processSnapshot(snapshot *common.Snapshot, isDataSnapsho
 	}
 	db, err := dataService.DBVersion(snapshot.SnapshotInfo)
 	if err != nil {
-		return fmt.Errorf("Unable to access database: %v", err)
+		return fmt.Errorf("unable to access database: %v", err)
 	}
 
 	var numApidClusters int
 	tx, err := db.Begin()
 	if err != nil {
-		return fmt.Errorf("Unable to open DB txn: {%v}", err.Error())
+		return fmt.Errorf("unable to open DB txn: {%v}", err.Error())
 	}
 	defer tx.Rollback()
 	err = tx.QueryRow("SELECT COUNT(*) FROM edgex_apid_cluster").Scan(&numApidClusters)
 	if err != nil {
-		return fmt.Errorf("Unable to read database: {%s}", err.Error())
+		return fmt.Errorf("unable to read database: {%s}", err.Error())
 	}
 
 	if numApidClusters != 1 {
-		return fmt.Errorf("Illegal state for apid_cluster. Must be a single row.")
+		return fmt.Errorf("illegal state for apid_cluster, must be a single row")
 	}
 
 	_, err = tx.Exec("ALTER TABLE edgex_apid_cluster ADD COLUMN last_sequence text DEFAULT ''")
@@ -633,21 +634,22 @@ func (dbMan *dbManager) processSnapshot(snapshot *common.Snapshot, isDataSnapsho
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("Error when commit in processSqliteSnapshot: %v", err)
+		return fmt.Errorf("error when commit in processSqliteSnapshot: %v", err)
 	}
 
 	//update apid instance info
 	apidInfo.LastSnapshot = snapshot.SnapshotInfo
 	err = dbMan.updateApidInstanceInfo(apidInfo.InstanceID, apidInfo.ClusterID, apidInfo.LastSnapshot)
 	if err != nil {
-		return fmt.Errorf("Unable to update instance info: %v", err)
+		log.Errorf("Unable to update instance info: %v", err)
+		return fmt.Errorf("unable to update instance info: %v", err)
 	}
 
 	dbMan.setDB(db)
 	if isDataSnapshot {
 		dbMan.knownTables, err = dbMan.extractTables()
 		if err != nil {
-			return fmt.Errorf("Unable to extract tables: %v", err)
+			return fmt.Errorf("unable to extract tables: %v", err)
 		}
 	}
 	log.Debugf("Snapshot processed: %s", snapshot.SnapshotInfo)
