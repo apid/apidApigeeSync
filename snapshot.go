@@ -30,6 +30,7 @@ import (
 )
 
 const bootstrapSnapshotName = "bootstrap"
+const lengthSqliteFileName = 7 // len("/sqlite")
 const (
 	headerSnapshotNumber = "Transicator-Snapshot-TXID"
 )
@@ -220,14 +221,16 @@ func (s *apidSnapshotManager) getAttemptDownloadClosure(isBoot bool, snapshot *c
 
 func processSnapshotServerFileResponse(dbId string, body io.Reader, snapshot *common.Snapshot) error {
 	dbPath := data.DBPath("common/" + dbId)
-	dbDir := dbPath[0 : len(dbPath)-7]
+	dbDir := dbPath[0 : len(dbPath)-lengthSqliteFileName]
 	log.Infof("Attempting to stream the sqlite snapshot to %s", dbPath)
 
-	// if exists, delete the old snapshot file
-	if _, err := os.Stat(dbDir); !os.IsNotExist(err) {
-		if err = os.RemoveAll(dbDir); err != nil {
-			log.Errorf("Failed to delete old snapshot; %v", err)
-			return err
+	// if other bootstrap snapshot exists, delete the old file
+	if dbId == bootstrapSnapshotName {
+		if _, err := os.Stat(dbDir); !os.IsNotExist(err) {
+			if err = os.RemoveAll(dbDir); err != nil {
+				log.Errorf("Failed to delete old bootstrap snapshot; %v", err)
+				return err
+			}
 		}
 	}
 

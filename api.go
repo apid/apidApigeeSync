@@ -25,8 +25,11 @@ import (
 const tokenEndpoint = "/accesstoken"
 
 const (
+	// long-polling timeout from http header
 	parBlock = "block"
-	parTag   = "If-None-Match"
+	// long-polling tag used for comparision
+	// if tag fails to match, new token is returned immediately
+	parTag = "If-None-Match"
 )
 
 type ApiManager struct {
