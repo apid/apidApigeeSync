@@ -105,7 +105,7 @@ var _ = Describe("dockerIT", func() {
 			Expect(err).Should(Succeed())
 		})
 
-		It("should succesfully download new table from pg", func(done Done) {
+		It("should successfully download new table from pg", func(done Done) {
 			tableName := "docker_test_download"
 			targetTablename := "edgex_" + tableName
 			handler := &newTableHandler{
@@ -335,7 +335,7 @@ func (w *waitSnapshotHandler) Handle(event apid.Event) {
 type newTableHandler struct {
 	targetTablename string
 	done            Done
-	verifyFunc      func (string, apid.DB)
+	verifyFunc      func(string, apid.DB)
 }
 
 func (n *newTableHandler) Handle(event apid.Event) {

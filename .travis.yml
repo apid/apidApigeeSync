@@ -14,4 +14,4 @@ install:
 script:
   - diff -u <(echo -n) <(gofmt -d $(git ls-files | grep '.go$' | grep -v vendor))
   - go vet $(glide novendor)
-  - go test
+  - go test -covermode=atomic $(glide novendor)

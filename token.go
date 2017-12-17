@@ -151,7 +151,7 @@ func (t *simpleTokenManager) retrieveNewToken() {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : ", err) })
+	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : %v", err) })
 }
 
 func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {

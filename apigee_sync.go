@@ -71,7 +71,7 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	for {
 		select {
 		case <-quit:
-			log.Info("Quit signal recieved.  Returning")
+			log.Info("Quit signal received.  Returning")
 			return
 		case <-retry:
 			start := time.Now()
@@ -124,7 +124,7 @@ type authFailError struct {
 }
 
 func (an expected200Error) Error() string {
-	return "Did not recieve OK response"
+	return "Did not receive OK response"
 }
 
 func (a quitSignalError) Error() string {

@@ -148,7 +148,7 @@ var _ = Describe("Sync", func() {
 
 		}
 
-		It("should succesfully bootstrap from clean slate", func(done Done) {
+		It("should successfully bootstrap from clean slate", func(done Done) {
 			log.Info("Starting sync tests...")
 			var closeDone <-chan bool
 			initializeContext()

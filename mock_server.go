@@ -149,17 +149,17 @@ func initDb(statements, path string) {
 
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		log.Panic("Could not instantiate mock db, %s", err)
+		log.Panicf("Could not instantiate mock db, %s", err)
 	}
 	defer db.Close()
 	sqlStatementsBuffer, err := ioutil.ReadFile(statements)
 	if err != nil {
-		log.Panic("Could not instantiate mock db, %s", err)
+		log.Panicf("Could not instantiate mock db, %s", err)
 	}
 	sqlStatementsString := string(sqlStatementsBuffer)
 	_, err = db.Exec(sqlStatementsString)
 	if err != nil {
-		log.Panic("Could not instantiate mock db, %s", err)
+		log.Panicf("Could not instantiate mock db, %s", err)
 	}
 
 }

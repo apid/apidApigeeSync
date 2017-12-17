@@ -152,7 +152,7 @@ func _delete(tableName string, rows []common.Row, txn apid.Tx) bool {
 	}
 
 	if len(rows) == 0 {
-		log.Errorf("No rows found for table.", tableName)
+		log.Errorf("No rows found for table %s", tableName)
 		return false
 	}
 
@@ -213,7 +213,7 @@ func buildDeleteSql(tableName string, row common.Row, pkeys []string) string {
 func update(tableName string, oldRows, newRows []common.Row, txn apid.Tx) bool {
 	pkeys, err := getPkeysForTable(tableName)
 	if len(pkeys) == 0 || err != nil {
-		log.Errorf("UPDATE No primary keys found for table.", tableName)
+		log.Errorf("UPDATE No primary keys found for table %s", tableName)
 		return false
 	}
 	if len(oldRows) == 0 || len(newRows) == 0 {
@@ -349,7 +349,7 @@ func getPkeysForTable(tableName string) ([]string, error) {
 	sql := "SELECT columnName FROM _transicator_tables WHERE tableName=$1 AND primaryKey ORDER BY columnName;"
 	rows, err := db.Query(sql, normalizedTableName)
 	if err != nil {
-		log.Errorf("Failed [%s] values=[s%] Error: %v", sql, normalizedTableName, err)
+		log.Errorf("Failed [%s] values=[%s] Error: %v", sql, normalizedTableName, err)
 		return nil, err
 	}
 	var columnNames []string
