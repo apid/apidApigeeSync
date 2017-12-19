@@ -94,7 +94,7 @@ var _ = Describe("token", func() {
 				w.Write(body)
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 
@@ -123,7 +123,7 @@ var _ = Describe("token", func() {
 			}))
 			config.Set(configProxyServerBaseURI, ts.URL)
 
-			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			token := testedTokenManager.getToken()
 			Expect(token.AccessToken).ToNot(BeEmpty())
@@ -163,7 +163,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager := createApidTokenManager(false)
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 
@@ -178,8 +178,6 @@ var _ = Describe("token", func() {
 		It("should have created_at_apid first time, update_at_apid after", func(done Done) {
 			finished := make(chan bool, 1)
 			count := 0
-
-			newInstanceID = true
 
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -202,7 +200,7 @@ var _ = Describe("token", func() {
 			}))
 
 			config.Set(configProxyServerBaseURI, ts.URL)
-			testedTokenManager := createSimpleTokenManager()
+			testedTokenManager := createApidTokenManager(true)
 			testedTokenManager.start()
 			testedTokenManager.getToken()
 			testedTokenManager.invalidateToken()

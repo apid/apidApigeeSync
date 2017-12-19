@@ -25,7 +25,6 @@ fi
 TEST_PG_BASE=postgres://postgres:changeme@$DOCKER_IP:5432
 TEST_PG_URL=postgres://postgres:changeme@$DOCKER_IP:5432/edgex
 echo ${TEST_PG_URL}
-
 export APIGEE_SYNC_DOCKER_PG_URL=${TEST_PG_URL}
 export APIGEE_SYNC_DOCKER_IP=${DOCKER_IP}
 
@@ -47,8 +46,13 @@ pgname=apidSync_test_pg
 ssname=apidSync_test_ss
 csname=apidSync_test_cs
 
+# setup docker network
+docker network rm apidApigeeSync-docker-test || true
+docker network create apidApigeeSync-docker-test
+DOCKER_PG_URL=postgres://postgres:changeme@$pgname:5432/edgex
+echo $DOCKER_PG_URL
 # run PG
-docker run --name ${pgname} -p 5432:5432 -d -e POSTGRES_PASSWORD=changeme apigeelabs/transicator-postgres
+docker run --name ${pgname} -p 5432:5432 --network=apidApigeeSync-docker-test -d -e POSTGRES_PASSWORD=changeme apigeelabs/transicator-postgres
 
 # Wait for PG to be up -- it takes a few seconds
 while `true`
@@ -67,8 +71,8 @@ psql -f ${WORK_DIR}/dockertests/master-schema.sql ${TEST_PG_URL}
 psql -f ${WORK_DIR}/dockertests/user-setup.sql ${TEST_PG_URL}
 
 # run SS and CS
-docker run --name ${ssname} -d -p 9001:9001 apigeelabs/transicator-snapshot -p 9001 -u ${TEST_PG_URL}
-docker run --name ${csname} -d -p 9000:9000 apigeelabs/transicator-changeserver -p 9000 -u ${TEST_PG_URL} -s testslot
+docker run --name ${ssname} -d -p 9001:9001 --network=apidApigeeSync-docker-test apigeelabs/transicator-snapshot -p 9001 -u ${DOCKER_PG_URL}
+docker run --name ${csname} -d -p 9000:9000 --network=apidApigeeSync-docker-test apigeelabs/transicator-changeserver -p 9000 -u ${DOCKER_PG_URL} -s testslot
 
 # Wait for SS to be up
 while `true`

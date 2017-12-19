@@ -90,9 +90,11 @@ func (m *ManagementPg) InsertDataScope(tx *sql.Tx, ds *dataScopeRow) error {
 			created_by,
 			updated,
 			updated_by,
-			_change_selector
+			_change_selector,
+			org_scope,
+			env_scope
 			)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`)
 	if err != nil {
 		return err
 	}
@@ -108,6 +110,8 @@ func (m *ManagementPg) InsertDataScope(tx *sql.Tx, ds *dataScopeRow) error {
 		ds.updated,
 		ds.updatedBy,
 		ds.changeSelector,
+		ds.orgScope,
+		ds.envScope,
 	)
 
 	return err

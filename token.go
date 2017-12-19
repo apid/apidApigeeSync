@@ -17,7 +17,6 @@ package apidApigeeSync
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"github.com/apid/apid-core/util"
 	"io/ioutil"
 	"net/http"
@@ -35,15 +34,13 @@ var (
 Usage:
    man := createTokenManager()
    bearer := man.getBearerToken()
-   // will automatically update config(configBearerToken) for other modules
-   // optionally, when done...
-   man.close()
+   will automatically update config(configBearerToken) for other modules
 */
 
-func createSimpleTokenManager() *simpleTokenManager {
+func createApidTokenManager(isNewInstance bool) *apidTokenManager {
 	isClosedInt := int32(0)
 
-	t := &simpleTokenManager{
+	t := &apidTokenManager{
 		quitPollingForToken: make(chan bool, 1),
 		closed:              make(chan bool),
 		getTokenChan:        make(chan bool),
@@ -52,11 +49,12 @@ func createSimpleTokenManager() *simpleTokenManager {
 		invalidateDone:      make(chan bool),
 		tokenUpdatedChan:    make(chan bool, 1),
 		isClosed:            &isClosedInt,
+		isNewInstance:       isNewInstance,
 	}
 	return t
 }
 
-type simpleTokenManager struct {
+type apidTokenManager struct {
 	token               *OauthToken
 	isClosed            *int32
 	quitPollingForToken chan bool
@@ -67,19 +65,20 @@ type simpleTokenManager struct {
 	returnTokenChan     chan *OauthToken
 	invalidateDone      chan bool
 	tokenUpdatedChan    chan bool
+	isNewInstance       bool
 }
 
-func (t *simpleTokenManager) start() {
+func (t *apidTokenManager) start() {
 	t.retrieveNewToken()
 	t.refreshTimer = time.After(t.token.refreshIn())
 	go t.maintainToken()
 }
 
-func (t *simpleTokenManager) getBearerToken() string {
+func (t *apidTokenManager) getBearerToken() string {
 	return t.getToken().AccessToken
 }
 
-func (t *simpleTokenManager) maintainToken() {
+func (t *apidTokenManager) maintainToken() {
 	for {
 		select {
 		case <-t.closed:
@@ -100,19 +99,13 @@ func (t *simpleTokenManager) maintainToken() {
 }
 
 // will block until valid
-func (t *simpleTokenManager) invalidateToken() error {
-	//has been closed
-	if atomic.LoadInt32(t.isClosed) == int32(1) {
-		log.Debug("TokenManager: invalidateToken() called on closed tokenManager")
-		return errors.New("invalidateToken() called on closed tokenManager")
-	}
+func (t *apidTokenManager) invalidateToken() {
 	log.Debug("invalidating token")
 	t.invalidateTokenChan <- true
 	<-t.invalidateDone
-	return nil
 }
 
-func (t *simpleTokenManager) getToken() *OauthToken {
+func (t *apidTokenManager) getToken() *OauthToken {
 	//has been closed
 	if atomic.LoadInt32(t.isClosed) == int32(1) {
 		log.Debug("TokenManager: getToken() called on closed tokenManager")
@@ -126,7 +119,7 @@ func (t *simpleTokenManager) getToken() *OauthToken {
  * blocking close() of tokenMan
  */
 
-func (t *simpleTokenManager) close() {
+func (t *apidTokenManager) close() {
 	//has been closed
 	if atomic.SwapInt32(t.isClosed, 1) == int32(1) {
 		log.Panic("TokenManager: close() has been called before!")
@@ -141,7 +134,7 @@ func (t *simpleTokenManager) close() {
 }
 
 // don't call externally. will block until success.
-func (t *simpleTokenManager) retrieveNewToken() {
+func (t *apidTokenManager) retrieveNewToken() {
 
 	log.Debug("Getting OAuth token...")
 	uriString := config.GetString(configProxyServerBaseURI)
@@ -151,10 +144,10 @@ func (t *simpleTokenManager) retrieveNewToken() {
 	}
 	uri.Path = path.Join(uri.Path, "/accesstoken")
 
-	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : ", err) })
+	pollWithBackoff(t.quitPollingForToken, t.getRetrieveNewTokenClosure(uri), func(err error) { log.Errorf("Error getting new token : %v", err) })
 }
 
-func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
+func (t *apidTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan bool) error {
 	return func(_ chan bool) error {
 		form := url.Values{}
 		form.Set("grant_type", "client_credentials")
@@ -168,9 +161,9 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 		req.Header.Set("status", "ONLINE")
 		req.Header.Set("plugin_details", apidPluginDetails)
 
-		if newInstanceID {
+		if t.isNewInstance {
 			req.Header.Set("created_at_apid", time.Now().Format(time.RFC3339))
-			newInstanceID = false
+			t.isNewInstance = false
 		} else {
 			req.Header.Set("updated_at_apid", time.Now().Format(time.RFC3339))
 		}
@@ -194,7 +187,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 
 		if resp.StatusCode != 200 {
 			log.Errorf("Oauth Request Failed with Resp Code: %d. Body: %s", resp.StatusCode, string(body))
-			return expected200Error{}
+			return expected200Error
 		}
 
 		var token OauthToken
@@ -212,22 +205,11 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 		}
 
 		log.Debugf("Got new token: %#v", token)
-
-		/*
-			if newInstanceID {
-				newInstanceID = false
-				err = updateApidInstanceInfo()
-				if err != nil {
-					log.Errorf("unable to unmarshal update apid instance info : %v", string(body), err)
-					return err
-
-				}
-			}
-		*/
 		t.token = &token
 		config.Set(configBearerToken, token.AccessToken)
 
 		//don't block on the buffered channel.  that means there is already a signal to serve new token
+		//TODO: This assumes apid-gateway is 1-1 mapping. Make use of generic long-polling provided by apid-core
 		select {
 		case t.tokenUpdatedChan <- true:
 		default:
@@ -238,7 +220,7 @@ func (t *simpleTokenManager) getRetrieveNewTokenClosure(uri *url.URL) func(chan 
 	}
 }
 
-func (t *simpleTokenManager) getTokenReadyChannel() <-chan bool {
+func (t *apidTokenManager) getTokenReadyChannel() <-chan bool {
 	return t.tokenUpdatedChan
 }
 

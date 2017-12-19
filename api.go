@@ -24,32 +24,45 @@ import (
 
 const tokenEndpoint = "/accesstoken"
 
-func InitAPI(services apid.Services) {
-	services.API().HandleFunc(tokenEndpoint, getAccessToken).Methods("GET")
+const (
+	// long-polling timeout from http header
+	parBlock = "block"
+	// long-polling tag used for comparision
+	// if tag fails to match, new token is returned immediately
+	parTag = "If-None-Match"
+)
+
+type ApiManager struct {
+	tokenMan tokenManager
+	endpoint string
 }
 
-func getAccessToken(w http.ResponseWriter, r *http.Request) {
-	b := r.URL.Query().Get("block")
+func (a *ApiManager) InitAPI(api apid.APIService) {
+	api.HandleFunc(a.endpoint, a.getAccessToken).Methods("GET")
+}
+
+func (a *ApiManager) getAccessToken(w http.ResponseWriter, r *http.Request) {
+	b := r.URL.Query().Get(parBlock)
 	var timeout int
 	if b != "" {
 		var err error
 		timeout, err = strconv.Atoi(b)
-		if err != nil {
+		if err != nil || timeout < 0 {
 			writeError(w, http.StatusBadRequest, "bad block value, must be number of seconds")
 			return
 		}
 	}
 	log.Debugf("api timeout: %d", timeout)
-	ifNoneMatch := r.Header.Get("If-None-Match")
-
-	if apidTokenManager.getBearerToken() != ifNoneMatch {
-		w.Write([]byte(apidTokenManager.getBearerToken()))
+	ifNoneMatch := r.Header.Get(parTag)
+	log.Debugf("ifNoneMatch: %s", ifNoneMatch)
+	if a.tokenMan.getBearerToken() != ifNoneMatch {
+		w.Write([]byte(a.tokenMan.getBearerToken()))
 		return
 	}
 
 	select {
-	case <-apidTokenManager.getTokenReadyChannel():
-		w.Write([]byte(apidTokenManager.getBearerToken()))
+	case <-a.tokenMan.getTokenReadyChannel():
+		w.Write([]byte(a.tokenMan.getBearerToken()))
 	case <-time.After(time.Duration(timeout) * time.Second):
 		w.WriteHeader(http.StatusNotModified)
 	}

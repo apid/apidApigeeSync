@@ -19,7 +19,6 @@ import (
 
 	"os"
 
-
 	"github.com/apid/apid-core"
 	"github.com/apid/apid-core/factory"
 	"github.com/apid/apidApigeeSync"
@@ -53,16 +52,16 @@ func main() {
 	router := apid.API().Router()
 
 	params := apidApigeeSync.MockParms{
-		ReliableAPI:            *reliable,
-		ClusterID:              "cluster",
-		TokenKey:               "key",
-		TokenSecret:            "secret",
-		Scope:                  "scope",
-		Organization:           "org",
-		Environment:            "test",
-		NumDevelopers:          *numDevs,
-		NumDeployments:         *numDeps,
-		BundleURI:              *bundleURI,
+		ReliableAPI:    *reliable,
+		ClusterID:      "cluster",
+		TokenKey:       "key",
+		TokenSecret:    "secret",
+		Scope:          "scope",
+		Organization:   "org",
+		Environment:    "test",
+		NumDevelopers:  *numDevs,
+		NumDeployments: *numDeps,
+		BundleURI:      *bundleURI,
 	}
 
 	log.Printf("Params: %#v\n", params)

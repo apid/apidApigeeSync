@@ -90,14 +90,14 @@ type MockServer struct {
 	changeChannel   chan []byte
 	sequenceID      *int64
 	maxDevID        *int64
-	deployIDMutex   sync.RWMutex
+	deployIDMutex   *sync.RWMutex
 	minDeploymentID *int64
 	maxDeploymentID *int64
 	newSnap         *int32
 	authFail        *int32
 }
 
-func (m *MockServer) forceAuthFail() {
+func (m *MockServer) forceAuthFailOnce() {
 	atomic.StoreInt32(m.authFail, 1)
 }
 
@@ -118,11 +118,13 @@ func (m *MockServer) forceNoSnapshot() {
 }
 
 func (m *MockServer) lastSequenceID() string {
-	return strconv.FormatInt(atomic.LoadInt64(m.sequenceID), 10)
+	num := strconv.FormatInt(atomic.LoadInt64(m.sequenceID), 10)
+	return num + "." + num + "." + num
 }
 
 func (m *MockServer) nextSequenceID() string {
-	return strconv.FormatInt(atomic.AddInt64(m.sequenceID, 1), 10)
+	num := strconv.FormatInt(atomic.AddInt64(m.sequenceID, 1), 10)
+	return num + "." + num + "." + num
 }
 
 func (m *MockServer) nextDeveloperID() string {
@@ -180,7 +182,7 @@ func (m *MockServer) init() {
 	m.newSnap = new(int32)
 	m.authFail = new(int32)
 	*m.authFail = 0
-
+	m.deployIDMutex = &sync.RWMutex{}
 	initDb("./sql/init_mock_db.sql", "./mockdb.sqlite3")
 	initDb("./sql/init_mock_boot_db.sql", "./mockdb_boot.sqlite3")
 
@@ -266,8 +268,11 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 	scopes := q["scope"]
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
-
-	w.Header().Set("Transicator-Snapshot-TXID", util.GenerateUUID())
+	if m.params.Scope != "" {
+		Expect(scopes).To(ContainElement(m.params.Scope))
+	}
+	m.snapshotID = util.GenerateUUID()
+	w.Header().Set(headerSnapshotNumber, m.snapshotID)
 
 	if len(scopes) == 1 {
 		//send bootstrap db
@@ -285,7 +290,7 @@ func (m *MockServer) sendSnapshot(w http.ResponseWriter, req *http.Request) {
 func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	defer GinkgoRecover()
 
-	val := atomic.SwapInt32(m.newSnap, 0)
+	val := atomic.LoadInt32(m.newSnap)
 	if val > 0 {
 		log.Debug("MockServer: force new snapshot")
 		w.WriteHeader(http.StatusBadRequest)
@@ -311,7 +316,9 @@ func (m *MockServer) sendChanges(w http.ResponseWriter, req *http.Request) {
 	//Expect(q.Get("snapshot")).To(Equal(m.snapshotID))
 
 	Expect(scopes).To(ContainElement(m.params.ClusterID))
-	//Expect(scopes).To(ContainElement(m.params.Scope))
+	if m.params.Scope != "" {
+		Expect(scopes).To(ContainElement(m.params.Scope))
+	}
 
 	// todo: the following is just legacy for the existing test in apigeeSync_suite_test
 	developer := m.createDeveloperWithProductAndApp()
@@ -343,6 +350,7 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 
 		// force failing auth check
 		if atomic.LoadInt32(m.authFail) == 1 {
+			atomic.StoreInt32(m.authFail, 0)
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Force fail: bad auth token. ")))
 			return
@@ -356,7 +364,7 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 
 		// check auth header
 		auth := req.Header.Get("Authorization")
-		expectedAuth := fmt.Sprintf("Bearer %s", m.oauthToken)
+		expectedAuth := m.getBearerToken()
 		if auth != expectedAuth {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(fmt.Sprintf("Bad auth token. Is: %s, should be: %s", auth, expectedAuth)))
@@ -364,6 +372,10 @@ func (m *MockServer) auth(target http.HandlerFunc) http.HandlerFunc {
 		}
 		target(w, req)
 	}
+}
+
+func (m *MockServer) getBearerToken() string {
+	return fmt.Sprintf("Bearer %s", m.oauthToken)
 }
 
 // make a handler unreliable

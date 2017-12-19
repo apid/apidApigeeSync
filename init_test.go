@@ -18,36 +18,78 @@ import (
 	"github.com/apid/apid-core"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"net/http"
+	"strconv"
 )
 
 var _ = Describe("init", func() {
-	var _ = BeforeEach(func() {
-		_initPlugin(apid.AllServices())
+	testCount := 0
+	BeforeEach(func() {
+		testCount++
 	})
 
 	Context("Apid Instance display name", func() {
+		AfterEach(func() {
+			apiService = apid.API()
+		})
 
-		It("should be hostname by default", func() {
-			log.Info("Starting init tests...")
+		It("init should register listener", func() {
+			me := &mockEvent{
+				listenerMap: make(map[apid.EventSelector]apid.EventHandlerFunc),
+			}
+			ma := &mockApi{
+				handleMap: make(map[string]http.HandlerFunc),
+			}
+			ms := &mockService{
+				config: apid.Config(),
+				log:    apid.Log(),
+				api:    ma,
+				data:   apid.Data(),
+				events: me,
+			}
+			testname := "test_" + strconv.Itoa(testCount)
+			ms.config.Set(configName, testname)
+			pd, err := initPlugin(ms)
+			Expect(err).Should(Succeed())
+			Expect(apidInfo.InstanceName).To(Equal(testname))
+			Expect(me.listenerMap[apid.SystemEventsSelector]).ToNot(BeNil())
+			Expect(ma.handleMap[tokenEndpoint]).ToNot(BeNil())
+			Expect(pd).Should(Equal(PluginData))
+			Expect(apidInfo.IsNewInstance).Should(BeTrue())
+		})
 
-			initConfigDefaults()
-			Expect(apidInfo.InstanceName).To(Equal("testhost"))
-		}, 3)
+		It("create managers for normal mode", func() {
+			listenerMan, apiMan, err := initManagers(false)
+			Expect(err).Should(Succeed())
+			Expect(listenerMan).ToNot(BeNil())
+			Expect(listenerMan.tokenMan).ToNot(BeNil())
+			snapMan, ok := listenerMan.snapMan.(*apidSnapshotManager)
+			Expect(ok).Should(BeTrue())
+			Expect(snapMan.tokenMan).ToNot(BeNil())
+			Expect(snapMan.dbMan).ToNot(BeNil())
+			changeMan, ok := listenerMan.changeMan.(*pollChangeManager)
+			Expect(ok).Should(BeTrue())
+			Expect(changeMan.tokenMan).ToNot(BeNil())
+			Expect(changeMan.dbMan).ToNot(BeNil())
+			Expect(changeMan.snapMan).ToNot(BeNil())
+			Expect(apiMan).ToNot(BeNil())
+			Expect(apiMan.tokenMan).ToNot(BeNil())
+		})
 
-		It("accept display name from config", func() {
-			config.Set(configName, "aa01")
-			initConfigDefaults()
-			var apidInfoLatest apidInstanceInfo
-			apidInfoLatest, _ = getApidInstanceInfo()
-			Expect(apidInfoLatest.InstanceName).To(Equal("aa01"))
-			Expect(apidInfoLatest.LastSnapshot).To(Equal(""))
-		}, 3)
+		It("create managers for diagnostic mode", func() {
+			config.Set(configDiagnosticMode, true)
+			listenerMan, apiMan, err := initManagers(true)
+			Expect(err).Should(Succeed())
+			Expect(listenerMan).ToNot(BeNil())
+			Expect(listenerMan.tokenMan).ToNot(BeNil())
+			snapMan, ok := listenerMan.snapMan.(*offlineSnapshotManager)
+			Expect(ok).Should(BeTrue())
+			Expect(snapMan.dbMan).ToNot(BeNil())
+			_, ok = listenerMan.changeMan.(*offlineChangeManager)
+			Expect(ok).Should(BeTrue())
+			Expect(apiMan).ToNot(BeNil())
+			Expect(apiMan.tokenMan).ToNot(BeNil())
+		})
 
-	})
-
-	It("should put apigeesync_apid_instance_id value in config", func() {
-		instanceID := config.GetString(configApidInstanceID)
-		Expect(instanceID).NotTo(BeEmpty())
-		Expect(instanceID).To(Equal(apidInfo.InstanceID))
 	})
 })

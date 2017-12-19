@@ -1,0 +1,9 @@
+apigeesync_instance_name: SQLLITAPID
+apigeesync_snapshot_server_base: http://localhost:9001/
+apigeesync_change_server_base: http://localhost:9000/
+apigeesync_snapshot_proto: sqlite
+log_level: Debug
+apigeesync_consumer_key: 33f39JNLosF1mDOXJoCfbauchVzPrGrl
+apigeesync_consumer_secret: LAolGShAx6H3vfNF
+apigeesync_cluster_id: 4c6bb536-0d64-43ca-abae-17c08f1a7e58
+local_storage_path: /Users/haoming/go/src/github.com/apid/apidApigeeSync/tmp/sqlite

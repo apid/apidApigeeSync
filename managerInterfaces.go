@@ -15,31 +15,38 @@
 package apidApigeeSync
 
 import (
+	"github.com/apid/apid-core"
 	"github.com/apigee-labs/transicator/common"
-	"net/url"
 )
 
 type tokenManager interface {
 	getBearerToken() string
-	invalidateToken() error
-	getToken() *OauthToken
+	invalidateToken()
 	close()
-	getRetrieveNewTokenClosure(*url.URL) func(chan bool) error
 	start()
 	getTokenReadyChannel() <-chan bool
 }
 
-type snapShotManager interface {
+type snapshotManager interface {
 	close() <-chan bool
 	downloadBootSnapshot()
-	storeBootSnapshot(snapshot *common.Snapshot)
-	downloadDataSnapshot()
-	storeDataSnapshot(snapshot *common.Snapshot)
-	downloadSnapshot(isBoot bool, scopes []string, snapshot *common.Snapshot) error
-	startOnLocalSnapshot(snapshot string) *common.Snapshot
+	downloadDataSnapshot() error
+	startOnDataSnapshot(snapshot string) error
 }
 
 type changeManager interface {
 	close() <-chan bool
 	pollChangeWithBackoff()
+}
+
+type DbManager interface {
+	initDB() error
+	setDB(db apid.DB)
+	getLastSequence() (lastSequence string)
+	findScopesForId(configId string) (scopes []string, err error)
+	updateLastSequence(lastSequence string) error
+	getApidInstanceInfo() (info apidInstanceInfo, err error)
+	processChangeList(changes *common.ChangeList) error
+	processSnapshot(snapshot *common.Snapshot, isDataSnapshot bool) error
+	getKnowTables() map[string]bool
 }
