@@ -106,7 +106,7 @@ var _ = Describe("dockerIT", func() {
 			Expect(err).Should(Succeed())
 		})
 
-		It("should succesfully download new table from pg", func(done Done) {
+		It("should successfully download new table from pg", func(done Done) {
 			tableName := "docker_test_download"
 			targetTablename := "edgex_" + tableName
 			handler := &newTableHandler{
