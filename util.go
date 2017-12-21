@@ -36,7 +36,7 @@ var (
 )
 
 var (
-	expected200Error = fmt.Errorf("did not recieve OK response")
+	expected200Error = fmt.Errorf("did not receive OK response")
 	quitSignalError  = fmt.Errorf("signal to quit encountered")
 	authFailError    = fmt.Errorf("authorization failed")
 )
@@ -128,7 +128,7 @@ func pollWithBackoff(quit chan bool, toExecute func(chan bool) error, handleErro
 	for {
 		select {
 		case <-quit:
-			log.Info("Quit signal recieved.  Returning")
+			log.Info("Quit signal receive.  Returning")
 			return
 		case <-retry:
 			start := time.Now()

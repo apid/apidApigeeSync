@@ -27,7 +27,7 @@ const tokenEndpoint = "/accesstoken"
 const (
 	// long-polling timeout from http header
 	parBlock = "block"
-	// long-polling tag used for comparision
+	// long-polling tag used for comparison
 	// if tag fails to match, new token is returned immediately
 	parTag = "If-None-Match"
 )
