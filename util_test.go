@@ -49,6 +49,18 @@ var _ = Describe("backoff", func() {
 			Expect(4).To(Equal(b.Attempt()))
 		})
 
+		It("should properly apply exponential backoff strategy with jitter set to true", func() {
+			b := NewExponentialBackoff(200*time.Millisecond, 2*time.Second, 2, true)
+			Expect(200 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(1).To(Equal(b.Attempt()))
+			Expect(400 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(2).To(Equal(b.Attempt()))
+			Expect(800 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(3).To(Equal(b.Attempt()))
+			Expect(1600 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(4).To(Equal(b.Attempt()))
+		})
+
 		It("should reset properly", func() {
 			b := NewExponentialBackoff(200*time.Millisecond, 2*time.Second, 2, false)
 			Expect(200 * time.Millisecond).To(Equal(b.Duration()))
@@ -63,6 +75,23 @@ var _ = Describe("backoff", func() {
 			Expect(400 * time.Millisecond).To(Equal(b.Duration()))
 			Expect(2).To(Equal(b.Attempt()))
 			Expect(800 * time.Millisecond).To(Equal(b.Duration()))
+			Expect(3).To(Equal(b.Attempt()))
+		})
+
+		It("should reset properly with jitter set to true", func() {
+			b := NewExponentialBackoff(200*time.Millisecond, 2*time.Second, 2, true)
+			Expect(200 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(1).To(Equal(b.Attempt()))
+			Expect(400 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(2).To(Equal(b.Attempt()))
+			Expect(800 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(3).To(Equal(b.Attempt()))
+			b.Reset()
+			Expect(200 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(1).To(Equal(b.Attempt()))
+			Expect(400 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
+			Expect(2).To(Equal(b.Attempt()))
+			Expect(800 * time.Millisecond).To(BeNumerically(">=", int64(b.Duration().Seconds())))
 			Expect(3).To(Equal(b.Attempt()))
 		})
 	})
